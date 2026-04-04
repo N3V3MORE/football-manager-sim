@@ -1,50 +1,65 @@
-# Welcome to your Expo app 👋
+# SideQuest Football Manager Simulator ⚽
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A high-fidelity, data-driven football management experience built with **React Native (Expo)** and **Zustand**. 
 
-## Get started
+SideQuest FM puts you in the manager's seat, requiring tactical precision, squad-building expertise, and strategic gameplay to lead your team to Premier League glory.
 
-1. Install dependencies
+---
 
+## 🚀 Key Features
+
+### 1. Manual Squad Management
+Unlink traditional simulators, you have total control. All players start in the **Reserves**. You must manually assign your **Starting XI** to position-specific pitch slots.
+- **Atomic Swapping**: Seamlessly move players between the pitch, bench, and reserves.
+- **7-Substitute Rule**: Strategy matters—choose your bench wisely to change the game.
+
+### 2. Tuned Match Engine
+Experience realistic match outcomes powered by a **Poisson-distributed simulation**.
+- **Data-Driven**: Team performance is calculated from player ratings, formation synergy, and home advantage.
+- **Realistic Scoring**: Top teams compete for high totals (80-110 goals/season) without the "hundred-goal blowout" bugs.
+- **Strategic Influence**: Switch between **Defend**, **Balanced**, and **Attack** strategies in real-time to influence the simulation.
+
+### 3. Modern Tactical Interface
+- **2-Letter Labels**: Clean, modern pitch layout using standard football shorthand (DM, AM, CB).
+- **Premium Dark Mode**: A sleek, high-contrast aesthetic designed for long management sessions.
+- **Dynamic Stats**: Track goals, assists, clean sheets, and card counts across the entire league.
+
+---
+
+## 🛠️ Getting Started
+
+### Prerequisites
+- Node.js (v18+)
+- Expo Go (on iOS/Android) or an Emulator
+
+### Installation
+1. Clone the repository:
    ```bash
+   git clone https://github.com/N3V3MORE/side-quest.git
+   ```
+2. Install dependencies:
+   ```bash
+   cd side-quest
    npm install
    ```
-
-2. Start the app
-
+3. Start the simulator:
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+---
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## 📈 Version Notes
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+We maintain a detailed history of features, bug fixes, and technical updates in our **[CHANGELOG.md](./CHANGELOG.md)**.
 
-## Get a fresh project
+**Current Version**: `v1.0.0`
+- Manual Lineup building enabled.
+- AI Starters restoration.
+- Match engine scoring calibration.
 
-When you're ready, run:
+---
 
-```bash
-npm run reset-project
-```
+## 🤝 Contributing
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+This is a side-quest project. Feel free to fork, submit PRs, or open issues for feature requests (like "In-game substitutions" or "Transfer Market")!
