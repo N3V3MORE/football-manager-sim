@@ -9,6 +9,14 @@ export type Formation =
   | '4-1-4-1' 
   | '4-3-2-1';
 
+export interface TeamTactics {
+  mentality: 'Defensive' | 'Balanced' | 'Attacking';
+  passingStyle: 'Short' | 'Mixed' | 'Direct';
+  tempo: 'Slow' | 'Normal' | 'Fast';
+  defensiveLine: 'Deep' | 'Standard' | 'High';
+  pressing: 'None' | 'Medium' | 'High';
+}
+
 export interface PlayerStats {
   pace: number;
   shooting: number;
@@ -22,11 +30,13 @@ export interface PlayerStats {
   gk_reflexes?: number;
   gk_speed?: number;
   gk_positioning?: number;
+  [key: string]: number | undefined; // For detailed micro-stats
 }
 
 export interface Player {
   id: string;
   name: string;
+  longName?: string;
   position: Position;
   subPosition: string;      // primary FIFA position e.g. 'RB', 'RM', 'ST'
   altPositions: string[];   // all FIFA positions e.g. ['CAM', 'CM', 'LW']
@@ -50,6 +60,8 @@ export interface Player {
   yellowCards: number;
   redCards: number;
   nationality: string;
+  playerTraits?: string;
+  clubJerseyNumber?: number | null;
   stats: PlayerStats;
 }
 
@@ -65,7 +77,7 @@ export interface Team {
   played: number;
   activeFormation: Formation;
   form: string[];            // ['W', 'D', 'L', 'W', 'W']
-  strategy: 'defend' | 'balanced' | 'attack';
+  tactics: TeamTactics;
   budget: number;            // transfer budget in millions £
   boardApproval: number;     // 0–100
   lastStartingXI?: string[]; // player IDs

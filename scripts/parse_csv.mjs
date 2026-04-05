@@ -73,17 +73,23 @@ const processCSV = async () => {
     if (!TARGET_TEAMS[clubName]) continue;
 
     const shortName = matchArr[headers.indexOf('short_name')]?.replace(/"/g, '').trim();
+    const longName = matchArr[headers.indexOf('long_name')]?.replace(/"/g, '').trim();
+    const clubJerseyNumber = parseInt(matchArr[headers.indexOf('club_jersey_number')], 10) || null;
+    const playerTraits = matchArr[headers.indexOf('player_traits')]?.replace(/"/g, '').trim() || '';
+
     const fifaPositions = matchArr[headers.indexOf('player_positions')] || '';
     const overall = parseInt(matchArr[headers.indexOf('overall')], 10);
     const age = parseInt(matchArr[headers.indexOf('age')], 10);
     const valueEur = parseInt((matchArr[headers.indexOf('value_eur')] || '0').replace(/"/g, ''), 10);
 
-    const pace       = parseInt(matchArr[headers.indexOf('pace')]     || '50', 10);
-    const shooting   = parseInt(matchArr[headers.indexOf('shooting')] || '50', 10);
-    const passing    = parseInt(matchArr[headers.indexOf('passing')]   || '50', 10);
-    const dribbling  = parseInt(matchArr[headers.indexOf('dribbling')]|| '50', 10);
-    const defending  = parseInt(matchArr[headers.indexOf('defending')] || '50', 10);
-    const physic     = parseInt(matchArr[headers.indexOf('physic')]    || '50', 10);
+    const getStat = (key) => parseInt(matchArr[headers.indexOf(key)] || '50', 10);
+
+    const pace       = getStat('pace');
+    const shooting   = getStat('shooting');
+    const passing    = getStat('passing');
+    const dribbling  = getStat('dribbling');
+    const defending  = getStat('defending');
+    const physic     = getStat('physic');
     const nationality = matchArr[headers.indexOf('nationality_name')]?.replace(/"/g, '').trim() || 'Unknown';
 
     const gk_diving      = parseInt(matchArr[headers.indexOf('goalkeeping_diving')]       || '5', 10);
@@ -97,13 +103,45 @@ const processCSV = async () => {
     const primaryPos   = allPositions[0] || 'CM';
     const broadPos     = toBroadPos(primaryPos);
 
-    // Market value: use FIFA value_eur if available, else estimate
     const marketValueM = valueEur > 0
       ? Math.round(valueEur / 100000) / 10  // euros to £m (1 decimal)
       : Math.round(Math.pow(overall, 2.5) / 50000 * 10) / 10;
 
+    const detailedStats = {
+      attacking_crossing: getStat('attacking_crossing'),
+      attacking_finishing: getStat('attacking_finishing'),
+      attacking_heading_accuracy: getStat('attacking_heading_accuracy'),
+      attacking_short_passing: getStat('attacking_short_passing'),
+      attacking_volleys: getStat('attacking_volleys'),
+      skill_dribbling: getStat('skill_dribbling'),
+      skill_curve: getStat('skill_curve'),
+      skill_fk_accuracy: getStat('skill_fk_accuracy'),
+      skill_long_passing: getStat('skill_long_passing'),
+      skill_ball_control: getStat('skill_ball_control'),
+      movement_acceleration: getStat('movement_acceleration'),
+      movement_sprint_speed: getStat('movement_sprint_speed'),
+      movement_agility: getStat('movement_agility'),
+      movement_reactions: getStat('movement_reactions'),
+      movement_balance: getStat('movement_balance'),
+      power_shot_power: getStat('power_shot_power'),
+      power_jumping: getStat('power_jumping'),
+      power_stamina: getStat('power_stamina'),
+      power_strength: getStat('power_strength'),
+      power_long_shots: getStat('power_long_shots'),
+      mentality_aggression: getStat('mentality_aggression'),
+      mentality_interceptions: getStat('mentality_interceptions'),
+      mentality_positioning: getStat('mentality_positioning'),
+      mentality_vision: getStat('mentality_vision'),
+      mentality_penalties: getStat('mentality_penalties'),
+      mentality_composure: getStat('mentality_composure'),
+      defending_marking_awareness: getStat('defending_marking_awareness'),
+      defending_standing_tackle: getStat('defending_standing_tackle'),
+      defending_sliding_tackle: getStat('defending_sliding_tackle'),
+    };
+
     parsedPlayers.push({
       name: shortName,
+      longName,
       fifaTeam: clubName,
       gameTeamTitle: TARGET_TEAMS[clubName],
       position: broadPos,
@@ -113,9 +151,12 @@ const processCSV = async () => {
       marketValue: marketValueM,
       age,
       nationality,
+      clubJerseyNumber,
+      playerTraits,
       stats: {
         pace, shooting, passing, dribbling, defending, physic,
         gk_diving, gk_handling, gk_kicking, gk_reflexes, gk_speed, gk_positioning,
+        ...detailedStats
       },
       id: parsedPlayers.length.toString(),
     });
