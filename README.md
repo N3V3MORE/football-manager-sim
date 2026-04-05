@@ -1,65 +1,61 @@
-# SideQuest Football Manager Simulator ⚽
+# Simple Football Sim ⚽
 
-A custom-built, data-driven football management experience built with **React Native (Expo)** and **Zustand**. 
+Just a custom-built football sim made with **React Native** and **Zustand**. 
 
-I built SideQuest FM to put you right in the manager's seat. It requires tactical precision, squad-building expertise, and strategic gameplay to lead your squad to Premier League glory.
-
----
-
-## 🚀 Key Features
-
-### 1. Active Squad Management
-Unlike rigid simulators, you have total control. All players start in the **Reserves**. You have to manually select and assign your **Starting XI** to position-specific pitch slots.
-- **7-Substitute Rule**: Strategy matters—choose your bench wisely to change the game.
-- **Mathematical Pitch UI**: The formation board uses a perfectly synchronized flex grid, showing clean 3-letter UI positions along with live OVR ratings directly on the pitch.
-
-### 2. Impact-Based Match Engine (v2)
-I threw out the basic event simulator and built a custom **Impact Coefficient** engine. 
-- **Hero Moments**: Elite lineup members (87+ OVR) can trigger rare, match-winning plays (like 30-yard screamers or triple-saves). Stars genuinely feel like stars.
-- **Fair Playmaking**: The mathematical weights for assists are flattened, ensuring normal buildup play is fairly distributed across your squad instead of one player hoarding 70 assists a season.
-- **Full 20-Team Restoration**: Patched the CSV ingestion to ensure exact club matching. Teams that were completely missing before (Bournemouth, Fulham) are back, and I wrote a procedural roster script to ensure every squad has a playable 15-man minimum.
-
-### 3. Modern Tactical Interface
-- **Premium Dark Mode**: A sleek, high-contrast aesthetic designed for late-night management sessions.
-- **Awards Dashboard**: Track dynamic seasonal stats like the Golden Boot, Playmaker of the Season, and Golden Glove directly in the app.
+I built this over the weekends because I wanted a straightforward manager game where I could just pick a team, drag players around a pitch, and see what happens over a 38-game season. No microtransactions or overly complicated mechanics.
 
 ---
 
-## 🛠️ Getting Started
+## 🚀 The Basics
 
-### Prerequisites
+### 1. Hands-on Squad Selection
+You actually have to set up your team. Every player defaults to the reserves, and you just drag and drop them onto the pitch grid to build your starting 11. It won't let you put 11 strikers on the pitch, but you can try.
+- **7-Man Bench**: Pick your subs wisely. (Or don't. It's your club).
+- **Pitch Grid**: The UI uses a flexible grid system, so your 3-man midfield won't look weirdly stacked on top of your forwards anymore.
+
+### 2. Match Engine (v2 Updates)
+I recently threw out the old math and added a bit more chaos into the engine:
+- **Big Moments**: Good players (87+ overall) occasionally do cool stuff. You might get a 30-yard screamer from De Bruyne or a crazy triple-save from Alisson. 
+- **Pass the Ball**: Fixed a hilarious math error where one player would just hoard 70 assists a season. Now, the rest of the midfield actually remembers how to pass.
+- **20 Teams**: Fixed a data bug so Bournemouth and Fulham are actually in the game now. I also wrote a script to auto-generate some backup players just in case the real-world data was missing someone.
+
+### 3. UI and Stats
+- **Dark Mode**: Because looking at glaring white screens at 2 AM is awful.
+- **Awards Tab**: Check out who's winning the Golden Boot, Playmaker of the Season, and the Golden Glove. (I finally filtered the Golden Glove so a left-back can't accidentally win it).
+
+---
+
+## 🛠️ How to run it
+
+### What you need
 - Node.js (v18+)
-- Expo Go (on iOS/Android) or an Emulator
+- Expo Go on your phone or a simulator
 
-### Installation
-1. Clone the repository:
+### Setup
+1. Download the code:
    ```bash
    git clone https://github.com/N3V3MORE/side-quest.git
    ```
-2. Install dependencies:
+2. Install the stuff:
    ```bash
    cd side-quest
    npm install
    ```
-3. Start up the simulator:
+3. Run it:
    ```bash
    npx expo start
    ```
 
 ---
 
-## 📈 Version Notes
+## 📈 Updates
 
-I keep a detailed history of features, bug fixes, and technical updates in the **[CHANGELOG.md](./CHANGELOG.md)**.
+I keep a log of changes in the **[CHANGELOG.md](./CHANGELOG.md)** if you want to read what broke and what got fixed.
 
 **Current Version**: `v2.0.0`
-- Impact-Based Match Engine integration.
-- Procedural missing-squad generation.
-- Full 20-team Premier League restoration.
-- Tactical Pitch grid overhaul.
 
 ---
 
 ## 🤝 Contributing
 
-This is a side-quest project of mine. Feel free to fork, submit PRs, or open issues if you have cool feature ideas!
+This is just a weekend project. Feel free to mess around with the code, add stuff, or open a pull request!

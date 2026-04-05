@@ -1,36 +1,35 @@
 # Changelog - v2.0.0
 
-## Features
-- **Impact-Based Match Engine**: Overhauled the match simulator with a new Impact Coefficient system. Elite players (87+ OVR) now trigger rare, role-specific "Hero Moments" (like 30-yard screamers or triple-saves), giving stars genuine match-winning gravity.
-- **Data Restoration**: Patched the CSV parser to handle exact club name matching. The league is now restored to its full 20-team roster (welcome back, Bournemouth and Fulham).
-- **Squad Fallback Generator**: Built a procedural roster filler. Even if our source data has gaps, every 2025/26 club is now guaranteed a playable 15-man minimum squad.
-- **Awards Dashboard**: Updated the League Stats terminology to "Golden Boot", "Playmaker of the Season", and "Golden Glove". Added a strict filter so only actual goalkeepers qualify for the Golden Glove.
-- **Tactical Pitch Overhaul**: Scrapped the old offset grid. Formation nodes now utilize a perfectly synchronized flex grid layout and display clean 3-letter position acronyms along with the player's overall rating (OVR) directly on the pitch.
+## What's New
+- **Better Match Engine**: Tweaked the match simulator so elite players (87+ rating) can actually pull off rare, match-winning plays like screamers or triple-saves. Finally, the big names feel like big names.
+- **Data Fixed**: Fixed a bug where teams like Bournemouth and Fulham were just completely missing from the CSV. The Premier League is back to 20 teams now, as it should be.
+- **Squad Fallback**: Threw in a quick script to auto-generate missing players. Even if the data is a bit thin, every team will at least have 15 players so the game doesn't break.
+- **Awards Dashboard**: Updated the stats screen names to "Golden Boot", "Playmaker of the Season", and "Golden Glove". Oh, and I added a filter so only actual goalkeepers can win the Golden Glove (sorry, left-backs).
+- **Pitch UI Fixed**: Rewrote the pitch grid math. The positions are perfectly aligned now, using 3-letter acronyms, and you can see player ratings right on the pitch.
 
 ## Bug Fixes
-- **The Assist Hoarding Bug**: Fixed a probability flaw where top playmakers were racking up 70+ assists per season. Flushed the mathematical weights so normal buildup play is fairly distributed across the squad.
-- **League Table Wrapping**: Solved a UI bug where large Goal Differences (e.g., +102) would wrap vertically off the screen.
-- **ID Normalization**: Stripped legacy UUIDs and migrated the player database down to lightweight sequential numeric IDs for cleaner tracking.
+- **Assist Hoarding Bug**: Fixed a funny issue where top playmakers were racking up like 70 assists a season. Adjusted the math so normal players actually pass the ball too.
+- **League Table UI**: Fixed a bug where a massive goal difference (like +102) would wrap weirdly on small screens.
+- **ID Cleanup**: Cleaned up the player database by moving from bulky UUIDs to simple numbers. 
 
 ---
 
 # Changelog - v1.0.0
 
-## Features
-- **Manual Squad Management**: I locked down the team rosters so everyone starts in the Reserves now. You have to actively jump into the pitch UI to select and drag your Starting XI.
-- **Pitch-Based Lineup Picker**: Added a drag-and-drop tactical board to snap players into positions (LB, CB, AM, etc.). Put some basic filtering in so you know who actually plays where.
-- **7-Substitute System**: Got a proper bench working! You can designate 7 subs per match now, and they show up with nice little badges.
-- **Match Engine Tuning**: Spent a bunch of time tweaking the Poisson distribution math to stop crazy scorelines. Elite teams are finally hitting realistic seasonal goal totals (around 80-110).
-- **AI Lineup Logic**: Wrote an auto-fill routine for the AI managers so they actually pick their best 11, otherwise simming the league was just beating up on ghost squads.
-- **Clean Position Labels**: Shaved down the UI clutter by swapping out 3-letter codes for standard 2-letter ones (DM, AM, WB).
-- **Strategic Visualization**: Hooked up some color-coded strategy buttons (Defend = Blue, Balanced = Green, Attack = Red) to switch up playstyles on the fly.
+## What's New
+- **Manual Squads**: You actually have to pick your team now. Everyone starts on the bench, and you drag them onto the pitch to set your starting 11.
+- **Substitutes**: You can designate up to 7 subs per match now, complete with little badges.
+- **Match Tuning**: Tweaked the scoring logic so elite teams score around 80-110 goals a season instead of random numbers.
+- **AI Auto-fill**: Set up a basic routine so AI teams pick their best 11. Simming against ghost squads gets boring quickly.
+- **Clean Position Labels**: Swapped out the clunky 3-letter positions for standard 2-letter ones (DM, AM, etc.) to keep things tidy.
+- **Strategy Buttons**: Added simple color-coded buttons (Defend, Balanced, Attack) just to easily switch up how your team plays.
 
 ## Bug Fixes
-- **AI Blowouts**: Prevented the engine from simulating games where AI teams had empty sides (this was breaking the goals-scored logic entirely).
-- **Goalie Discipline**: Tuned down the referee logic because keepers were picking up way too many random yellow cards.
-- **Position Alignment**: Finally fixed the annoying visual bug where LW and RW were mapped backwards on the pitch!
+- **AI Blowouts**: Stopped the simulator from playing games where the AI had no players.
+- **Goalie Discipline**: Told the referees to chill out; goalkeepers were getting way too many yellow cards.
+- **Position Alignment**: Finally fixed the visual glitch where LW and RW were mapped backwards on the pitch.
 
-## Technical Updates
-- Moved state management over to Atomic Swapping in `gameStore.ts`.
-- Added the `initGameData` param so I can spin up fresh saves based on who the user controls.
-- Totally rebuilt `squad.tsx` from scratch for a darker, sleeker aesthetic. Runs way smoother now too.
+## Technical Stuff
+- Moved the state management to work a bit better under the hood.
+- Added a param so I can spin up fresh saves based on who is playing.
+- Redesigned the squad page for a nice dark theme. Looks much better at 2 AM.
