@@ -1,28 +1,27 @@
 # SideQuest Football Manager Simulator ⚽
 
-A high-fidelity, data-driven football management experience built with **React Native (Expo)** and **Zustand**. 
+A custom-built, data-driven football management experience built with **React Native (Expo)** and **Zustand**. 
 
-SideQuest FM puts you in the manager's seat, requiring tactical precision, squad-building expertise, and strategic gameplay to lead your team to Premier League glory.
+I built SideQuest FM to put you right in the manager's seat. It requires tactical precision, squad-building expertise, and strategic gameplay to lead your squad to Premier League glory.
 
 ---
 
 ## 🚀 Key Features
 
-### 1. Manual Squad Management
-Unlink traditional simulators, you have total control. All players start in the **Reserves**. You must manually assign your **Starting XI** to position-specific pitch slots.
-- **Atomic Swapping**: Seamlessly move players between the pitch, bench, and reserves.
+### 1. Active Squad Management
+Unlike rigid simulators, you have total control. All players start in the **Reserves**. You have to manually select and assign your **Starting XI** to position-specific pitch slots.
 - **7-Substitute Rule**: Strategy matters—choose your bench wisely to change the game.
+- **Mathematical Pitch UI**: The formation board uses a perfectly synchronized flex grid, showing clean 3-letter UI positions along with live OVR ratings directly on the pitch.
 
-### 2. Tuned Match Engine
-Experience realistic match outcomes powered by a **Poisson-distributed simulation**.
-- **Data-Driven**: Team performance is calculated from player ratings, formation synergy, and home advantage.
-- **Realistic Scoring**: Top teams compete for high totals (80-110 goals/season) without the "hundred-goal blowout" bugs.
-- **Strategic Influence**: Switch between **Defend**, **Balanced**, and **Attack** strategies in real-time to influence the simulation.
+### 2. Impact-Based Match Engine (v2)
+I threw out the basic event simulator and built a custom **Impact Coefficient** engine. 
+- **Hero Moments**: Elite lineup members (87+ OVR) can trigger rare, match-winning plays (like 30-yard screamers or triple-saves). Stars genuinely feel like stars.
+- **Fair Playmaking**: The mathematical weights for assists are flattened, ensuring normal buildup play is fairly distributed across your squad instead of one player hoarding 70 assists a season.
+- **Full 20-Team Restoration**: Patched the CSV ingestion to ensure exact club matching. Teams that were completely missing before (Bournemouth, Fulham) are back, and I wrote a procedural roster script to ensure every squad has a playable 15-man minimum.
 
 ### 3. Modern Tactical Interface
-- **2-Letter Labels**: Clean, modern pitch layout using standard football shorthand (DM, AM, CB).
-- **Premium Dark Mode**: A sleek, high-contrast aesthetic designed for long management sessions.
-- **Dynamic Stats**: Track goals, assists, clean sheets, and card counts across the entire league.
+- **Premium Dark Mode**: A sleek, high-contrast aesthetic designed for late-night management sessions.
+- **Awards Dashboard**: Track dynamic seasonal stats like the Golden Boot, Playmaker of the Season, and Golden Glove directly in the app.
 
 ---
 
@@ -42,7 +41,7 @@ Experience realistic match outcomes powered by a **Poisson-distributed simulatio
    cd side-quest
    npm install
    ```
-3. Start the simulator:
+3. Start up the simulator:
    ```bash
    npx expo start
    ```
@@ -51,15 +50,16 @@ Experience realistic match outcomes powered by a **Poisson-distributed simulatio
 
 ## 📈 Version Notes
 
-We maintain a detailed history of features, bug fixes, and technical updates in our **[CHANGELOG.md](./CHANGELOG.md)**.
+I keep a detailed history of features, bug fixes, and technical updates in the **[CHANGELOG.md](./CHANGELOG.md)**.
 
-**Current Version**: `v1.0.0`
-- Manual Lineup building enabled.
-- AI Starters restoration.
-- Match engine scoring calibration.
+**Current Version**: `v2.0.0`
+- Impact-Based Match Engine integration.
+- Procedural missing-squad generation.
+- Full 20-team Premier League restoration.
+- Tactical Pitch grid overhaul.
 
 ---
 
 ## 🤝 Contributing
 
-This is a side-quest project. Feel free to fork, submit PRs, or open issues for feature requests (like "In-game substitutions" or "Transfer Market")!
+This is a side-quest project of mine. Feel free to fork, submit PRs, or open issues if you have cool feature ideas!
