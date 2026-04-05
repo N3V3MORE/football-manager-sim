@@ -1,3 +1,14 @@
+# Changelog - v3.0.0 (The Engine Overhaul)
+
+## What's New
+- **Turbo Match Engine**: Decoupled the match logic from the state store, enabling pure functional simulations. The engine now clocks in at **~14,800 matches per second**, making 500-season statistical tests possible in under 13 seconds.
+- **Statistical Parity**: Calibrated the core scoring mechanics against historical Premier League data. Optimized the "Chaos Factor" and "Big Moment" triggers to achieve a natural **2.70 goals-per-match** average across the league.
+- **Advanced Positional Logic**: Refined the three-phase duel system (Build-up, Creation, Finishing). Midfield battles now correctly account for positional density, preventing "stat-lock" where lower-rated teams were previously unable to score.
+- **Simulation Tooling**: Integrated `turbo_sim.ts` for massive Monte Carlo testing and `detailed_season_sim.ts` for granular, match-by-match logical debugging.
+- **Disciplinary Realism**: Tuned the foul and card frequency to match professional standards (~4.0 yellow cards per match).
+
+---
+
 # Changelog - v2.0.0
 
 ## What's New
