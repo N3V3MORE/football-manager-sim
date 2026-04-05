@@ -17,20 +17,20 @@
 # Changelog - v1.0.0
 
 ## Features
-- **Manual Squad Management**: Teams now start with all players in Reserves. Managers must manually assign the Starting XI via the pitch interface.
-- **Pitch-Based Lineup Picker**: Tactically assign players to specific slots (e.g., LB, CB, AM) with eligibility filtering.
-- **7-Substitute System**: Designate up to 7 substitutes per match with clear visual badges.
-- **Match Engine Tuning**: Stabilized scoring using a tuned Poisson distribution (targeting realistic seasonal goal totals of 80-110 for elite teams).
-- **AI Lineup Logic**: Automated best-11 assignment for non-player teams to ensure competitive match simulations.
-- **Modernized Position Labels**: Shortened all 3-letter codes to modern 2-letter standards (e.g., DM, AM, WB) for UI clarity.
-- **Strategic Visualization**: Color-coded tactical strategies (Defend/Blue, Balanced/Green, Attack/Red).
+- **Manual Squad Management**: I locked down the team rosters so everyone starts in the Reserves now. You have to actively jump into the pitch UI to select and drag your Starting XI.
+- **Pitch-Based Lineup Picker**: Added a drag-and-drop tactical board to snap players into positions (LB, CB, AM, etc.). Put some basic filtering in so you know who actually plays where.
+- **7-Substitute System**: Got a proper bench working! You can designate 7 subs per match now, and they show up with nice little badges.
+- **Match Engine Tuning**: Spent a bunch of time tweaking the Poisson distribution math to stop crazy scorelines. Elite teams are finally hitting realistic seasonal goal totals (around 80-110).
+- **AI Lineup Logic**: Wrote an auto-fill routine for the AI managers so they actually pick their best 11, otherwise simming the league was just beating up on ghost squads.
+- **Clean Position Labels**: Shaved down the UI clutter by swapping out 3-letter codes for standard 2-letter ones (DM, AM, WB).
+- **Strategic Visualization**: Hooked up some color-coded strategy buttons (Defend = Blue, Balanced = Green, Attack = Red) to switch up playstyles on the fly.
 
 ## Bug Fixes
-- **AI Blowouts**: Fixed an issue where AI teams played with empty squads, leading to unrealistic scoring.
-- **Goalie Discipline**: Reduced excessive yellow card frequency for goalkeepers.
-- **Position Alignment**: Corrected the LW/RW swap on the pitch.
+- **AI Blowouts**: Prevented the engine from simulating games where AI teams had empty sides (this was breaking the goals-scored logic entirely).
+- **Goalie Discipline**: Tuned down the referee logic because keepers were picking up way too many random yellow cards.
+- **Position Alignment**: Finally fixed the annoying visual bug where LW and RW were mapped backwards on the pitch!
 
 ## Technical Updates
-- Migrated state management to Atomic Swapping in `gameStore.ts`.
-- Implemented `initGameData` parameter for user-specific initialization.
-- Fully overhauled `squad.tsx` for premium dark-themed aesthetics and better performance.
+- Moved state management over to Atomic Swapping in `gameStore.ts`.
+- Added the `initGameData` param so I can spin up fresh saves based on who the user controls.
+- Totally rebuilt `squad.tsx` from scratch for a darker, sleeker aesthetic. Runs way smoother now too.
