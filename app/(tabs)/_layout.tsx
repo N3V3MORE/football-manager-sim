@@ -33,31 +33,17 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="tactics"
+        options={{
+          title: 'Tactics',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="slider.horizontal.3" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="transfers"
         options={{
           title: 'Market',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="arrow.left.arrow.right" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="calendar"
-        options={{
-          title: 'Fixtures',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="league"
-        options={{
-          title: 'Table',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet.rectangle.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="board"
-        options={{
-          title: 'Board',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.bar.fill" color={color} />,
         }}
       />
     </Tabs>

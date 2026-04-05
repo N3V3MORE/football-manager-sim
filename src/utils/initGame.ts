@@ -1,6 +1,6 @@
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
-import { Player, Team, Fixture, Position, BoardObjective } from '../models/types';
+import { Player, Team, Fixture, Position, BoardObjective, TeamTactics } from '../models/types';
 import { computeMarketValue, getBudgetForClass } from './calendar';
 import premierLeaguePlayers from '../data/premier_league_players.json';
 
@@ -76,11 +76,28 @@ const generateObjectives = (teamClass: string, teamName: string): BoardObjective
   return objectives;
 };
 
+const getRandomTactics = (): TeamTactics => {
+  const mentalities: TeamTactics['mentality'][] = ['Defensive', 'Balanced', 'Attacking'];
+  const passingStyles: TeamTactics['passingStyle'][] = ['Short', 'Mixed', 'Direct'];
+  const tempos: TeamTactics['tempo'][] = ['Slow', 'Normal', 'Fast'];
+  const lines: TeamTactics['defensiveLine'][] = ['Deep', 'Standard', 'High'];
+  const pressings: TeamTactics['pressing'][] = ['None', 'Medium', 'High'];
+
+  return {
+    mentality: mentalities[Math.floor(Math.random() * mentalities.length)],
+    passingStyle: passingStyles[Math.floor(Math.random() * passingStyles.length)],
+    tempo: tempos[Math.floor(Math.random() * tempos.length)],
+    defensiveLine: lines[Math.floor(Math.random() * lines.length)],
+    pressing: pressings[Math.floor(Math.random() * pressings.length)],
+  };
+};
+
 export const initGameData = (userTeamName?: string) => {
   const teams: Record<string, Team> = {};
   const players: Record<string, Player> = {};
   const fixtures: Record<string, Fixture> = {};
   const teamIds: string[] = [];
+  const teamClasses: Record<string, string> = {}; // teamId -> class letter
 
   // Group real players by team title
   const playersByTeam: Record<string, any[]> = {};
@@ -96,6 +113,7 @@ export const initGameData = (userTeamName?: string) => {
   REAL_TEAMS.forEach(teamData => {
     const teamId = `T${teamCounter++}`;
     teamIds.push(teamId);
+    teamClasses[teamId] = teamData.class;
 
     teams[teamId] = {
       id: teamId,
@@ -109,7 +127,9 @@ export const initGameData = (userTeamName?: string) => {
       played: 0,
       activeFormation: '4-3-3',
       form: [],
-      strategy: 'balanced',
+      tactics: teamData.name === userTeamName 
+        ? { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' }
+        : getRandomTactics(),
       budget: getBudgetForClass(teamData.class),
       boardApproval: 50,
     };
@@ -181,6 +201,8 @@ export const initGameData = (userTeamName?: string) => {
         wage: Math.floor(mv * 1.5) + 10,
         contractLeft: 1 + Math.floor(Math.random() * 4),
         impactCoefficient: impact,
+        matchRatingHistory: [],
+        minutesPlayed: 0,
         goals: 0,
         assists: 0,
         cleanSheets: 0,
@@ -249,7 +271,7 @@ export const initGameData = (userTeamName?: string) => {
     fixtures[sId] = { id: sId, week: f.week + rounds, homeTeamId: f.away, awayTeamId: f.home, homeScore: null, awayScore: null, isPlayed: false };
   });
 
-  return { teams, players, fixtures };
+  return { teams, players, fixtures, teamClasses };
 };
 
 /** Generate board objectives for the user's team. */

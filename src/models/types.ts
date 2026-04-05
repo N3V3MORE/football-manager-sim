@@ -54,6 +54,8 @@ export interface Player {
   wage: number;             // wage in thousands per week
   contractLeft: number;     // years remaining on contract
   impactCoefficient: number;// modifier for clutch/hero moments
+  matchRatingHistory: number[]; // array of hidden ratings for each match
+  minutesPlayed: number;        // total season minutes played
   goals: number;
   assists: number;
   cleanSheets: number;
@@ -81,7 +83,6 @@ export interface Team {
   budget: number;            // transfer budget in millions £
   boardApproval: number;     // 0–100
   lastStartingXI?: string[]; // player IDs
-  lastSubs?: string[];       // player IDs
   formationMap?: Record<string, string>; // Maps slot coordinate 'row-col' to playerId
 }
 

@@ -250,7 +250,7 @@ export default function HubScreen() {
         </TouchableOpacity>
 
         {/* ── Upcoming Fixtures ── */}
-        <View style={styles.card}>
+        <TouchableOpacity style={styles.card} onPress={() => router.push('/calendar')} activeOpacity={0.85}>
           <Text style={styles.cardTitle}>Upcoming Fixtures</Text>
           {upcomingFixtures.map(({ week, match }) => {
             const oppId = match
@@ -286,7 +286,24 @@ export default function HubScreen() {
               </View>
             );
           })}
-        </View>
+          <Text style={styles.smallTapText}>Tap to view full calendar ›</Text>
+        </TouchableOpacity>
+
+        {/* ── Board Room ── */}
+        <TouchableOpacity style={styles.card} onPress={() => router.push('/board')} activeOpacity={0.85}>
+          <Text style={styles.cardTitle}>Board Room</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View>
+              <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Manager Approval</Text>
+              <Text style={{ color: myTeam.boardApproval >= 65 ? '#10B981' : (myTeam.boardApproval < 30 ? '#ef4444' : '#f59e0b'), fontSize: 24, fontWeight: '900', marginTop: 4 }}>
+                {Math.round(myTeam.boardApproval)}%
+              </Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.smallTapText}>Tap to view objectives ›</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
 
         {/* ── Mini Table ── */}
         <TouchableOpacity style={styles.card} onPress={() => router.push('/league')}>

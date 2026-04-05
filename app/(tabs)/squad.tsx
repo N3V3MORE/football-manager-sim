@@ -91,7 +91,6 @@ export default function SquadScreen() {
   const players       = useGameStore(s => s.players);
   const teams         = useGameStore(s => s.teams);
   const setFormation  = useGameStore(s => s.setFormation);
-  const setStrategy   = useGameStore(s => s.setStrategy);
   const swapPlayer    = useGameStore(s => s.swapPlayer);
   const markAsSub     = useGameStore(s => s.markAsSub);
   const swapStartingSlots = useGameStore(s => s.swapStartingSlots);
@@ -233,7 +232,6 @@ export default function SquadScreen() {
     }
   };
 
-  const strategy = myTeam?.strategy || 'balanced';
 
   const renderPlayerInPicker = (item: Player) => {
     const isSuspended = item.matchesSuspended > 0;
@@ -386,29 +384,6 @@ export default function SquadScreen() {
           </View>
         </View>
 
-        <View style={styles.strategyBar}>
-          <TouchableOpacity
-            style={[styles.stratBtn, strategy === 'defend' && styles.stratBtnDefend]}
-            onPress={() => setStrategy(userTeamId, 'defend')}
-          >
-            <Text style={styles.stratArrow}>◀</Text>
-            <Text style={[styles.stratText, strategy === 'defend' && styles.stratTextActive]}>DEFEND</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.stratBtn, strategy === 'balanced' && styles.stratBtnBalanced]}
-            onPress={() => setStrategy(userTeamId, 'balanced')}
-          >
-            <Text style={[styles.stratText, strategy === 'balanced' && styles.stratTextActive]}>BALANCED</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.stratBtn, strategy === 'attack' && styles.stratBtnAttack]}
-            onPress={() => setStrategy(userTeamId, 'attack')}
-          >
-            <Text style={[styles.stratText, strategy === 'attack' && styles.stratTextActive]}>ATTACK</Text>
-            <Text style={styles.stratArrow}>▶</Text>
-          </TouchableOpacity>
-        </View>
-
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Substitutes ({bench.length}/7)</Text>
           {bench.length === 0 && <Text style={styles.emptyNote}>Long-press a reserve to designate as sub</Text>}
@@ -527,19 +502,6 @@ const styles = StyleSheet.create({
   dropdownValue: { flex: 1, fontSize: 16, fontWeight: '900', color: '#f8fafc' },
   dropdownCaret: { fontSize: 14, color: '#64748b' },
 
-  // Strategy bar
-  strategyBar: {
-    flexDirection: 'row', borderRadius: 10, overflow: 'hidden',
-    borderWidth: 1, borderColor: '#334155', marginBottom: 10,
-  },
-  stratBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 9, backgroundColor: '#0f172a', gap: 4,
-  },
-  stratBtnDefend:    { backgroundColor: '#3B82F6' },
-  stratBtnAttack:    { backgroundColor: '#ef4444' },
-  stratBtnBalanced:  { backgroundColor: '#10B981' },
-  stratText:         { fontSize: 11, fontWeight: '900', color: '#64748b', letterSpacing: 0.5 },
   stratTextActive:   { color: '#fff' },
   stratArrow:        { fontSize: 12, color: '#64748b' },
   infoText:          { fontSize: 10, color: '#475569', fontStyle: 'italic' },
