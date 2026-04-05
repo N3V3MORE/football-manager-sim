@@ -1,11 +1,9 @@
 export type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
 export type Formation = 
   | '4-3-3' 
-  | '4-3-3 Flat' | '4-3-3 Attack' | '4-3-3 Defend'
   | '3-4-3' 
   | '5-2-3' 
   | '4-4-2'
-  | '4-4-2 Flat' | '4-4-2 Diamond'
   | '4-2-3-1' 
   | '3-5-2' 
   | '4-1-4-1' 
@@ -30,14 +28,22 @@ export interface Player {
   id: string;
   name: string;
   position: Position;
-  subPosition: string;   // granular FIFA pos e.g. 'RB', 'RM', 'ST'
+  subPosition: string;      // primary FIFA position e.g. 'RB', 'RM', 'ST'
+  altPositions: string[];   // all FIFA positions e.g. ['CAM', 'CM', 'LW']
   overallRating: number;
+  marketValue: number;      // value in millions £ e.g. 45.5
   age: number;
-  morale: number; // 0 to 100
-  energy: number; // 0 to 100
+  morale: number;           // 0 to 100
+  energy: number;           // 0 to 100
   teamId: string;
   isStarting: boolean;
-  isSub: boolean;        // true = designated sub (bench), false = pure reserve
+  isSub: boolean;           // true = designated sub (bench)
+  isTransferListed: boolean; // true = listed for sale
+  askingPrice: number;      // asking price in millions £ (0 if not listed)
+  matchesSuspended: number; // dynamically used for suspensions
+  wage: number;             // wage in thousands per week
+  contractLeft: number;     // years remaining on contract
+  impactCoefficient: number;// modifier for clutch/hero moments
   goals: number;
   assists: number;
   cleanSheets: number;
@@ -58,10 +64,21 @@ export interface Team {
   losses: number;
   played: number;
   activeFormation: Formation;
-  form: string[]; // ['W', 'D', 'L', 'W', 'W']
+  form: string[];            // ['W', 'D', 'L', 'W', 'W']
   strategy: 'defend' | 'balanced' | 'attack';
+  budget: number;            // transfer budget in millions £
+  boardApproval: number;     // 0–100
   lastStartingXI?: string[]; // player IDs
-  lastSubs?: string[];        // player IDs
+  lastSubs?: string[];       // player IDs
+  formationMap?: Record<string, string>; // Maps slot coordinate 'row-col' to playerId
+}
+
+export interface BoardObjective {
+  id: string;
+  description: string;
+  type: 'position' | 'goalDiff' | 'spend' | 'wins';
+  target: number;
+  met: boolean;
 }
 
 export interface Fixture {
@@ -81,4 +98,5 @@ export interface GameState {
   players: Record<string, Player>;
   fixtures: Record<string, Fixture>;
   news: string[];
+  boardObjectives: BoardObjective[];
 }

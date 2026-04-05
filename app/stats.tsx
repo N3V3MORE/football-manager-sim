@@ -20,7 +20,7 @@ export default function StatsScreen() {
     .slice(0, 10);
 
   const topCleanSheets = [...allPlayers]
-    .filter(p => p.cleanSheets && p.cleanSheets > 0)
+    .filter(p => p.position === 'GK' && p.cleanSheets && p.cleanSheets > 0)
     .sort((a, b) => b.cleanSheets - a.cleanSheets || b.overallRating - a.overallRating)
     .slice(0, 10);
 
@@ -89,11 +89,11 @@ export default function StatsScreen() {
             <Text style={styles.title}>League Stats</Text>
         </View>
 
-        {renderPane('Top Scorers (Golden Boot)', 'goals', topScorers, 'goals')}
-        {renderPane('Top Assisters', 'assists', topAssisters, 'assists')}
-        {renderPane('Most Clean Sheets', 'cleanSheets', topCleanSheets, 'cleanSheets')}
-        {renderPane('Most Yellow Cards', 'yellow', topYellowCards, 'yellowCards')}
-        {renderPane('Most Red Cards', 'red', topRedCards, 'redCards')}
+        {renderPane('Golden Boot', 'goals', topScorers, 'goals')}
+        {renderPane('Playmaker of the Season', 'assists', topAssisters, 'assists')}
+        {renderPane('Golden Glove', 'cleanSheets', topCleanSheets, 'cleanSheets')}
+        {renderPane('Yellow Cards', 'yellow', topYellowCards, 'yellowCards')}
+        {renderPane('Red Cards', 'red', topRedCards, 'redCards')}
 
         <View style={{ height: 40 }} />
       </ScrollView>

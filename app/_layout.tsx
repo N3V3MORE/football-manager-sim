@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useGameStore } from '@/src/store/gameStore';
+import { useState } from 'react';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -14,27 +15,28 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const userTeamId = useGameStore(state => state.userTeamId);
+  const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
+    setHasHydrated(useGameStore.persist.hasHydrated());
+    const unsub = useGameStore.persist.onFinishHydration(() => {
+      setHasHydrated(true);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+
     const state = useGameStore.getState();
     const isStateValid = state.userTeamId && state.teams[state.userTeamId];
 
     if (!isStateValid) {
-      // First, temporarily initialize to generate the data
       state.initializeGame('temp');
-      
-      // Now get that generated data
-      const allTeams = useGameStore.getState().teams;
-      const firstTeamId = Object.keys(allTeams)[0];
-      
-      // Update the userTeamId directly without regenerating the data
-      if (firstTeamId) {
-        useGameStore.setState({ userTeamId: firstTeamId });
-      }
     }
-  }, [userTeamId]);
+  }, [hasHydrated, userTeamId]);
 
-  if (!userTeamId) return null; // Wait for initialization
+  if (!hasHydrated || !userTeamId) return null; // Wait for initialization
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

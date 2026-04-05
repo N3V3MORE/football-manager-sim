@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,12 +12,44 @@ export default function MatchScreen() {
   const fixtures = useGameStore(state => state.fixtures);
   const teams = useGameStore(state => state.teams);
   const players = useGameStore(state => state.players);
-  const playMatch = useGameStore(state => state.playMatch);
+  const processMatchMinute = useGameStore(state => state.processMatchMinute);
+  const finishLiveMatch = useGameStore(state => state.finishLiveMatch);
   const advanceWeek = useGameStore(state => state.advanceWeek);
 
   const fixture = fixtures[fixtureId];
   
-  const [matchPlayed, setMatchPlayed] = useState(false);
+  const [minute, setMinute] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isHalfTime, setIsHalfTime] = useState(false);
+  const [matchFinished, setMatchFinished] = useState(false);
+  const [logs, setLogs] = useState<string[]>(['Match is ready to start!']);
+
+  const minuteRef = useRef(0);
+
+  useEffect(() => {
+    let interval: any;
+    if (isPlaying && !isHalfTime && !matchFinished) {
+      interval = setInterval(() => {
+        minuteRef.current += 1;
+        const nextMin = minuteRef.current;
+        setMinute(nextMin);
+
+        const { event } = processMatchMinute(fixtureId, nextMin);
+        if (event) {
+          setLogs((l) => [event, ...l].slice(0, 8));
+        }
+        if (nextMin === 45) {
+          setIsHalfTime(true);
+          setIsPlaying(false);
+        } else if (nextMin >= 90) {
+          setMatchFinished(true);
+          setIsPlaying(false);
+          finishLiveMatch(fixtureId);
+        }
+      }, 167); // 15 seconds total for 90 minutes
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying, isHalfTime, matchFinished, fixtureId, processMatchMinute, finishLiveMatch]);
 
   const getPosColor = (pos: string) => {
     switch(pos) {
@@ -53,10 +85,9 @@ export default function MatchScreen() {
     .filter(p => p.teamId === fixture.awayTeamId && p.isStarting)
     .sort((a, b) => posOrder[a.position] - posOrder[b.position]);
 
-  const handleSimulate = () => {
-    playMatch(fixtureId);
-    setMatchPlayed(true);
-  };
+  const handleStart = () => setIsPlaying(true);
+  const handlePause = () => setIsPlaying(false);
+  const handleResumeHT = () => { setIsHalfTime(false); setIsPlaying(true); };
 
   const handleContinue = () => {
     advanceWeek(); // advance to next week
@@ -64,7 +95,13 @@ export default function MatchScreen() {
   };
 
   const handleExit = () => {
-      router.back();
+    if (!matchFinished && minute > 0 && minute < 90) {
+      for (let m = minute + 1; m <= 90; m++) {
+        processMatchMinute(fixtureId, m);
+      }
+      finishLiveMatch(fixtureId);
+    }
+    router.back();
   };
 
   const currentFixture = fixtures[fixtureId];
@@ -80,27 +117,32 @@ export default function MatchScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.headerTitle}>Match Simulation</Text>
         <Text style={styles.stadiumText}>{stadium}</Text>
+        <Text style={styles.minuteClock}>{minute}&apos;</Text>
         
         <View style={styles.scoreboard}>
           <View style={styles.teamBox}>
             <Text style={[styles.teamName, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
-            <Text style={styles.score}>{currentFixture.isPlayed ? currentFixture.homeScore : '-'}</Text>
+            <Text style={styles.score}>
+                {minute > 0 || currentFixture.isPlayed ? currentFixture.homeScore : '-'}
+            </Text>
           </View>
           <View style={styles.vsBox}>
             <Text style={styles.vsText}>VS</Text>
           </View>
           <View style={styles.teamBox}>
             <Text style={[styles.teamName, { color: awayPrimary }]}>{awayTeam.name}</Text>
-            <Text style={styles.score}>{currentFixture.isPlayed ? currentFixture.awayScore : '-'}</Text>
+            <Text style={styles.score}>
+                {minute > 0 || currentFixture.isPlayed ? currentFixture.awayScore : '-'}
+            </Text>
           </View>
         </View>
 
         <View style={styles.logBox}>
-          {currentFixture.isPlayed ? (
-            <Text style={styles.logText}>Match Finished!</Text>
-          ) : (
-            <Text style={styles.logText}>Ready To Kick Off</Text>
-          )}
+          {logs.map((log, idx) => (
+             <Text key={idx} style={[styles.logText, idx === 0 && styles.logTextLatest]}>
+                {log}
+             </Text>
+          ))}
         </View>
 
         <View style={styles.lineupRow}>
@@ -129,11 +171,27 @@ export default function MatchScreen() {
         </View>
 
         <View style={styles.buttonContainer}>
-          {!matchPlayed ? (
-            <TouchableOpacity style={styles.btnSimulate} onPress={handleSimulate}>
-              <Text style={styles.btnText}>Quick Simulate</Text>
+          {!isPlaying && !isHalfTime && !matchFinished && minute === 0 && (
+            <TouchableOpacity style={styles.btnSimulate} onPress={handleStart}>
+              <Text style={styles.btnText}>Kick Off</Text>
             </TouchableOpacity>
-          ) : (
+          )}
+          {isPlaying && (
+            <TouchableOpacity style={styles.btnPause} onPress={handlePause}>
+              <Text style={styles.btnText}>Pause & Tactics</Text>
+            </TouchableOpacity>
+          )}
+          {!isPlaying && !isHalfTime && !matchFinished && minute > 0 && (
+            <TouchableOpacity style={styles.btnSimulate} onPress={handleStart}>
+              <Text style={styles.btnText}>Resume</Text>
+            </TouchableOpacity>
+          )}
+          {isHalfTime && (
+            <TouchableOpacity style={styles.btnSimulate} onPress={handleResumeHT}>
+              <Text style={styles.btnText}>Start Second Half</Text>
+            </TouchableOpacity>
+          )}
+          {matchFinished && (
             <TouchableOpacity style={styles.btnContinue} onPress={handleContinue}>
               <Text style={styles.btnText}>Continue to Next Week</Text>
             </TouchableOpacity>
@@ -178,8 +236,15 @@ const styles = StyleSheet.create({
       fontSize: 14,
       textAlign: 'center',
       fontWeight: '600',
-      marginBottom: 32,
+      marginBottom: 12,
       letterSpacing: 1,
+  },
+  minuteClock: {
+      color: '#ef4444',
+      fontSize: 32,
+      fontWeight: '900',
+      textAlign: 'center',
+      marginBottom: 20,
   },
   scoreboard: {
     flexDirection: 'row',
@@ -219,14 +284,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#1e293b',
     padding: 16,
     borderRadius: 12,
-    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#334155',
+    minHeight: 120,
   },
   logText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  logTextLatest: {
     color: '#38bdf8',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
+    marginBottom: 8,
   },
   lineupRow: {
       flexDirection: 'row',
@@ -253,6 +324,15 @@ const styles = StyleSheet.create({
   },
   btnSimulate: {
     backgroundColor: '#38bdf8',
+    paddingVertical: 10,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    alignSelf: 'center',
+    minWidth: 200,
+  },
+  btnPause: {
+    backgroundColor: '#F59E0B',
     paddingVertical: 10,
     paddingHorizontal: 32,
     borderRadius: 8,

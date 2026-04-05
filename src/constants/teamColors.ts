@@ -7,7 +7,7 @@ export interface TeamTheme {
 
 export const TEAM_COLORS: Record<string, TeamTheme> = {
     'Arsenal': { primary: '#EF0107', secondary: '#FFFFFF', stadium: 'Emirates Stadium', founded: 1886 },
-    'Aston Villa': { primary: '#670E36', secondary: '#95BFE5', stadium: 'Villa Park', founded: 1874 },
+    'Aston Villa': { primary: '#6C1D45', secondary: '#95BFE5', stadium: 'Villa Park', founded: 1874 },
     'Bournemouth': { primary: '#B50E12', secondary: '#000000', stadium: 'Vitality Stadium', founded: 1899 },
     'Brentford': { primary: '#E30613', secondary: '#FFFFFF', stadium: 'Gtech Community Stadium', founded: 1889 },
     'Brighton': { primary: '#0057B8', secondary: '#FFFFFF', stadium: 'Amex Stadium', founded: 1901 },

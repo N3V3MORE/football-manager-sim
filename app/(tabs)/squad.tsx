@@ -1,68 +1,89 @@
 import {
-  StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, Pressable
+  StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, Pressable, Animated, PanResponder
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useGameStore } from '@/src/store/gameStore';
 import { Formation, Player } from '@/src/models/types';
 
 // ─── Formation slot definitions ──────────────────────────────────────────────
-interface Slot { pos: 'GK' | 'DEF' | 'MID' | 'FWD'; label: string; }
+import { getSlotsForFormation, Slot } from '@/src/constants/formations';
 
 const FORMATIONS: Formation[] = ['4-3-3', '4-4-2', '4-2-3-1', '5-2-3', '3-5-2', '4-1-4-1', '4-3-2-1'];
 
-// Base slots for each formation family
-const BASE_FORMATION_SLOTS: Record<string, Slot[][]> = {
-  '4-3-3': [
-    [{ pos: 'FWD', label: 'LW' }, { pos: 'FWD', label: 'CF' }, { pos: 'FWD', label: 'RW' }],
-    [{ pos: 'MID', label: 'CM' }, { pos: 'MID', label: 'CM' }, { pos: 'MID', label: 'CM' }],
-    [{ pos: 'DEF', label: 'LB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'RB' }],
-    [{ pos: 'GK', label: 'GK' }],
-  ],
-  '4-4-2': [
-    [{ pos: 'FWD', label: 'ST' }, { pos: 'FWD', label: 'ST' }],
-    [{ pos: 'MID', label: 'LM' }, { pos: 'MID', label: 'CM' }, { pos: 'MID', label: 'CM' }, { pos: 'MID', label: 'RM' }],
-    [{ pos: 'DEF', label: 'LB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'RB' }],
-    [{ pos: 'GK', label: 'GK' }],
-  ],
-  '4-2-3-1': [
-    [{ pos: 'FWD', label: 'ST' }],
-    [{ pos: 'MID', label: 'AM' }, { pos: 'MID', label: 'AM' }, { pos: 'MID', label: 'AM' }],
-    [{ pos: 'MID', label: 'DM' }, { pos: 'MID', label: 'DM' }],
-    [{ pos: 'DEF', label: 'LB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'RB' }],
-    [{ pos: 'GK', label: 'GK' }],
-  ],
-  '5-2-3': [
-    [{ pos: 'FWD', label: 'LW' }, { pos: 'FWD', label: 'ST' }, { pos: 'FWD', label: 'RW' }],
-    [{ pos: 'MID', label: 'CM' }, { pos: 'MID', label: 'CM' }],
-    [{ pos: 'DEF', label: 'WB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'WB' }],
-    [{ pos: 'GK', label: 'GK' }],
-  ],
-  '3-5-2': [
-    [{ pos: 'FWD', label: 'ST' }, { pos: 'FWD', label: 'ST' }],
-    [{ pos: 'MID', label: 'LM' }, { pos: 'MID', label: 'CM' }, { pos: 'MID', label: 'DM' }, { pos: 'MID', label: 'CM' }, { pos: 'MID', label: 'RM' }],
-    [{ pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'CB' }],
-    [{ pos: 'GK', label: 'GK' }],
-  ],
-  '4-1-4-1': [
-    [{ pos: 'FWD', label: 'ST' }],
-    [{ pos: 'MID', label: 'LM' }, { pos: 'MID', label: 'CM' }, { pos: 'MID', label: 'CM' }, { pos: 'MID', label: 'RM' }],
-    [{ pos: 'MID', label: 'DM' }],
-    [{ pos: 'DEF', label: 'LB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'RB' }],
-    [{ pos: 'GK', label: 'GK' }],
-  ],
-  '4-3-2-1': [
-    [{ pos: 'FWD', label: 'ST' }],
-    [{ pos: 'MID', label: 'AM' }, { pos: 'MID', label: 'AM' }],
-    [{ pos: 'MID', label: 'CM' }, { pos: 'MID', label: 'CM' }, { pos: 'MID', label: 'CM' }],
-    [{ pos: 'DEF', label: 'LB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'CB' }, { pos: 'DEF', label: 'RB' }],
-    [{ pos: 'GK', label: 'GK' }],
-  ],
+const SLOT_SUBPOS: Record<string, string[]> = {
+  GK: ['GK'],
+  LB: ['LB', 'LWB'], RB: ['RB', 'RWB'],
+  WB: ['WB', 'LWB', 'RWB', 'LB', 'RB'],
+  CB: ['CB'],
+  DM: ['CDM', 'CM'], AM: ['CAM', 'LM', 'CM', 'RM'],
+  CM: ['CM', 'CDM', 'CAM'],
+  LM: ['LM', 'LW'], RM: ['RM', 'RW'],
+  LW: ['LW', 'LM', 'LF'], RW: ['RW', 'RM', 'RF'],
+  LF: ['LF', 'LW'], RF: ['RF', 'RW'],
+  ST: ['ST', 'CF'], CF: ['CF', 'ST'],
 };
 
-const getSlotsForFormation = (formation: string): Slot[][] => {
-  const base = formation.split(' ')[0];
-  return BASE_FORMATION_SLOTS[base] || BASE_FORMATION_SLOTS['4-3-3'];
+const DraggableDot = ({
+  slotKey, slot, assigned, getPosColor, onPress, onDragBegin, onDragEnd, setRef
+}: any) => {
+  const pan = useRef(new Animated.ValueXY()).current;
+  const isDragging = useRef(false);
+  const assignedRef = useRef(assigned);
+  assignedRef.current = assigned;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (e, gesture) => !!assignedRef.current && (Math.abs(gesture.dx) > 10 || Math.abs(gesture.dy) > 10),
+      onPanResponderGrant: () => {
+         isDragging.current = true;
+         onDragBegin();
+         pan.setOffset({ x: (pan.x as any)._value, y: (pan.y as any)._value });
+         pan.setValue({ x: 0, y: 0 });
+      },
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+      onPanResponderRelease: (e, gesture) => {
+         isDragging.current = false;
+         pan.flattenOffset();
+         onDragEnd(gesture.moveX, gesture.moveY);
+         Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
+      }
+    })
+  ).current;
+
+  return (
+    <View ref={setRef} style={[styles.pitchDot, { zIndex: isDragging.current ? 100 : 1 }]}>
+      <Animated.View
+        style={{ transform: pan.getTranslateTransform() }}
+        {...panResponder.panHandlers}
+      >
+        <TouchableOpacity 
+          onPress={onPress} 
+          activeOpacity={0.8}
+          delayPressIn={50}
+        >
+          <View style={[
+            styles.pitchDotCircle,
+            { backgroundColor: assigned ? getPosColor(slot.pos) : '#1e3a2f' },
+            !assigned && styles.pitchDotEmpty,
+          ]}>
+            <Text style={styles.pitchDotLabel}>
+              {assigned ? (assigned.subPosition || slot.pos).substring(0, 3) : slot.label}
+            </Text>
+          </View>
+          <Text style={[styles.pitchDotName, !assigned && { color: '#4ade80' }]} numberOfLines={1}>
+            {assigned ? assigned.name.split(' ').pop() : '+'}
+          </Text>
+          {assigned && (
+             <View style={{ backgroundColor: '#cbd5e1', alignSelf: 'center', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, marginTop: 2 }}>
+               <Text style={{ fontSize: 9, fontWeight: '900', color: '#0f172a' }}>{assigned.overallRating}</Text>
+             </View>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
 };
 
 export default function SquadScreen() {
@@ -73,10 +94,16 @@ export default function SquadScreen() {
   const setStrategy   = useGameStore(s => s.setStrategy);
   const swapPlayer    = useGameStore(s => s.swapPlayer);
   const markAsSub     = useGameStore(s => s.markAsSub);
+  const swapStartingSlots = useGameStore(s => s.swapStartingSlots);
 
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [expandedCardId, setExpandedCardId]   = useState<string | null>(null);
   const [showFormationDrop, setShowFormationDrop] = useState(false);
   const [activeSlotIndex, setActiveSlotIndex] = useState<{ row: number; col: number } | null>(null);
+  const [showInfo, setShowInfo] = useState(false);
+
+  const slotRefs = useRef<Record<string, any>>({});
+  const slotBounds = useRef<Record<string, {x: number, y: number, w: number, h: number}>>({});
 
   if (!userTeamId) return null;
   const myTeam  = teams[userTeamId];
@@ -97,12 +124,58 @@ export default function SquadScreen() {
   const bench     = mySquad.filter(p => p.isSub);
   const reserves  = mySquad.filter(p => !p.isStarting && !p.isSub);
 
-  const slotPlayers: (Player | null)[][] = slots.map((row: Slot[]) => {
-    return row.map((slot: Slot) => {
-      // Find a starter whose subPosition or broad position matches this slot
-      return starters.find(p => p.isStarting && (p.subPosition === slot.label || p.position === slot.pos)) || null;
-    });
-  });
+  const formationMap = myTeam?.formationMap || {};
+  const hasMap = Object.keys(formationMap).length > 0;
+  
+  const slotPlayers = useMemo(() => {
+    const arr: (Player | null)[][] = slots.map((row: Slot[]) => row.map(() => null));
+    if (hasMap) {
+      slots.forEach((row: Slot[], r: number) => {
+         row.forEach((_: any, c: number) => {
+            const pid = formationMap[`${r}-${c}`];
+            arr[r][c] = pid ? starters.find(p => p.id === pid) || null : null;
+         });
+      });
+    } else {
+      const available = [...starters];
+      arr.forEach((row, r) => {
+         row.forEach((_, c) => {
+            const slot = slots[r][c];
+            let idx = available.findIndex(p => p.subPosition === slot.label);
+            if (idx === -1) idx = available.findIndex(p => p.position === slot.pos);
+            if (idx !== -1) arr[r][c] = available.splice(idx, 1)[0];
+         });
+      });
+      arr.forEach((row) => {
+         row.forEach((_, c) => {
+            if (!row[c] && available.length > 0) row[c] = available.shift() || null;
+         });
+      });
+    }
+    return arr;
+  }, [slots, starters, hasMap, formationMap]);
+
+  const measureSlots = () => {
+     Object.keys(slotRefs.current).forEach(key => {
+        slotRefs.current[key]?.measure((x: number, y: number, w: number, h: number, px: number, py: number) => {
+           slotBounds.current[key] = { x: px, y: py, w, h };
+        });
+     });
+  };
+
+  const handleDragEnd = (r: number, c: number, mx: number, my: number) => {
+     setScrollEnabled(true);
+     let droppedKey: string | null = null;
+     Object.entries(slotBounds.current).forEach(([k, b]: [string, any]) => {
+        if (mx >= b.x - 20 && mx <= b.x + b.w + 20 &&
+            my >= b.y - 20 && my <= b.y + b.h + 20) {
+           droppedKey = k;
+        }
+     });
+     if (droppedKey && droppedKey !== `${r}-${c}`) {
+        swapStartingSlots(userTeamId, `${r}-${c}`, droppedKey);
+     }
+  };
 
   const handleFormationSelect = (f: string) => {
     if (userTeamId) setFormation(userTeamId, f as Formation);
@@ -119,30 +192,17 @@ export default function SquadScreen() {
     }
   };
 
-  const VARIANTS: Record<string, string[]> = {
-    '4-3-3': ['4-3-3', '4-3-3 Attack', '4-3-3 Defend'],
-    '4-4-2': ['4-4-2', '4-4-2 Diamond'],
-  };
-
-  const SLOT_SUBPOS: Record<string, string[]> = {
-    GK: ['GK'],
-    LB: ['LB', 'LWB'], RB: ['RB', 'RWB'],
-    WB: ['WB', 'LWB', 'RWB', 'LB', 'RB'],
-    CB: ['CB'],
-    DM: ['CDM', 'CM'], AM: ['CAM', 'LM', 'CM', 'RM'],
-    CM: ['CM', 'CDM', 'CAM'],
-    LM: ['LM', 'LW'], RM: ['RM', 'RW'],
-    LW: ['LW', 'LM', 'LF'], RW: ['RW', 'RM', 'RF'],
-    LF: ['LF', 'LW'], RF: ['RF', 'RW'],
-    ST: ['ST', 'CF'], CF: ['CF', 'ST'],
-  };
 
   const getPickerSections = (slot: Slot, currentOccupantId: string | null) => {
-    const pool = mySquad.filter(p => !p.isStarting || p.id === currentOccupantId)
+    const pool = mySquad.filter(p => !p.isStarting)
       .sort((a, b) => b.overallRating - a.overallRating);
     const allowedSubPos = SLOT_SUBPOS[slot.label] || [];
 
-    const recommended = pool.filter(p => allowedSubPos.includes(p.subPosition || p.position));
+    const recommended = pool.filter(p => {
+      const hasAltPos = p.altPositions?.some(alt => allowedSubPos.includes(alt));
+      return hasAltPos || allowedSubPos.includes(p.subPosition) || allowedSubPos.includes(p.position);
+    });
+    
     const recIds = new Set(recommended.map(p => p.id));
     const alternatives = pool.filter(p => !recIds.has(p.id) && p.position === slot.pos);
 
@@ -157,39 +217,61 @@ export default function SquadScreen() {
     const currentOccupant = activeSlotIndex
       ? slotPlayers[activeSlotIndex.row]?.[activeSlotIndex.col]
       : null;
-    swapPlayer(currentOccupant?.id ?? null, pickedId);
+    const slotKey = activeSlotIndex ? `${activeSlotIndex.row}-${activeSlotIndex.col}` : undefined;
+    swapPlayer(currentOccupant?.id ?? null, pickedId, slotKey);
     setActiveSlotIndex(null);
   };
 
-  const handleSubToggle = (playerId: string) => {
-    if (bench.length >= 7 && !bench.find(p => p.id === playerId)) return;
-    markAsSub(playerId);
+  const handleSubToggle = (playerId: string, isBench: boolean) => {
+    if (isBench) {
+      // Long-press on bench player removes them from sub designation
+      markAsSub(playerId);
+    } else {
+      // Single tap on reserve adds to subs (if space)
+      if (bench.length >= 7) return;
+      markAsSub(playerId);
+    }
   };
 
   const strategy = myTeam?.strategy || 'balanced';
 
-  const renderPlayerInPicker = (item: Player) => (
-    <TouchableOpacity key={item.id} style={styles.pickerRow} onPress={() => handlePickPlayer(item.id)}>
+  const renderPlayerInPicker = (item: Player) => {
+    const isSuspended = item.matchesSuspended > 0;
+    const isExhausted = item.energy < 70;
+    const warningColor = (isSuspended || isExhausted) ? '#ef4444' : undefined;
+    return (
+    <TouchableOpacity key={item.id} style={[styles.pickerRow, warningColor && { borderColor: warningColor }]} onPress={() => handlePickPlayer(item.id)}>
       <View style={[styles.modalPosPill, { backgroundColor: getPosColor(item.position) }]}>
         <Text style={styles.modalPosText}>{item.subPosition || item.position}</Text>
       </View>
-      <Text style={styles.pickerName} numberOfLines={1}>{item.name}</Text>
-      <Text style={styles.pickerNat}>{item.nationality}</Text>
+      <View style={{ flex: 1 }}>
+         <Text style={[styles.pickerName, warningColor && { color: warningColor }]} numberOfLines={1}>{item.name}</Text>
+         <Text style={styles.pickerNat}>{item.nationality} • {Math.floor(item.energy)}% NRG</Text>
+      </View>
       <View style={styles.pickerRating}>
         <Text style={styles.pickerRatingText}>{item.overallRating}</Text>
       </View>
       {item.isStarting && <Text style={styles.pickerStarter}>★ In Selection</Text>}
+      {isSuspended && <Text style={{ fontSize: 10, color: '#ef4444', fontWeight: 'bold' }}> SUSP</Text>}
     </TouchableOpacity>
-  );
+    );
+  };
 
   const renderCompactPlayer = (item: Player, _unused1: boolean, _unused2: boolean, isBench: boolean) => {
     const isExpanded = expandedCardId === item.id;
+    const isSuspended = item.matchesSuspended > 0;
+    const isExhausted = item.energy < 70;
+    const warningColor = (isSuspended || isExhausted) ? '#ef4444' : undefined;
+
     return (
       <View key={item.id}>
         <TouchableOpacity
-          style={[styles.playerRow, isExpanded && styles.playerRowExpanded]}
-          onPress={() => setExpandedCardId(isExpanded ? null : item.id)}
-          onLongPress={() => handleSubToggle(item.id)}
+          style={[styles.playerRow, isExpanded && styles.playerRowExpanded, warningColor && { borderColor: warningColor }]}
+          onPress={() => isBench
+            ? setExpandedCardId(isExpanded ? null : item.id)
+            : handleSubToggle(item.id, false)
+          }
+          onLongPress={() => isBench ? handleSubToggle(item.id, true) : setExpandedCardId(isExpanded ? null : item.id)}
           delayLongPress={400}
           activeOpacity={0.7}
         >
@@ -197,8 +279,10 @@ export default function SquadScreen() {
             <Text style={styles.posText}>{item.subPosition || item.position}</Text>
           </View>
           <View style={styles.playerMeta}>
-            <Text style={styles.playerName} numberOfLines={1}>{item.name}</Text>
-            <Text style={styles.nationality}>{item.nationality}</Text>
+            <Text style={[styles.playerName, warningColor && { color: warningColor }]} numberOfLines={1}>
+              {item.name} {isSuspended && <Text style={{fontSize: 10, color: '#ef4444'}}>[SUSP]</Text>}
+            </Text>
+            <Text style={styles.nationality}>{item.nationality} • {Math.floor(item.energy)}% Energy</Text>
           </View>
           <View style={styles.playerRowRight}>
             <View style={styles.ratingBox}>
@@ -254,73 +338,75 @@ export default function SquadScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView>
+      <ScrollView scrollEnabled={scrollEnabled} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Tactics & Squad</Text>
+          <View style={styles.headerRow}>
+            <Text style={styles.title}>Tactics & Squad</Text>
+            <TouchableOpacity style={styles.infoBtn} onPress={() => setShowInfo(true)}>
+              <Text style={styles.infoBtnText}>i</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowFormationDrop(true)}>
             <Text style={styles.dropdownLabel}>Formation</Text>
             <Text style={styles.dropdownValue}>{activeFormation}</Text>
             <Text style={styles.dropdownCaret}>▾</Text>
           </TouchableOpacity>
-
-          <View style={styles.strategyBar}>
-            <TouchableOpacity
-              style={[styles.stratBtn, strategy === 'defend' && styles.stratBtnDefend]}
-              onPress={() => setStrategy(userTeamId, 'defend')}
-            >
-              <Text style={styles.stratArrow}>◀</Text>
-              <Text style={[styles.stratText, strategy === 'defend' && styles.stratTextActive]}>DEFEND</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.stratBtn, strategy === 'balanced' && styles.stratBtnBalanced]}
-              onPress={() => setStrategy(userTeamId, 'balanced')}
-            >
-              <Text style={[styles.stratText, strategy === 'balanced' && styles.stratTextActive]}>BALANCED</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.stratBtn, strategy === 'attack' && styles.stratBtnAttack]}
-              onPress={() => setStrategy(userTeamId, 'attack')}
-            >
-              <Text style={[styles.stratText, strategy === 'attack' && styles.stratTextActive]}>ATTACK</Text>
-              <Text style={styles.stratArrow}>▶</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.infoText}>Long-press reserve to mark as sub (max 7) • Tap pitch slot to assign player</Text>
         </View>
 
         <View style={styles.pitchWrapper}>
+          {/* Football pitch */}
           <View style={styles.pitch}>
-            <View style={styles.pitchHalfLine} />
-            <View style={styles.pitchCentreCircle} />
-            {slots.map((row: Slot[], rowIdx: number) => (
-              <View key={rowIdx} style={styles.pitchRow}>
-                {row.map((slot: Slot, colIdx: number) => {
-                  const assigned = slotPlayers[rowIdx]?.[colIdx];
-                  return (
-                    <TouchableOpacity
-                      key={colIdx}
-                      style={styles.pitchDot}
-                      onPress={() => handleSlotPress(rowIdx, colIdx)}
-                    >
-                      <View style={[
-                        styles.pitchDotCircle,
-                        { backgroundColor: assigned ? getPosColor(slot.pos) : '#1e3a2f' },
-                        !assigned && styles.pitchDotEmpty,
-                      ]}>
-                        <Text style={styles.pitchDotLabel}>
-                          {assigned ? (assigned.subPosition || slot.pos).substring(0, 2) : slot.label}
-                        </Text>
-                      </View>
-                      <Text style={[styles.pitchDotName, !assigned && { color: '#4ade80' }]} numberOfLines={1}>
-                        {assigned ? assigned.name.split(' ').pop() : '+'}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ))}
+            <View style={styles.pitchOutline} />
+
+            <View style={{ flex: 1, justifyContent: 'space-around', zIndex: 10, paddingVertical: 10 }}>
+              {slots.map((row: Slot[], rowIdx: number) => (
+                <View key={rowIdx} style={{ flexDirection: 'row', justifyContent: row.length === 1 ? 'center' : 'space-evenly', alignItems: 'center' }}>
+                  {row.map((slot: Slot, colIdx: number) => {
+                    const assigned = slotPlayers[rowIdx]?.[colIdx];
+                    const slotKey = `${rowIdx}-${colIdx}`;
+                    return (
+                       <View key={slotKey} style={{ zIndex: 10 }}>
+                         <DraggableDot
+                            slotKey={slotKey}
+                            slot={slot}
+                            assigned={assigned}
+                            getPosColor={getPosColor}
+                            onPress={() => handleSlotPress(rowIdx, colIdx)}
+                            onDragBegin={() => { setScrollEnabled(false); measureSlots(); }}
+                            onDragEnd={(mx: number, my: number) => handleDragEnd(rowIdx, colIdx, mx, my)}
+                            setRef={(r: any) => { if (r) slotRefs.current[slotKey] = r; }}
+                         />
+                       </View>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
           </View>
+        </View>
+
+        <View style={styles.strategyBar}>
+          <TouchableOpacity
+            style={[styles.stratBtn, strategy === 'defend' && styles.stratBtnDefend]}
+            onPress={() => setStrategy(userTeamId, 'defend')}
+          >
+            <Text style={styles.stratArrow}>◀</Text>
+            <Text style={[styles.stratText, strategy === 'defend' && styles.stratTextActive]}>DEFEND</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.stratBtn, strategy === 'balanced' && styles.stratBtnBalanced]}
+            onPress={() => setStrategy(userTeamId, 'balanced')}
+          >
+            <Text style={[styles.stratText, strategy === 'balanced' && styles.stratTextActive]}>BALANCED</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.stratBtn, strategy === 'attack' && styles.stratBtnAttack]}
+            onPress={() => setStrategy(userTeamId, 'attack')}
+          >
+            <Text style={[styles.stratText, strategy === 'attack' && styles.stratTextActive]}>ATTACK</Text>
+            <Text style={styles.stratArrow}>▶</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
@@ -345,7 +431,6 @@ export default function SquadScreen() {
             <Text style={styles.dropdownModalTitle}>Choose Formation</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
               {FORMATIONS.map(f => {
-                const variants = VARIANTS[f] || [f];
                 const isSelectedBase = baseFormation === f;
                 return (
                   <View key={f}>
@@ -356,21 +441,6 @@ export default function SquadScreen() {
                       <Text style={[styles.dropdownItemText, isSelectedBase && styles.dropdownItemTextActive]}>{f}</Text>
                       {isSelectedBase && <Text style={styles.activeCheck}>✓</Text>}
                     </TouchableOpacity>
-                    {isSelectedBase && (
-                      <View style={styles.variantRow}>
-                        {variants.map(v => (
-                          <TouchableOpacity 
-                            key={v} 
-                            style={[styles.variantBtn, activeFormation === v && styles.variantBtnActive]}
-                            onPress={() => handleFormationSelect(v)}
-                          >
-                            <Text style={[styles.variantText, activeFormation === v && styles.variantTextActive]}>
-                              {v.includes(' ') ? v.split(' ')[1] : 'Standard'}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
                   </View>
                 );
               })}
@@ -413,6 +483,28 @@ export default function SquadScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Info Modal ── */}
+      <Modal visible={showInfo} transparent animationType="fade" onRequestClose={() => setShowInfo(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', paddingHorizontal: 30 }}>
+          <View style={{ backgroundColor: '#1e293b', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: '#334155' }}>
+            <Text style={{ fontSize: 18, fontWeight: '900', color: '#f8fafc', marginBottom: 16 }}>How to Use</Text>
+            <Text style={{ color: '#94a3b8', lineHeight: 22, fontSize: 14 }}>
+              {'• Tap a pitch circle to assign a player to that position.\n\n' +
+               '• Drag a pitch player to another slot to swap positions.\n\n' +
+               '• Tap any non-starting player in Reserves to add them to the Bench.\n\n' +
+               '• Long-press a Bench player to move them back to Reserves.\n\n' +
+               '• Use the Formation dropdown to switch formations.\n\n' +
+               '• Set DEFEND / BALANCED / ATTACK strategy to adjust your team\'s style.'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setShowInfo(false)}
+              style={{ marginTop: 20, backgroundColor: '#334155', borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}>
+              <Text style={{ color: '#f8fafc', fontWeight: '900' }}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -420,7 +512,10 @@ export default function SquadScreen() {
 const styles = StyleSheet.create({
   container:   { flex: 1, backgroundColor: '#0f172a' },
   header:      { padding: 16, backgroundColor: '#1e293b', borderBottomWidth: 1, borderBottomColor: '#334155' },
-  title:       { fontSize: 24, fontWeight: '900', color: '#f8fafc', marginBottom: 12 },
+  headerRow:   { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  title:       { fontSize: 24, fontWeight: '900', color: '#f8fafc', flex: 1 },
+  infoBtn:     { width: 30, height: 30, borderRadius: 15, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center' },
+  infoBtnText: { color: '#94a3b8', fontSize: 14, fontWeight: '900' },
 
   // Formation dropdown trigger
   dropdownBtn: {
@@ -453,18 +548,13 @@ const styles = StyleSheet.create({
   pitchWrapper:      { paddingHorizontal: 10, paddingVertical: 10 },
   pitch: {
     backgroundColor: '#14532d', borderRadius: 12,
-    paddingVertical: 16, paddingHorizontal: 8,
+    height: 480,
     borderWidth: 2, borderColor: '#166534', overflow: 'hidden', position: 'relative',
   },
-  pitchHalfLine: {
-    position: 'absolute', top: '52%', left: 16, right: 16, height: 1,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+  pitchOutline: {
+    position: 'absolute', top: 12, bottom: 12, left: 12, right: 12, 
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)', borderRadius: 2
   },
-  pitchCentreCircle: {
-    position: 'absolute', top: '42%', left: '33%', width: '34%', aspectRatio: 1,
-    borderRadius: 1000, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
-  },
-  pitchRow:     { flexDirection: 'row', justifyContent: 'space-evenly', marginVertical: 5 },
   pitchDot:     { alignItems: 'center', width: 54 },
   pitchDotCircle: {
     width: 38, height: 38, borderRadius: 19,

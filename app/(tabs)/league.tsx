@@ -76,10 +76,10 @@ export default function LeagueTableScreen() {
                 <Text style={[styles.cell, styles.stat, isUser && styles.userText]}>{team.wins}</Text>
                 <Text style={[styles.cell, styles.stat, isUser && styles.userText]}>{team.draws}</Text>
                 <Text style={[styles.cell, styles.stat, isUser && styles.userText]}>{team.losses}</Text>
-                <Text style={[styles.cell, styles.stat, isUser && styles.userText]}>{team.goalsFor}</Text>
-                <Text style={[styles.cell, styles.stat, isUser && styles.userText]}>{team.goalsAgainst}</Text>
-                <Text style={[styles.cell, styles.stat, isUser && styles.userText]}>{gd > 0 ? `+${gd}` : gd}</Text>
-                <Text style={[styles.cell, styles.stat, styles.pts, isUser && styles.userText]}>{team.points}</Text>
+                <Text style={[styles.cell, styles.stat, isUser && styles.userText]} numberOfLines={1} adjustsFontSizeToFit>{team.goalsFor}</Text>
+                <Text style={[styles.cell, styles.stat, isUser && styles.userText]} numberOfLines={1} adjustsFontSizeToFit>{team.goalsAgainst}</Text>
+                <Text style={[styles.cell, styles.stat, isUser && styles.userText]} numberOfLines={1} adjustsFontSizeToFit>{gd > 0 ? `+${gd}` : gd}</Text>
+                <Text style={[styles.cell, styles.stat, styles.pts, isUser && styles.userText]} numberOfLines={1} adjustsFontSizeToFit>{team.points}</Text>
               </TouchableOpacity>
             );
           })}
@@ -188,8 +188,8 @@ const styles = StyleSheet.create({
   },
   pos: { width: 22, textAlign: 'center', fontWeight: '900', color: '#94a3b8' },
   name: { flex: 1, fontWeight: '700', fontSize: 11 },
-  stat: { width: 26, textAlign: 'center', fontWeight: '600' },
-  pts: { width: 30, fontWeight: '900', color: '#f8fafc' },
+  stat: { width: 29, textAlign: 'center', fontWeight: '600' },
+  pts: { width: 32, textAlign: 'center', fontWeight: '900', color: '#f8fafc' },
   userText: { color: '#38bdf8', fontWeight: '900' },
   kitStrip: {
     flexDirection: 'row',
