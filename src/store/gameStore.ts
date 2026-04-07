@@ -5,6 +5,7 @@ import { GameState, Team, Player, Formation, TeamTactics } from '../models/types
 import { initGameData, generateBoardObjectives } from '../utils/initGame';
 import { getSlotsForFormation } from '../constants/formations';
 import { ENGINE_CONFIG } from '../config/engineConfig';
+import { getSeasonWeekLimit } from '../core/leagueUtils';
 import {
   autoAssignLineup,
   simulatePossession,
@@ -16,7 +17,8 @@ import {
 import { addPlayerStat } from '../core/matchUtils';
 import { qualifiesForWindowedCleanSheet } from '../core/postMatchAccounting';
 import { computeWeeklyTransfers, computeWeeklyProgression } from '../core/progressionEngine';
-import { rebuildFormationMap } from '../core/formationMapUtils';
+import { advanceSeason } from '../core/seasonTransition';
+import { rebuildFormationMap, removePlayerFromTeamSelections } from '../core/formationMapUtils';
 
 type LiveMatchState = {
   initialized: boolean;
@@ -235,7 +237,7 @@ export const useGameStore = create<GameStore>()(
 
         const userTeam = data.teams[actualTeamId];
         const teamClass = data.teamClasses[actualTeamId] || 'C';
-        const objectives = userTeam ? generateBoardObjectives(teamClass, userTeam.name) : [];
+        const objectives = userTeam ? generateBoardObjectives(teamClass, userTeam.name, userTeam.division) : [];
 
         set({
           userTeamId: actualTeamId,
@@ -479,6 +481,16 @@ export const useGameStore = create<GameStore>()(
         // Match the analysis scripts: update week state before transfer decisions.
         get().processWeeklyTransfers();
         get().checkBoardObjectives();
+
+        const postProgressionState = get();
+        const seasonWeekLimit = getSeasonWeekLimit(postProgressionState.fixtures);
+        if (postProgressionState.currentWeek > seasonWeekLimit) {
+          set(state => ({
+            ...advanceSeason(state.players, state.teams, state.userTeamId, state.news),
+            userTeamId: state.userTeamId,
+            liveMatches: {},
+          }));
+        }
       },
 
       setFormation: (teamId, formation) => {
@@ -635,8 +647,10 @@ export const useGameStore = create<GameStore>()(
 
       skipToEndOfSeason: () => {
         const maxWeek = Object.values(get().fixtures).reduce((max, f) => Math.max(max, f.week), 0);
-        while (get().currentWeek <= maxWeek) {
+        let guard = maxWeek + 2;
+        while (get().currentWeek <= maxWeek && guard-- > 0) {
           get().advanceWeek();
+          if (get().currentWeek === 1) break;
         }
       },
 
@@ -711,7 +725,9 @@ export const useGameStore = create<GameStore>()(
 
           const sellingTeam = state.teams[player.teamId];
           const updatedUserTeam = { ...userTeam, budget: userTeam.budget - fee };
-          const updatedSellingTeam = sellingTeam ? { ...sellingTeam, budget: sellingTeam.budget + fee } : undefined;
+          const updatedSellingTeam = sellingTeam
+            ? removePlayerFromTeamSelections({ ...sellingTeam, budget: sellingTeam.budget + fee }, player.id)
+            : undefined;
           const updatedPlayer = { ...player, teamId: userTeam.id, wage: wageOffered > 0 ? wageOffered : player.wage, isStarting: false, isSub: false, isTransferListed: false, askingPrice: 0 };
 
           result = { success: true, message: `Successfully purchased ${player.name} for GBP ${fee}m.` };
@@ -752,6 +768,7 @@ export const useGameStore = create<GameStore>()(
          set(state => {
             if (!state.userTeamId) return state;
             const myTeam = state.teams[state.userTeamId];
+            const manager = myTeam.manager;
             let approvalChange = 0;
             const updatedObjectives = state.boardObjectives.map(obj => {
                let isMet = obj.met;
@@ -780,10 +797,15 @@ export const useGameStore = create<GameStore>()(
             }
 
             const newApproval = Math.min(100, Math.max(0, myTeam.boardApproval + approvalChange));
+            const nextManager = {
+              ...manager,
+              boardTrust: Math.min(100, Math.max(0, manager.boardTrust + approvalChange)),
+              jobSecurity: Math.min(100, Math.max(0, manager.jobSecurity + Math.round(approvalChange / 2))),
+            };
 
             // Not fully causing game over yet, just tracking it!
             return {
-               teams: { ...state.teams, [myTeam.id]: { ...myTeam, boardApproval: newApproval } },
+               teams: { ...state.teams, [myTeam.id]: { ...myTeam, boardApproval: newApproval, manager: nextManager } },
                boardObjectives: updatedObjectives
             };
          });

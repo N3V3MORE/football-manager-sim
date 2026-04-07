@@ -1,6 +1,7 @@
 import { initGameData } from '../src/utils/initGame';
 import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
+import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 
 async function runTurboSim(seasons = 500) {
   console.log(`\nSTARTING TURBO SIMULATION (${seasons} seasons)`);
@@ -18,8 +19,9 @@ async function runTurboSim(seasons = 500) {
       currentWeek: 1,
       news: [] as string[],
     };
+    const seasonWeeks = getSeasonWeekLimit(state.fixtures);
 
-    for (let week = 1; week <= 38; week++) {
+    for (let week = 1; week <= seasonWeeks; week++) {
       const weekFixtures = Object.values(state.fixtures).filter(fixture => fixture.week === week);
 
       for (const fixture of weekFixtures) {

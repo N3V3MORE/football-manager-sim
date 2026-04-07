@@ -131,6 +131,8 @@ export const getBudgetForClass = (teamClass: string): number => {
     case 'B': return 55;
     case 'C': return 30;
     case 'D': return 15;
-    default: return 25;
+    case 'E': return 8;
+    case 'F': return 4;
+    default: return 20;
   }
 };

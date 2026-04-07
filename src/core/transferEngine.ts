@@ -1,4 +1,5 @@
 import { Player, Team } from '../models/types';
+import { removePlayerFromTeamSelections } from './formationMapUtils';
 
 export const computeWeeklyTransfers = (
   players: Record<string, Player>,
@@ -97,7 +98,10 @@ export const computeWeeklyTransfers = (
 
         const seller = updatedTeams[target.teamId];
         if (seller) {
-          updatedTeams[target.teamId] = { ...seller, budget: seller.budget + target.askingPrice };
+          updatedTeams[target.teamId] = removePlayerFromTeamSelections(
+            { ...seller, budget: seller.budget + target.askingPrice },
+            target.id
+          );
         }
         updatedPlayers[target.id] = {
           ...updatedPlayers[target.id],

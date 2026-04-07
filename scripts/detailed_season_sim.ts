@@ -1,6 +1,7 @@
 import { initGameData } from '../src/utils/initGame';
 import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
+import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 import * as fs from 'fs';
 
 type StatSnapshot = {
@@ -70,8 +71,9 @@ async function runDetailedSim() {
   let redCards = 0;
   let yellowCards = 0;
   let redCardLogMismatches = 0;
+  const seasonWeeks = getSeasonWeekLimit(state.fixtures);
 
-  for (let w = 1; w <= 38; w++) {
+  for (let w = 1; w <= seasonWeeks; w++) {
     outputLog.push(`\n--- WEEK ${w} ---`);
     const weekFixtures = Object.values(state.fixtures).filter(f => f.week === w);
 

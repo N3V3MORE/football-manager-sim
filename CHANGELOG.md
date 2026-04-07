@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.2.2 - Polish the league navigation
+
+What changed:
+- Added a reusable page header with an explicit `Hub` back action so the root pages no longer rely on the default navigator label.
+- Tightened the board, calendar, stats, and league headers so the top of each screen uses less empty space.
+- Reworked the league screen into a proper two-axis layout: horizontal country paging and vertical division reels inside each country.
+- Added a return-to-top button for each country section to make long tables easier to navigate.
+- Cleaned the remaining label encoding issue in the page headers by switching them to plain ASCII text.
+
 ## v3.2.1 - Merge squad and tactics
 
 What changed:

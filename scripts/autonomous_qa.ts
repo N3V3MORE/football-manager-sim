@@ -1,4 +1,5 @@
 import { useGameStore } from '../src/store/gameStore';
+import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 
 async function runAutonomousQA() {
   const store = useGameStore.getState();
@@ -50,9 +51,10 @@ async function runAutonomousQA() {
   useGameStore.getState().processMatchMinute(fixtureId, 15);
   console.log('[OK] Empty user squad did not break processMatchMinute');
 
-  console.log('--- TEST: RAPID SEASON ADVANCE (38 WEEKS) ---');
+  const seasonWeeks = getSeasonWeekLimit(useGameStore.getState().fixtures);
+  console.log(`--- TEST: RAPID SEASON ADVANCE (${seasonWeeks} WEEKS) ---`);
   try {
-    for (let i = 0; i < 38; i++) {
+    for (let i = 0; i < seasonWeeks; i++) {
       useGameStore.getState().advanceWeek();
     }
     console.log('[OK] Rapid week advance survived');

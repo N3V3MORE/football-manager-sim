@@ -32,6 +32,23 @@ export default function RootLayout() {
 
     if (!isStateValid) {
       state.initializeGame('temp');
+      return;
+    }
+
+    if (Object.values(state.teams).some(team => !team.division)) {
+      useGameStore.setState({
+        teams: Object.fromEntries(
+          Object.entries(state.teams).map(([teamId, team]) => [
+            teamId,
+            {
+              ...team,
+              division: team.division || 'Premier League',
+              countryId: team.countryId || 'england',
+              clubClass: team.clubClass || 'C',
+            },
+          ])
+        ),
+      });
     }
   }, [hasHydrated, userTeamId]);
 
@@ -41,8 +58,11 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="league" options={{ headerShown: false }} />
+        <Stack.Screen name="board" options={{ headerShown: false }} />
+        <Stack.Screen name="calendar" options={{ headerShown: false }} />
+        <Stack.Screen name="stats" options={{ headerShown: false }} />
         <Stack.Screen name="match" options={{ presentation: 'fullScreenModal', title: 'Match Day' }} />
-        <Stack.Screen name="stats" options={{ presentation: 'modal', title: 'League Stats' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

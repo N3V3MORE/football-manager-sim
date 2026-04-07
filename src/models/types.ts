@@ -1,4 +1,5 @@
 export type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
+export type Division = 'Premier League' | 'Championship' | 'League One' | 'League Two';
 export type Formation = 
   | '4-3-3' 
   | '3-4-3' 
@@ -7,7 +8,45 @@ export type Formation =
   | '4-2-3-1' 
   | '3-5-2' 
   | '4-1-4-1' 
-  | '4-3-2-1';
+  | '4-3-2-1'
+  | '3-4-2-1'
+  | '4-5-1'
+  | '4-2-2-2'
+  | '3-2-4-1';
+
+export type ManagerStatus = 'Permanent' | 'Interim' | 'Caretaker';
+
+export interface ManagerRecord {
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  position: number;
+}
+
+export interface Manager {
+  id: string;
+  teamId: string;
+  teamName: string;
+  name: string;
+  nationality: string;
+  dateOfBirth: string;
+  age: number;
+  appointedAt: string;
+  contractUntil: string;
+  status: ManagerStatus;
+  reputation: number;
+  preferredFormations: Formation[];
+  tacticalIdentity: string;
+  transferIdentity: string;
+  boardTrust: number;
+  jobSecurity: number;
+  seasonExpectations: string;
+  clubFit: number;
+  record: ManagerRecord;
+}
 
 export interface TeamTactics {
   mentality: 'Defensive' | 'Balanced' | 'Attacking';
@@ -70,6 +109,10 @@ export interface Player {
 export interface Team {
   id: string;
   name: string;
+  countryId?: string;
+  division: Division;
+  clubClass?: string;
+  manager: Manager;
   points: number;
   goalsFor: number;
   goalsAgainst: number;
@@ -97,6 +140,7 @@ export interface BoardObjective {
 export interface Fixture {
   id: string;
   week: number;
+  division?: Division;
   homeTeamId: string;
   awayTeamId: string;
   homeScore: number | null;

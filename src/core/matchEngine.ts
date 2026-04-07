@@ -240,10 +240,12 @@ export const quickSimMatch = (
     const team = updatedTeams[teamId];
     const shouldPreserveManual = Boolean(userTeamId && teamId === userTeamId);
     if (shouldPreserveManual) {
-      const eligibleTeamPlayers = Object.values(updatedPlayers).filter(p => p.teamId === teamId && p.matchesSuspended === 0);
+      const teamPlayers = Object.values(updatedPlayers).filter(p => p.teamId === teamId);
+      const eligibleTeamPlayers = teamPlayers.filter(p => p.matchesSuspended === 0);
+      const savedStarters = teamPlayers.filter(player => player.isStarting);
       const cleanFormationMap = rebuildFormationMap(
         getSlotsForFormation(team.activeFormation),
-        eligibleTeamPlayers.filter(player => player.isStarting),
+        savedStarters,
         team.formationMap || {}
       );
       updatedTeams[teamId] = { ...team, formationMap: cleanFormationMap };
@@ -277,10 +279,9 @@ export const quickSimMatch = (
           .filter(player => !player.isStarting)
           .sort((a, b) => (b.overallRating + b.energy * 0.1) - (a.overallRating + a.energy * 0.1))
           .slice(0, 11 - starters.length);
-        fillCandidates.forEach(player => {
-          updatedPlayers[player.id] = { ...updatedPlayers[player.id], isStarting: true, isSub: false };
-        });
+        starters = [...starters, ...fillCandidates];
       }
+      return starters.slice(0, 11);
     } else {
       const lineupUpdates = buildQuickSimLineup(teamId, updatedPlayers, team.activeFormation);
       Object.keys(lineupUpdates).forEach(id => {
@@ -295,22 +296,33 @@ export const quickSimMatch = (
   const awayTeam = updatedTeams[fixture.awayTeamId];
   const homeStarters = getTeamStarters(fixture.homeTeamId);
   const awayStarters = getTeamStarters(fixture.awayTeamId);
-  const getBench = (teamId: string) => {
-    let bench = Object.values(updatedPlayers).filter(p => p.teamId === teamId && p.isSub && p.matchesSuspended === 0);
+  const getBench = (teamId: string, matchStarters: Player[]) => {
+    const starterIds = new Set(matchStarters.map(player => player.id));
+    let bench = Object.values(updatedPlayers).filter(p => (
+      p.teamId === teamId &&
+      p.isSub &&
+      p.matchesSuspended === 0 &&
+      !starterIds.has(p.id)
+    ));
     if (bench.length < 7) {
       const extra = Object.values(updatedPlayers)
-        .filter(p => p.teamId === teamId && !p.isStarting && !p.isSub && p.matchesSuspended === 0)
+        .filter(p => p.teamId === teamId && !p.isStarting && !p.isSub && p.matchesSuspended === 0 && !starterIds.has(p.id))
         .sort((a, b) => b.overallRating - a.overallRating)
         .slice(0, 7 - bench.length);
       extra.forEach(player => {
         updatedPlayers[player.id] = { ...updatedPlayers[player.id], isSub: true };
       });
-      bench = Object.values(updatedPlayers).filter(p => p.teamId === teamId && p.isSub && p.matchesSuspended === 0);
+      bench = Object.values(updatedPlayers).filter(p => (
+        p.teamId === teamId &&
+        p.isSub &&
+        p.matchesSuspended === 0 &&
+        !starterIds.has(p.id)
+      ));
     }
     return bench.slice(0, 7);
   };
-  const homeBench = getBench(fixture.homeTeamId);
-  const awayBench = getBench(fixture.awayTeamId);
+  const homeBench = getBench(fixture.homeTeamId, homeStarters);
+  const awayBench = getBench(fixture.awayTeamId, awayStarters);
 
   if (homeStarters.length === 0 || awayStarters.length === 0) return { players, teams, fixture, events: matchEvents };
 

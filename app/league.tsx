@@ -1,25 +1,45 @@
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, type DimensionValue } from 'react-native';
-import { useGameStore } from '@/src/store/gameStore';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+  type DimensionValue,
+} from 'react-native';
+import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useGameStore } from '@/src/store/gameStore';
 import { getTeamTheme } from '@/src/constants/teamColors';
-import { useState } from 'react';
 import { Player, Team } from '@/src/models/types';
 import { getSlotsForFormation } from '@/src/constants/formations';
 import { rebuildFormationSlotPlayers } from '@/src/core/formationMapUtils';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
+import { DEFAULT_COUNTRY_ID, LEAGUE_COUNTRIES, getLeagueCountry } from '@/src/core/leaguePyramids';
+import { sortTeamsByTable } from '@/src/core/leagueUtils';
+import { PageHeader } from '@/components/ui/page-header';
 
 const MINI_SLOT_WIDTH = 56;
 const MINI_DOT_SIZE = 32;
 
 const getMiniSlotPosition = (rowIdx: number, colIdx: number, rowLength: number, totalRows: number) => {
-  const rowPercent = totalRows > 1
-    ? 10 + (rowIdx / (totalRows - 1)) * 80
-    : 50;
-
+  const rowPercent = totalRows > 1 ? 10 + (rowIdx / (totalRows - 1)) * 80 : 50;
   return {
     left: `${((colIdx + 1) / (rowLength + 1)) * 100}%` as DimensionValue,
     top: `${rowPercent}%` as DimensionValue,
   };
+};
+
+const getPosColor = (pos: string) => {
+  switch (pos) {
+    case 'GK': return '#F59E0B';
+    case 'DEF': return '#3B82F6';
+    case 'MID': return '#10B981';
+    case 'FWD': return '#EF4444';
+    default: return '#6B7280';
+  }
 };
 
 export default function LeagueTableScreen() {
@@ -27,17 +47,55 @@ export default function LeagueTableScreen() {
   const players = useGameStore(state => state.players);
   const userTeamId = useGameStore(state => state.userTeamId);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [selectedCountryId, setSelectedCountryId] = useState(
+    teams[userTeamId || '']?.countryId || DEFAULT_COUNTRY_ID
+  );
+  const { width } = useWindowDimensions();
+  const countryScrollRef = useRef<ScrollView>(null);
+  const divisionScrollRefs = useRef<Record<string, ScrollView | null>>({});
+  const divisionOffsets = useRef<Record<string, Record<string, number>>>({});
 
-  const sortedTeams = Object.values(teams).sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points;
-    const diffA = a.goalsFor - a.goalsAgainst;
-    const diffB = b.goalsFor - b.goalsAgainst;
-    return diffB - diffA;
-  });
+  const userTeam = userTeamId ? teams[userTeamId] : null;
+  const activeCountryId = userTeam?.countryId || selectedCountryId || DEFAULT_COUNTRY_ID;
+  const activeCountry = getLeagueCountry(activeCountryId);
+
+  const teamsByCountry = useMemo(() => Object.fromEntries(
+    LEAGUE_COUNTRIES.map(country => [
+      country.id,
+      sortTeamsByTable(
+        Object.values(teams).filter(team => (team.countryId || DEFAULT_COUNTRY_ID) === country.id)
+      ),
+    ])
+  ) as Record<string, Team[]>, [teams]);
+
+  useEffect(() => {
+    const targetIndex = Math.max(0, LEAGUE_COUNTRIES.findIndex(country => country.id === activeCountryId));
+    if (targetIndex < 0) return;
+    requestAnimationFrame(() => {
+      countryScrollRef.current?.scrollTo({ x: targetIndex * width, animated: true });
+    });
+  }, [activeCountryId, width]);
 
   const getLastLineup = (team: Team) => {
     if (!team.lastStartingXI || team.lastStartingXI.length === 0) return null;
     return team.lastStartingXI.map(id => players[id]).filter(Boolean) as Player[];
+  };
+
+  const scrollToCountry = (countryId: string) => {
+    const index = Math.max(0, LEAGUE_COUNTRIES.findIndex(country => country.id === countryId));
+    setSelectedCountryId(countryId);
+    countryScrollRef.current?.scrollTo({ x: index * width, animated: true });
+  };
+
+  const scrollToDivision = (countryId: string, division: string) => {
+    const offset = divisionOffsets.current[countryId]?.[division];
+    if (offset !== undefined) {
+      divisionScrollRefs.current[countryId]?.scrollTo({ y: offset, animated: true });
+    }
+  };
+
+  const scrollCountryToTop = (countryId: string) => {
+    divisionScrollRefs.current[countryId]?.scrollTo({ y: 0, animated: true });
   };
 
   const renderMiniPitch = (team: Team, lineup: Player[]) => {
@@ -74,26 +132,33 @@ export default function LeagueTableScreen() {
     );
   };
 
-  const getPosColor = (pos: string) => {
-    switch (pos) {
-      case 'GK': return '#F59E0B';
-      case 'DEF': return '#3B82F6';
-      case 'MID': return '#10B981';
-      case 'FWD': return '#EF4444';
-      default: return '#6B7280';
-    }
-  };
+  const renderDivisionSection = (countryId: string, division: string, isActiveCountry: boolean) => {
+    const divisionTeams = teamsByCountry[countryId] || [];
+    const divisionTeamsOnly = divisionTeams.filter(team => team.division === division);
+    const isActiveDivision = isActiveCountry && division === userTeam?.division;
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView>
-        <View style={styles.header}>
-          <Text style={styles.title}>League Table</Text>
-          <Text style={styles.subtitle}>Tap a team to view their last lineup</Text>
+    return (
+      <View
+        key={division}
+        onLayout={(event) => {
+          if (!divisionOffsets.current[countryId]) divisionOffsets.current[countryId] = {};
+          divisionOffsets.current[countryId][division] = event.nativeEvent.layout.y;
+        }}
+        style={[styles.divisionSection, isActiveDivision && styles.divisionSectionActive]}
+      >
+        <View style={styles.divisionHeaderRow}>
+          <View>
+            <Text style={styles.divisionTitle}>{division}</Text>
+            <Text style={styles.divisionSubtitle}>
+              {isActiveDivision ? 'Your current division' : 'Scroll down through this country'}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.divisionJumpBtn} onPress={() => scrollToDivision(countryId, division)}>
+            <Text style={styles.divisionJumpText}>Go</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.table}>
-          {/* Header Row */}
           <View style={[styles.row, styles.headerRow]}>
             <Text style={[styles.cell, styles.pos]}>#</Text>
             <Text style={[styles.cell, styles.name]}>Club</Text>
@@ -107,7 +172,7 @@ export default function LeagueTableScreen() {
             <Text style={[styles.cell, styles.stat, styles.pts]}>Pts</Text>
           </View>
 
-          {sortedTeams.map((team, index) => {
+          {divisionTeamsOnly.map((team, index) => {
             const isUser = team.id === userTeamId;
             const gd = team.goalsFor - team.goalsAgainst;
             const theme = getTeamTheme(team.name);
@@ -116,7 +181,6 @@ export default function LeagueTableScreen() {
               <TouchableOpacity key={team.id} style={[styles.row, isUser && styles.userRow]} onPress={() => setSelectedTeam(team)}>
                 <Text style={[styles.cell, styles.pos, isUser && styles.userText]}>{index + 1}</Text>
                 <View style={styles.nameCell}>
-                  {/* Dual kit strip */}
                   <View style={styles.kitStrip}>
                     <View style={[styles.kitBlock, { backgroundColor: theme.primary }]} />
                     <View style={[styles.kitBlock, { backgroundColor: theme.secondary === '#FFFFFF' ? '#e2e8f0' : theme.secondary }]} />
@@ -135,13 +199,81 @@ export default function LeagueTableScreen() {
             );
           })}
         </View>
+      </View>
+    );
+  };
+
+  const renderCountryPage = (countryId: string) => {
+    const country = getLeagueCountry(countryId);
+    const isActiveCountry = countryId === activeCountryId;
+
+    return (
+      <View key={countryId} style={[styles.countryPage, { width }]}>
+        <ScrollView
+          ref={ref => {
+            divisionScrollRefs.current[countryId] = ref;
+          }}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.countryScrollContent}
+        >
+          <View style={styles.countryBanner}>
+            <View>
+              <Text style={styles.countryLabel}>{country.label}</Text>
+              <Text style={styles.countryHint}>{country.reelHint}</Text>
+            </View>
+            <TouchableOpacity style={styles.countryTopBtn} onPress={() => scrollCountryToTop(countryId)}>
+              <Text style={styles.countryTopBtnText}>Top</Text>
+            </TouchableOpacity>
+          </View>
+          {country.divisions.map(division => renderDivisionSection(countryId, division, isActiveCountry))}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <PageHeader
+        title="League Table"
+        subtitle="Swipe left/right for countries. Scroll down for lower divisions."
+        backLabel="< Hub"
+        onBack={() => router.replace('/')}
+      />
+      <View style={styles.reelRow}>
+        {LEAGUE_COUNTRIES.map(country => (
+          <TouchableOpacity
+            key={country.id}
+            style={[styles.reelChip, country.id === activeCountry.id && styles.reelChipActive]}
+            onPress={() => scrollToCountry(country.id)}
+          >
+            <Text style={[styles.reelChipText, country.id === activeCountry.id && styles.reelChipTextActive]}>
+              {country.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <ScrollView
+        ref={countryScrollRef}
+        style={styles.countryPager}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        nestedScrollEnabled
+        onMomentumScrollEnd={(event) => {
+          const index = Math.round(event.nativeEvent.contentOffset.x / width);
+          const nextCountry = LEAGUE_COUNTRIES[index];
+          if (nextCountry) setSelectedCountryId(nextCountry.id);
+        }}
+      >
+        {LEAGUE_COUNTRIES.map(country => renderCountryPage(country.id))}
       </ScrollView>
 
-      {/* Last Lineup Modal */}
       <Modal
         visible={selectedTeam !== null}
         animationType="slide"
-        transparent={true}
+        transparent
         onRequestClose={() => setSelectedTeam(null)}
       >
         <View style={styles.modalOverlay}>
@@ -204,9 +336,60 @@ export default function LeagueTableScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 6 },
-  title: { fontSize: 26, fontWeight: '900', color: '#f8fafc' },
-  subtitle: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  reelRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  reelChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  reelChipActive: { backgroundColor: '#0f172a', borderColor: '#38bdf8' },
+  reelChipText: { color: '#94a3b8', fontSize: 11, fontWeight: '800' },
+  reelChipTextActive: { color: '#38bdf8' },
+  countryPager: { flex: 1 },
+  countryPage: { flex: 1 },
+  countryScrollContent: { paddingBottom: 18 },
+  countryBanner: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  countryLabel: { color: '#f8fafc', fontSize: 15, fontWeight: '900' },
+  countryHint: { color: '#64748b', fontSize: 11, marginTop: 2 },
+  countryTopBtn: {
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#334155',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  countryTopBtnText: { color: '#cbd5e1', fontSize: 11, fontWeight: '900' },
+  divisionSection: { paddingHorizontal: 8, paddingTop: 2, paddingBottom: 20 },
+  divisionSectionActive: {},
+  divisionHeaderRow: {
+    paddingHorizontal: 8,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  divisionTitle: { color: '#f8fafc', fontSize: 18, fontWeight: '900' },
+  divisionSubtitle: { color: '#64748b', fontSize: 11, marginTop: 2 },
+  divisionJumpBtn: {
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#334155',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  divisionJumpText: { color: '#cbd5e1', fontSize: 12, fontWeight: '800' },
   table: {
     backgroundColor: '#1e293b',
     margin: 8,
@@ -245,8 +428,6 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
   kitBlock: { flex: 1 },
-
-  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',

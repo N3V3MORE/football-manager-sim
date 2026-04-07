@@ -7,6 +7,11 @@ const ADAPTIVE_FORMATIONS: Formation[] = [
   '4-4-2',
   '4-1-4-1',
   '4-3-2-1',
+  '3-4-3',
+  '3-4-2-1',
+  '4-5-1',
+  '4-2-2-2',
+  '3-2-4-1',
   '3-5-2',
   '5-2-3',
 ];
@@ -57,21 +62,28 @@ const pickAdaptiveFormation = (
   mode: 'attack' | 'defense' | 'stable'
 ): Formation | null => {
   const modePool: Formation[] = mode === 'defense'
-    ? ['5-2-3', '3-5-2', '4-1-4-1', '4-4-2']
+    ? ['5-2-3', '3-5-2', '4-1-4-1', '4-4-2', '3-4-2-1', '4-5-1']
     : mode === 'attack'
-      ? ['4-3-3', '4-2-3-1', '3-5-2', '4-3-2-1']
+      ? ['4-3-3', '4-2-3-1', '3-4-3', '3-5-2', '4-3-2-1', '3-4-2-1', '4-2-2-2', '3-2-4-1']
       : ADAPTIVE_FORMATIONS;
 
   const formationScores = modePool.map(formation => {
     let bias = 0;
+    if (team.manager?.preferredFormations.includes(formation)) bias += 16;
     if (mode === 'defense') {
+      if (formation === '5-2-3') bias += 30;
       if (formation.startsWith('5')) bias += 18;
       if (formation === '3-5-2') bias += 10;
       if (formation === '4-1-4-1') bias += 8;
+      if (formation === '4-5-1' || formation === '3-4-2-1') bias += 6;
     } else if (mode === 'attack') {
       if (formation === '4-3-3' || formation === '4-2-3-1') bias += 12;
+      if (formation === '3-4-3') bias += 10;
       if (formation === '3-5-2') bias += 8;
+      if (formation === '4-2-2-2' || formation === '3-2-4-1') bias += 8;
     }
+    if (team.manager?.jobSecurity < 35) bias += 5;
+    if (team.manager?.jobSecurity > 80 && formation === team.activeFormation) bias += 4;
     return { formation, score: scoreFormationFit(players, formation) + bias };
   }).sort((a, b) => b.score - a.score);
 
@@ -87,7 +99,8 @@ const pickAdaptiveFormation = (
   }
 
   const minDelta = mode === 'stable' ? 12 : 6;
-  const changeChance = mode === 'stable' ? 0.35 : 0.7;
+  const securitySwing = team.manager ? (50 - team.manager.jobSecurity) / 200 : 0;
+  const changeChance = Math.max(0.2, Math.min(0.9, (mode === 'stable' ? 0.35 : 0.7) + securitySwing));
   if (best.score - currentScore >= minDelta && Math.random() < changeChance) return best.formation;
   if (mode !== 'stable' && Math.random() < 0.16) return best.formation;
   return null;

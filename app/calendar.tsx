@@ -1,9 +1,11 @@
 import React from 'react';
 import { StyleSheet, Text, View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
 import { formatShortDate } from '@/src/utils/calendar';
 import { getTeamTheme } from '@/src/constants/teamColors';
+import { PageHeader } from '@/components/ui/page-header';
 
 export default function CalendarScreen() {
   const currentWeek = useGameStore(s => s.currentWeek);
@@ -20,10 +22,12 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Season Calendar</Text>
-        <Text style={styles.subtitle}>2024/25 Fixtures</Text>
-      </View>
+      <PageHeader
+        title="Season Calendar"
+        subtitle="2024/25 Fixtures"
+        backLabel="< Hub"
+        onBack={() => router.replace('/')}
+      />
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {myFixtures.map(f => {
@@ -95,9 +99,6 @@ export default function CalendarScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  header: { padding: 16, backgroundColor: '#1e293b', borderBottomWidth: 1, borderColor: '#334155' },
-  title: { fontSize: 24, fontWeight: '900', color: '#f8fafc' },
-  subtitle: { fontSize: 14, color: '#94a3b8', fontWeight: '600', marginTop: 4 },
   scroll: { paddingVertical: 10 },
   row: { 
     flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16,

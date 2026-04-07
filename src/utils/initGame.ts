@@ -1,8 +1,11 @@
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
-import { Player, Team, Fixture, Position, BoardObjective, TeamTactics } from '../models/types';
+import { Player, Team, Fixture, Position, BoardObjective, TeamTactics, Division } from '../models/types';
 import { computeMarketValue, getBudgetForClass } from './calendar';
-import premierLeaguePlayers from '../data/premier_league_players.json';
+import englishLeaguePlayers from '../data/english_league_players.json';
+import { PREMIER_LEAGUE_MANAGERS } from '../data/premier_league_managers';
+import { buildManager, buildGenericManager, deriveInitialBoardApproval } from '../core/managerUtils';
+import { buildRoundRobinFixtures, getDivisionTeamCount } from '../core/leagueUtils';
 
 const REAL_TEAMS = [
   { name: 'Arsenal',            class: 'A' },
@@ -27,56 +30,7 @@ const REAL_TEAMS = [
   { name: 'Wolves',             class: 'C' },
 ];
 
-/** Generate 3 board objectives based on team class. */
-const generateObjectives = (teamClass: string, teamName: string): BoardObjective[] => {
-  const objectives: BoardObjective[] = [];
-
-  // Position objective
-  const posTargets: Record<string, { desc: string; target: number }> = {
-    S: { desc: 'Win the Premier League title',      target: 1  },
-    A: { desc: 'Finish in the Top 4',               target: 4  },
-    B: { desc: 'Finish in the Top 8',               target: 8  },
-    C: { desc: 'Finish in the Top Half (Top 10)',   target: 10 },
-    D: { desc: 'Avoid Relegation (Finish Top 17)',  target: 17 },
-  };
-  const pos = posTargets[teamClass] || posTargets['C'];
-  objectives.push({
-    id: uuidv4(), description: pos.desc,
-    type: 'position', target: pos.target, met: false,
-  });
-
-  // Win-rate objective
-  const winTargets: Record<string, { desc: string; target: number }> = {
-    S: { desc: 'Win at least 22 league matches',    target: 22 },
-    A: { desc: 'Win at least 18 league matches',    target: 18 },
-    B: { desc: 'Win at least 13 league matches',    target: 13 },
-    C: { desc: 'Win at least 10 league matches',    target: 10 },
-    D: { desc: 'Win at least 6 league matches',     target: 6  },
-  };
-  const win = winTargets[teamClass] || winTargets['C'];
-  objectives.push({
-    id: uuidv4(), description: win.desc,
-    type: 'wins', target: win.target, met: false,
-  });
-
-  // Transfer spend objective
-  const spendTargets: Record<string, { desc: string; target: number }> = {
-    S: { desc: 'Invest at least £60m in transfers', target: 60 },
-    A: { desc: 'Invest at least £30m in transfers', target: 30 },
-    B: { desc: 'Invest at least £20m in transfers', target: 20 },
-    C: { desc: 'Invest at least £10m in transfers', target: 10 },
-    D: { desc: 'Invest at least £5m in transfers',  target: 5  },
-  };
-  const spend = spendTargets[teamClass] || spendTargets['C'];
-  objectives.push({
-    id: uuidv4(), description: spend.desc,
-    type: 'spend', target: spend.target, met: false,
-  });
-
-  return objectives;
-};
-
-const getRandomTactics = (): TeamTactics => {
+const getRandomTactics = () => {
   const mentalities: TeamTactics['mentality'][] = ['Defensive', 'Balanced', 'Attacking'];
   const passingStyles: TeamTactics['passingStyle'][] = ['Short', 'Mixed', 'Direct'];
   const tempos: TeamTactics['tempo'][] = ['Slow', 'Normal', 'Fast'];
@@ -92,6 +46,192 @@ const getRandomTactics = (): TeamTactics => {
   };
 };
 
+type LowerLeaguePlayerRow = {
+  leagueId: number;
+  leagueName: Division;
+  clubName: string;
+  clubTeamId: number;
+  name: string;
+  longName?: string;
+  position: Position;
+  subPosition: string;
+  altPositions: string[];
+  overallRating: number;
+  marketValue: number;
+  age: number;
+  nationality: string;
+  clubJerseyNumber?: number | null;
+  stats: {
+    pace: number;
+    shooting: number;
+    passing: number;
+    dribbling: number;
+    defending: number;
+    physic: number;
+    gk_diving?: number;
+    gk_handling?: number;
+    gk_kicking?: number;
+    gk_reflexes?: number;
+    gk_speed?: number;
+    gk_positioning?: number;
+  };
+};
+
+const toLowerLeagueSourcePlayers = (rows: LowerLeaguePlayerRow[]) => rows.map(row => ({
+  name: row.name,
+  longName: row.longName,
+  fifaTeam: row.clubName,
+  gameTeamTitle: row.clubName,
+  position: row.position,
+  subPosition: row.subPosition,
+  altPositions: row.altPositions,
+  overallRating: row.overallRating,
+  marketValue: row.marketValue,
+  age: row.age,
+  nationality: row.nationality,
+  clubJerseyNumber: row.clubJerseyNumber,
+  stats: row.stats,
+}));
+
+const deriveTeamClass = (division: Division, avgOverall: number) => {
+  if (division === 'Premier League') return avgOverall >= 84 ? 'A' : avgOverall >= 79 ? 'B' : avgOverall >= 75 ? 'C' : 'D';
+  if (division === 'Championship') return avgOverall >= 74 ? 'B' : avgOverall >= 70 ? 'C' : avgOverall >= 66 ? 'D' : 'E';
+  if (division === 'League One') return avgOverall >= 72 ? 'C' : avgOverall >= 68 ? 'D' : avgOverall >= 64 ? 'E' : 'F';
+  return avgOverall >= 68 ? 'D' : avgOverall >= 64 ? 'E' : 'F';
+};
+
+const buildGenericTeamManager = (teamName: string, teamId: string, division: Division, avgOverall: number) => (
+  buildGenericManager(teamName, teamId, division, Math.max(35, Math.min(85, Math.round(avgOverall))))
+);
+
+const buildTeamObjectives = (teamClass: string, division: Division): BoardObjective[] => {
+  const teamCount = getDivisionTeamCount(division);
+  const seasonMatches = Math.max(1, (teamCount - 1) * 2);
+  const topHalf = Math.ceil(teamCount / 2);
+  const safeZone = Math.max(teamCount - 3, topHalf + 1);
+
+  const posTargets: Record<string, { desc: string; target: number }> = {
+    S: { desc: `Win the ${division} title`, target: 1 },
+    A: { desc: `Finish in the Top 4 in the ${division}`, target: 4 },
+    B: { desc: `Finish in the Top 8 in the ${division}`, target: 8 },
+    C: { desc: `Finish in the Top Half of the ${division}`, target: topHalf },
+    D: { desc: `Finish above the relegation zone in the ${division}`, target: safeZone },
+    E: { desc: `Stay clear of the drop in the ${division}`, target: safeZone },
+    F: { desc: `Secure survival in the ${division}`, target: safeZone },
+  };
+  const pos = posTargets[teamClass] || posTargets['C'];
+
+  const winTargetByClass: Record<string, number> = {
+    S: Math.max(22, Math.round(seasonMatches * 0.60)),
+    A: Math.max(18, Math.round(seasonMatches * 0.50)),
+    B: Math.max(13, Math.round(seasonMatches * 0.40)),
+    C: Math.max(10, Math.round(seasonMatches * 0.35)),
+    D: Math.max(8, Math.round(seasonMatches * 0.28)),
+    E: Math.max(6, Math.round(seasonMatches * 0.22)),
+    F: Math.max(5, Math.round(seasonMatches * 0.18)),
+  };
+
+  const spendTargets: Record<string, number> = {
+    S: 60,
+    A: 30,
+    B: 20,
+    C: 10,
+    D: 5,
+    E: 3,
+    F: 2,
+  };
+
+  return [
+    {
+      id: uuidv4(),
+      description: pos.desc,
+      type: 'position',
+      target: pos.target,
+      met: false,
+    },
+    {
+      id: uuidv4(),
+      description: `Win at least ${winTargetByClass[teamClass] || 10} league matches`,
+      type: 'wins',
+      target: winTargetByClass[teamClass] || 10,
+      met: false,
+    },
+    {
+      id: uuidv4(),
+      description: `Invest at least GBP ${spendTargets[teamClass] || 5}m in transfers`,
+      type: 'spend',
+      target: spendTargets[teamClass] || 5,
+      met: false,
+    },
+  ];
+};
+
+const calculateImpactCoefficient = (overallRating: number) => {
+  if (overallRating >= 88) return 1.5 + ((overallRating - 88) * 0.15);
+  if (overallRating >= 84) return 1.1 + ((overallRating - 84) * 0.08);
+  return 0.9 + ((overallRating - 70) * 0.01);
+};
+
+const buildPlayerRecord = (rp: any, teamId: string, playerId: string, includeLongName = false): Player => {
+  const mv = rp.marketValue && rp.marketValue > 0 ? rp.marketValue : computeMarketValue(rp.overallRating, rp.age);
+  return {
+    id: playerId,
+    name: rp.name,
+    ...(includeLongName && rp.longName ? { longName: rp.longName } : {}),
+    position: rp.position as Position,
+    subPosition: rp.subPosition || rp.position || 'MID',
+    altPositions: Array.isArray(rp.altPositions) ? rp.altPositions : [rp.subPosition || rp.position || 'MID'],
+    overallRating: rp.overallRating,
+    marketValue: mv,
+    age: rp.age,
+    morale: 80 + Math.floor(Math.random() * 21),
+    energy: 90 + Math.floor(Math.random() * 11),
+    teamId,
+    isStarting: false,
+    isSub: false,
+    isTransferListed: false,
+    askingPrice: 0,
+    matchesSuspended: 0,
+    wage: Math.floor(mv * 1.5) + 10,
+    contractLeft: 1 + Math.floor(Math.random() * 4),
+    impactCoefficient: calculateImpactCoefficient(rp.overallRating),
+    matchRatingHistory: [],
+    minutesPlayed: 0,
+    goals: 0,
+    assists: 0,
+    cleanSheets: 0,
+    yellowCards: 0,
+    redCards: 0,
+    nationality: rp.nationality || 'Unknown',
+    ...(rp.clubJerseyNumber !== undefined ? { clubJerseyNumber: rp.clubJerseyNumber ?? null } : {}),
+    stats: {
+      pace: rp.stats?.pace || 50,
+      shooting: rp.stats?.shooting || 50,
+      passing: rp.stats?.passing || 50,
+      dribbling: rp.stats?.dribbling || 50,
+      defending: rp.stats?.defending || 50,
+      physical: rp.stats?.physic || 50,
+      gk_diving: rp.stats?.gk_diving,
+      gk_handling: rp.stats?.gk_handling,
+      gk_kicking: rp.stats?.gk_kicking,
+      gk_reflexes: rp.stats?.gk_reflexes,
+      gk_speed: rp.stats?.gk_speed,
+      gk_positioning: rp.stats?.gk_positioning,
+    },
+  };
+};
+
+const markBestStarters = (teamPlayers: Player[], players: Record<string, Player>) => {
+  const sorted = [...teamPlayers].sort((a, b) => b.overallRating - a.overallRating);
+  const gks = sorted.filter(p => p.position === 'GK').slice(0, 1);
+  const defs = sorted.filter(p => p.position === 'DEF').slice(0, 4);
+  const mids = sorted.filter(p => p.position === 'MID').slice(0, 3);
+  const fwds = sorted.filter(p => p.position === 'FWD').slice(0, 3);
+  [...gks, ...defs, ...mids, ...fwds].forEach(player => {
+    players[player.id] = { ...players[player.id], isStarting: true };
+  });
+};
+
 export const initGameData = (userTeamName?: string) => {
   const teams: Record<string, Team> = {};
   const players: Record<string, Player> = {};
@@ -99,11 +239,14 @@ export const initGameData = (userTeamName?: string) => {
   const teamIds: string[] = [];
   const teamClasses: Record<string, string> = {}; // teamId -> class letter
 
-  // Group real players by team title
+  const premierLeaguePlayers = (englishLeaguePlayers as any[]).filter(player => player.leagueId === 1);
+  const lowerLeaguePlayers = (englishLeaguePlayers as any[]).filter(
+    player => player.leagueId === 11 || player.leagueId === 12 || player.leagueId === 13
+  );
   const playersByTeam: Record<string, any[]> = {};
-  (premierLeaguePlayers as any[]).forEach(p => {
-    if (!playersByTeam[p.gameTeamTitle]) playersByTeam[p.gameTeamTitle] = [];
-    playersByTeam[p.gameTeamTitle].push(p);
+  premierLeaguePlayers.forEach(player => {
+    if (!playersByTeam[player.clubName]) playersByTeam[player.clubName] = [];
+    playersByTeam[player.clubName].push(player);
   });
 
   let teamCounter = 1;
@@ -114,10 +257,19 @@ export const initGameData = (userTeamName?: string) => {
     const teamId = `T${teamCounter++}`;
     teamIds.push(teamId);
     teamClasses[teamId] = teamData.class;
+    const managerSource = PREMIER_LEAGUE_MANAGERS.find(item => item.teamName === teamData.name);
+    if (!managerSource) {
+      throw new Error(`Missing manager data for ${teamData.name}`);
+    }
+    const manager = buildManager(managerSource, teamId);
 
     teams[teamId] = {
       id: teamId,
       name: teamData.name,
+      countryId: 'england',
+      division: 'Premier League',
+      clubClass: teamData.class,
+      manager,
       points: 0,
       goalsFor: 0,
       goalsAgainst: 0,
@@ -131,7 +283,7 @@ export const initGameData = (userTeamName?: string) => {
         ? { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' }
         : getRandomTactics(),
       budget: getBudgetForClass(teamData.class),
-      boardApproval: 50,
+      boardApproval: deriveInitialBoardApproval(manager),
     };
 
     const teamPlayers: Player[] = [];
@@ -170,110 +322,95 @@ export const initGameData = (userTeamName?: string) => {
     realPlayers.sort((a, b) => b.overallRating - a.overallRating);
 
     realPlayers.forEach(rp => {
-      // Use market value from CSV if available
-      const mv = rp.marketValue && rp.marketValue > 0
-        ? rp.marketValue
-        : computeMarketValue(rp.overallRating, rp.age);
-
-      // Impact Coefficient calculation
-      let impact = 1.0;
-      if (rp.overallRating >= 88) impact = 1.5 + ((rp.overallRating - 88) * 0.15); // e.g. 91 => 1.95
-      else if (rp.overallRating >= 84) impact = 1.1 + ((rp.overallRating - 84) * 0.08);
-      else impact = 0.9 + ((rp.overallRating - 70) * 0.01);
-
-      const p: Player = {
-        id: (playerCounter++).toString(),
-        name: rp.name,
-        position: rp.position as Position,
-        subPosition: rp.subPosition || rp.position || 'MID',
-        altPositions: Array.isArray(rp.altPositions) ? rp.altPositions : [rp.subPosition || rp.position || 'MID'],
-        overallRating: rp.overallRating,
-        marketValue: mv,
-        age: rp.age,
-        morale: 80 + Math.floor(Math.random() * 21),
-        energy: 90 + Math.floor(Math.random() * 11),
-        teamId,
-        isStarting: false,
-        isSub: false,
-        isTransferListed: false,
-        askingPrice: 0,
-        matchesSuspended: 0,
-        wage: Math.floor(mv * 1.5) + 10,
-        contractLeft: 1 + Math.floor(Math.random() * 4),
-        impactCoefficient: impact,
-        matchRatingHistory: [],
-        minutesPlayed: 0,
-        goals: 0,
-        assists: 0,
-        cleanSheets: 0,
-        yellowCards: 0,
-        redCards: 0,
-        nationality: rp.nationality || 'Unknown',
-        stats: {
-          pace:     rp.stats?.pace     || 50,
-          shooting: rp.stats?.shooting || 50,
-          passing:  rp.stats?.passing  || 50,
-          dribbling: rp.stats?.dribbling || 50,
-          defending: rp.stats?.defending || 50,
-          physical: rp.stats?.physic   || rp.stats?.physical || 50,
-          gk_diving:      rp.stats?.gk_diving,
-          gk_handling:    rp.stats?.gk_handling,
-          gk_kicking:     rp.stats?.gk_kicking,
-          gk_reflexes:    rp.stats?.gk_reflexes,
-          gk_speed:       rp.stats?.gk_speed,
-          gk_positioning: rp.stats?.gk_positioning,
-        },
-      };
+      const p = buildPlayerRecord(rp, teamId, (playerCounter++).toString());
       players[p.id] = p;
       teamPlayers.push(p);
     });
 
     // Auto-select best 11 for AI teams; user team stays in reserves
     if (teamData.name !== userTeamName) {
-      const sorted = [...teamPlayers].sort((a, b) => b.overallRating - a.overallRating);
-      const gks  = sorted.filter(p => p.position === 'GK').slice(0, 1);
-      const defs = sorted.filter(p => p.position === 'DEF').slice(0, 4);
-      const mids = sorted.filter(p => p.position === 'MID').slice(0, 3);
-      const fwds = sorted.filter(p => p.position === 'FWD').slice(0, 3);
-      [...gks, ...defs, ...mids, ...fwds].forEach(p => { players[p.id].isStarting = true; });
+      markBestStarters(teamPlayers, players);
     }
+  });
+
+  const lowerRows = lowerLeaguePlayers as LowerLeaguePlayerRow[];
+  const lowerGroups = lowerRows.reduce<Record<Division, Record<string, LowerLeaguePlayerRow[]>>>((acc, row) => {
+    if (!acc[row.leagueName]) acc[row.leagueName] = {};
+    if (!acc[row.leagueName][row.clubName]) acc[row.leagueName][row.clubName] = [];
+    acc[row.leagueName][row.clubName].push(row);
+    return acc;
+  }, { Championship: {}, 'League One': {}, 'League Two': {} } as Record<Division, Record<string, LowerLeaguePlayerRow[]>>);
+
+  (['Championship', 'League One', 'League Two'] as Division[]).forEach((division) => {
+    const clubs = Object.entries(lowerGroups[division] || {})
+      .map(([clubName, rows]) => {
+        const avgOverall = rows.reduce((sum, row) => sum + row.overallRating, 0) / Math.max(1, rows.length);
+        return { clubName, rows, avgOverall, teamClass: deriveTeamClass(division, avgOverall) };
+      })
+      .sort((a, b) => {
+        if (b.avgOverall !== a.avgOverall) return b.avgOverall - a.avgOverall;
+        return a.clubName.localeCompare(b.clubName);
+      });
+
+    clubs.forEach(club => {
+      const teamId = `T${teamCounter++}`;
+      teamIds.push(teamId);
+      teamClasses[teamId] = club.teamClass;
+      const manager = buildGenericTeamManager(club.clubName, teamId, division, club.avgOverall);
+      const teamPlayers: Player[] = [];
+      const realPlayers = toLowerLeagueSourcePlayers(club.rows);
+
+    teams[teamId] = {
+      id: teamId,
+      name: club.clubName,
+      countryId: 'england',
+      division,
+      clubClass: club.teamClass,
+      manager,
+        points: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        played: 0,
+        activeFormation: manager.preferredFormations[0] || '4-2-3-1',
+        form: [],
+        tactics: club.clubName === userTeamName
+          ? { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' }
+          : getRandomTactics(),
+        budget: getBudgetForClass(club.teamClass),
+        boardApproval: deriveInitialBoardApproval(manager),
+      };
+
+      realPlayers.sort((a, b) => b.overallRating - a.overallRating);
+      realPlayers.forEach(rp => {
+        const p = buildPlayerRecord(rp, teamId, (playerCounter++).toString(), true);
+        players[p.id] = p;
+        teamPlayers.push(p);
+      });
+
+      if (club.clubName !== userTeamName) {
+        markBestStarters(teamPlayers, players);
+      }
+    });
   });
 
   // 2. Generate round-robin fixtures using proper circle method
   // This naturally alternates home/away for each team each round
-  const numTeams = teamIds.length;
-  const rounds = numTeams - 1;
-  const circleIds = [...teamIds];
-
-  // Build first-half schedule (weeks 1–19)
-  const firstHalf: { home: string; away: string; week: number }[] = [];
-  for (let round = 0; round < rounds; round++) {
-    const week = round + 1;
-    // Pair fixed[0] with last slot, then pair inward
-    for (let i = 0; i < numTeams / 2; i++) {
-      const teamA = circleIds[i];
-      const teamB = circleIds[numTeams - 1 - i];
-      // Alternate home/away based on round parity per pairing
-      const flipHome = (round + i) % 2 === 0;
-      firstHalf.push({ home: flipHome ? teamA : teamB, away: flipHome ? teamB : teamA, week });
-    }
-    // Rotate all except the first element (circle method)
-    const last = circleIds.pop()!;
-    circleIds.splice(1, 0, last);
-  }
-
-  // Build second half: swap home/away, add 19 weeks offset
   let fixtureCounter = 1;
-  firstHalf.forEach(f => {
-    const fId = `F${fixtureCounter++}`;
-    const sId = `F${fixtureCounter++}`;
-    fixtures[fId] = { id: fId, week: f.week, homeTeamId: f.home, awayTeamId: f.away, homeScore: null, awayScore: null, isPlayed: false };
-    fixtures[sId] = { id: sId, week: f.week + rounds, homeTeamId: f.away, awayTeamId: f.home, homeScore: null, awayScore: null, isPlayed: false };
+  (['Premier League', 'Championship', 'League One', 'League Two'] as Division[]).forEach(division => {
+    const divisionTeamIds = teamIds.filter(teamId => teams[teamId].division === division);
+    const generated = buildRoundRobinFixtures(divisionTeamIds, division, fixtureCounter);
+    Object.assign(fixtures, generated.fixtures);
+    fixtureCounter = generated.nextCounter;
   });
 
   return { teams, players, fixtures, teamClasses };
 };
 
 /** Generate board objectives for the user's team. */
-export const generateBoardObjectives = (teamClass: string, teamName: string): BoardObjective[] =>
-  generateObjectives(teamClass, teamName);
+export const generateBoardObjectives = (teamClass: string, teamName: string, division: Division = 'Premier League'): BoardObjective[] =>
+  buildTeamObjectives(teamClass, division);
+
+
