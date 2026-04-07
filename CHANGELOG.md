@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.2.1 - Merge squad and tactics
+
+What changed:
+- Combined Starting XI and Tactics into one Squad tab with a top switcher.
+- Added a Settings tab for current-team controls and temporary dev tools.
+- Moved change-team and season-skip dev controls out of the Hub.
+- Hid the old Tactics tab route from the tab bar while keeping the route available.
+- Added missing tab icon mappings so the new Settings tab and existing tab icons render correctly.
+
 ## v3.2.0 - Fix lineup views and player ordering
 
 What changed:

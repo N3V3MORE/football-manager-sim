@@ -35,8 +35,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="tactics"
         options={{
-          title: 'Tactics',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="slider.horizontal.3" color={color} />,
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -44,6 +43,13 @@ export default function TabLayout() {
         options={{
           title: 'Market',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="arrow.left.arrow.right" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
         }}
       />
     </Tabs>

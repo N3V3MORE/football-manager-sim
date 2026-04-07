@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal } from 'react-native';
+import React from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '@/src/store/gameStore';
 import { useRouter } from 'expo-router';
@@ -53,12 +53,7 @@ export default function HubScreen() {
   const fixtures = useGameStore(state => state.fixtures);
   const advanceWeek = useGameStore(state => state.advanceWeek);
   const news = useGameStore(state => state.news);
-  const skipToEndOfSeason = useGameStore(state => state.skipToEndOfSeason);
-  const changeTeam = useGameStore(state => state.changeTeam);
   const players = useGameStore(state => state.players);
-
-  const [showDevOptions, setShowDevOptions] = useState(false);
-  const [showChangeTeam, setShowChangeTeam] = useState(false);
 
   const myTeam = userTeamId ? teams[userTeamId] : null;
 
@@ -78,19 +73,6 @@ export default function HubScreen() {
     } else {
       router.push({ pathname: '/match', params: { fixtureId: myNextMatch.id } });
     }
-  };
-
-  const handleDevReset = () => {
-    if (!userTeamId) return;
-    const teamName = myTeam?.name;
-    // Re-init fresh game with same team
-    const allTeamNames = Object.values(teams).map(t => t.name);
-    const matchedTeam = allTeamNames.find(n => n === teamName);
-    if (matchedTeam) {
-      // Reinitialize using store action
-      useGameStore.getState().initializeGame(userTeamId);
-    }
-    setShowDevOptions(false);
   };
 
   if (!myTeam) return <View style={styles.container}><Text style={{ color: '#fff', margin: 20 }}>Loading...</Text></View>;
@@ -150,9 +132,6 @@ export default function HubScreen() {
               </Text>
               <Text style={styles.subtitle}>{myTheme.stadium} | Est. {myTheme.founded}</Text>
             </View>
-            <TouchableOpacity style={styles.devResetButton} onPress={() => setShowDevOptions(!showDevOptions)}>
-              <Text style={styles.devResetText}>DEV</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Stat chips */}
@@ -178,35 +157,6 @@ export default function HubScreen() {
             </View>
           </View>
         </View>
-
-        {/* Dev options panel */}
-        {showDevOptions && (
-          <View style={styles.devPanel}>
-            <Text style={styles.devPanelTitle}>Dev Tools</Text>
-            <View style={styles.devRow}>
-              <TouchableOpacity style={styles.devBtn} onPress={() => { advanceWeek(); setShowDevOptions(false); }}>
-                <Text style={styles.devBtnText}>Next Week</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.devBtn, { borderColor: '#F59E0B' }]} onPress={() => {
-                advanceWeek(); advanceWeek(); advanceWeek(); advanceWeek(); advanceWeek();
-                setShowDevOptions(false);
-              }}>
-                <Text style={[styles.devBtnText, { color: '#F59E0B' }]}>+5 Weeks</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={[styles.devRow, { marginTop: 6 }]}>
-              <TouchableOpacity style={[styles.devBtn, { borderColor: '#F59E0B' }]} onPress={() => { skipToEndOfSeason(); setShowDevOptions(false); }}>
-                <Text style={[styles.devBtnText, { color: '#F59E0B' }]}>Skip Season</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.devBtn} onPress={() => setShowChangeTeam(true)}>
-                <Text style={styles.devBtnText}>Change Team</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity style={[styles.devBtn, { marginTop: 6, borderColor: '#ef4444' }]} onPress={handleDevReset}>
-              <Text style={[styles.devBtnText, { color: '#ef4444' }]}>Reset Season</Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
         {/* Breaking news */}
         <View style={styles.card}>
@@ -361,31 +311,6 @@ export default function HubScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Change team modal */}
-      <Modal visible={showChangeTeam} transparent animationType="slide" onRequestClose={() => setShowChangeTeam(false)}>
-        <View style={styles.ctOverlay}>
-          <View style={styles.ctSheet}>
-            <Text style={styles.ctTitle}>Change Team</Text>
-            <ScrollView>
-              {Object.values(teams).sort((a, b) => a.name.localeCompare(b.name)).map(t => {
-                const th = getTeamTheme(t.name);
-                return (
-                  <TouchableOpacity key={t.id} style={[styles.ctRow, t.id === userTeamId && styles.ctRowActive]}
-                    onPress={() => { changeTeam(t.id); setShowChangeTeam(false); setShowDevOptions(false); }}>
-                    <View style={[styles.ctKitChip, { backgroundColor: th.primary }]} />
-                    <View style={[styles.ctKitChip, { backgroundColor: th.secondary === '#FFFFFF' ? '#e2e8f0' : th.secondary }]} />
-                    <Text style={[styles.ctTeamName, t.id === userTeamId && { color: '#38bdf8' }]}>{t.name}</Text>
-                    {t.id === userTeamId && <Text style={styles.ctCurrent}>CURRENT</Text>}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <TouchableOpacity style={styles.ctClose} onPress={() => setShowChangeTeam(false)}>
-              <Text style={styles.ctCloseText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -404,8 +329,6 @@ const styles = StyleSheet.create({
   kitBlock: { flex: 1 },
   teamName: { fontSize: 22, fontWeight: '900', letterSpacing: 0.5 },
   subtitle: { fontSize: 13, color: '#64748b', marginTop: 2, fontWeight: '600' },
-  devResetButton: { padding: 8, backgroundColor: '#1e293b', borderRadius: 8, borderWidth: 1, borderColor: '#334155' },
-  devResetText: { color: '#64748b', fontSize: 10, fontWeight: '900' },
 
   // Stat chips
   statChipRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', borderRadius: 10, padding: 10 },
@@ -482,25 +405,4 @@ const styles = StyleSheet.create({
   statLeaderName: { fontSize: 13, fontWeight: '800', color: '#f8fafc' },
   statLeaderNum: { fontSize: 11, color: '#64748b', fontWeight: '600' },
 
-  // Dev
-  devPanel: {
-    backgroundColor: '#111827', borderBottomWidth: 1, borderBottomColor: '#1e293b',
-    paddingHorizontal: 14, paddingVertical: 12,
-  },
-  devPanelTitle: { fontSize: 10, color: '#64748b', fontWeight: '900', letterSpacing: 1.5, marginBottom: 10, textTransform: 'uppercase' },
-  devRow: { flexDirection: 'row', gap: 8 },
-  devBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#334155', alignItems: 'center' },
-  devBtnText: { color: '#94a3b8', fontSize: 11, fontWeight: '900' },
-
-  // Change team modal
-  ctOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-  ctSheet: { backgroundColor: '#111827', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '75%', paddingBottom: 30 },
-  ctTitle: { fontSize: 18, fontWeight: '900', color: '#f8fafc', textAlign: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#1e293b' },
-  ctRow: { paddingVertical: 14, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#1e293b', flexDirection: 'row', alignItems: 'center', gap: 8 },
-  ctRowActive: { backgroundColor: '#0ea5e915' },
-  ctKitChip: { width: 10, height: 10, borderRadius: 3 },
-  ctTeamName: { flex: 1, color: '#f1f5f9', fontSize: 16, fontWeight: '700' },
-  ctCurrent: { fontSize: 10, color: '#38bdf8', fontWeight: '900', backgroundColor: '#0ea5e930', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
-  ctClose: { margin: 16, backgroundColor: '#1e293b', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  ctCloseText: { color: '#64748b', fontWeight: '900', fontSize: 15 },
 });

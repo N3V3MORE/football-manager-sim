@@ -16,6 +16,8 @@ The current focus is a fast, inspectable match engine that can run full-season a
 ## Gameplay
 
 - Pick a club and set a starting XI with the pitch grid.
+- Switch between Starting XI and Tactics inside the Squad tab.
+- Use the Settings tab for current-team controls and temporary dev tools.
 - Use 7-player benches and formation maps for manual lineup continuity.
 - Run live match minutes or quick-sim fixtures.
 - Track league table, player stats, awards, budgets, transfers, morale, energy, suspensions, and weekly news.
@@ -54,6 +56,6 @@ npm run start
 
 ## Version
 
-Current version: `v3.2.0`
+Current version: `v3.2.1`
 
 See [CHANGELOG.md](./CHANGELOG.md) for release notes.

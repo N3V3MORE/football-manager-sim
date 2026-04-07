@@ -4,7 +4,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useGameStore } from '@/src/store/gameStore';
-import { Formation, Player } from '@/src/models/types';
+import { Formation, Player, TeamTactics } from '@/src/models/types';
 
 import { getSlotsForFormation, Slot } from '@/src/constants/formations';
 import { getSlotFitScore, rebuildFormationMap, rebuildFormationSlotPlayers } from '@/src/core/formationMapUtils';
@@ -101,6 +101,7 @@ export default function SquadScreen() {
   const players       = useGameStore(s => s.players);
   const teams         = useGameStore(s => s.teams);
   const setFormation  = useGameStore(s => s.setFormation);
+  const setTactics    = useGameStore(s => s.setTactics);
   const swapPlayer    = useGameStore(s => s.swapPlayer);
   const markAsSub     = useGameStore(s => s.markAsSub);
   const swapStartingSlots = useGameStore(s => s.swapStartingSlots);
@@ -110,6 +111,7 @@ export default function SquadScreen() {
   const [showFormationDrop, setShowFormationDrop] = useState(false);
   const [activeSlotIndex, setActiveSlotIndex] = useState<{ row: number; col: number } | null>(null);
   const [showInfo, setShowInfo] = useState(false);
+  const [activePane, setActivePane] = useState<'xi' | 'tactics'>('xi');
 
   const slotRefs = useRef<Record<string, any>>({});
   const slotBounds = useRef<Record<string, {x: number, y: number, w: number, h: number}>>({});
@@ -347,6 +349,37 @@ export default function SquadScreen() {
   const activeSlot = activeSlotIndex !== null ? slots[activeSlotIndex.row]?.[activeSlotIndex.col] : null;
   const currentOccupant = activeSlotIndex !== null ? slotPlayers[activeSlotIndex.row]?.[activeSlotIndex.col] : null;
   const pickerSections = activeSlot ? getPickerSections(activeSlot, currentOccupant?.id ?? null) : null;
+  const tactics = myTeam?.tactics;
+
+  const renderTacticSection = (
+    title: string,
+    key: keyof TeamTactics,
+    options: TeamTactics[keyof TeamTactics][],
+    descriptions: Record<string, string>
+  ) => {
+    if (!tactics) return null;
+
+    return (
+      <View style={styles.tacticsSection}>
+        <Text style={styles.tacticsSectionTitle}>{title}</Text>
+        <View style={styles.tacticsOptionsRow}>
+          {options.map(option => {
+            const isActive = tactics[key] === option;
+            return (
+              <TouchableOpacity
+                key={option}
+                style={[styles.tacticsOptBtn, isActive && styles.tacticsOptBtnActive]}
+                onPress={() => setTactics(userTeamId, { [key]: option } as Partial<TeamTactics>)}
+              >
+                <Text style={[styles.tacticsOptText, isActive && styles.tacticsOptTextActive]}>{option}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={styles.tacticsHintText}>{descriptions[tactics[key]]}</Text>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -364,49 +397,96 @@ export default function SquadScreen() {
             <Text style={styles.dropdownValue}>{activeFormation}</Text>
             <Text style={styles.dropdownCaret}>v</Text>
           </TouchableOpacity>
-        </View>
 
-        <View style={styles.pitchWrapper}>
-          {/* Football pitch */}
-          <View style={styles.pitch}>
-            <View style={styles.pitchOutline} />
-
-            <View style={styles.pitchSlots}>
-              {slots.map((row: Slot[], rowIdx: number) => (
-                row.map((slot: Slot, colIdx: number) => {
-                    const assigned = slotPlayers[rowIdx]?.[colIdx];
-                    const slotKey = `${rowIdx}-${colIdx}`;
-                    const position = getSlotPosition(rowIdx, colIdx, row.length, slots.length);
-                    return (
-                       <View key={slotKey} style={[styles.pitchSlotAnchor, position]}>
-                         <DraggableDot
-                            slot={slot}
-                            assigned={assigned}
-                            getPosColor={getPosColor}
-                            onPress={() => handleSlotPress(rowIdx, colIdx)}
-                            onDragBegin={() => { setScrollEnabled(false); measureSlots(); }}
-                            onDragEnd={(mx: number, my: number) => handleDragEnd(rowIdx, colIdx, mx, my)}
-                            setRef={(r: any) => { if (r) slotRefs.current[slotKey] = r; }}
-                         />
-                       </View>
-                    );
-                  })
-              ))}
-            </View>
+          <View style={styles.paneSwitch}>
+            <TouchableOpacity
+              style={[styles.paneSwitchBtn, activePane === 'xi' && styles.paneSwitchBtnActive]}
+              onPress={() => setActivePane('xi')}
+            >
+              <Text style={[styles.paneSwitchText, activePane === 'xi' && styles.paneSwitchTextActive]}>Starting XI</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.paneSwitchBtn, activePane === 'tactics' && styles.paneSwitchBtnActive]}
+              onPress={() => setActivePane('tactics')}
+            >
+              <Text style={[styles.paneSwitchText, activePane === 'tactics' && styles.paneSwitchTextActive]}>Tactics</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Substitutes ({bench.length}/7)</Text>
-          {bench.length === 0 && <Text style={styles.emptyNote}>Long-press a reserve to designate as sub</Text>}
-          {bench.map(p => renderCompactPlayer(p, false, false, true))}
-        </View>
+        {activePane === 'xi' ? (
+          <>
+            <View style={styles.pitchWrapper}>
+              {/* Football pitch */}
+              <View style={styles.pitch}>
+                <View style={styles.pitchOutline} />
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Reserves ({reserves.length})</Text>
-          {reserves.length === 0 && <Text style={styles.emptyNote}>All players assigned to XI or bench</Text>}
-          {reserves.map(p => renderCompactPlayer(p, false, false, false))}
-        </View>
+                <View style={styles.pitchSlots}>
+                  {slots.map((row: Slot[], rowIdx: number) => (
+                    row.map((slot: Slot, colIdx: number) => {
+                        const assigned = slotPlayers[rowIdx]?.[colIdx];
+                        const slotKey = `${rowIdx}-${colIdx}`;
+                        const position = getSlotPosition(rowIdx, colIdx, row.length, slots.length);
+                        return (
+                           <View key={slotKey} style={[styles.pitchSlotAnchor, position]}>
+                             <DraggableDot
+                                slot={slot}
+                                assigned={assigned}
+                                getPosColor={getPosColor}
+                                onPress={() => handleSlotPress(rowIdx, colIdx)}
+                                onDragBegin={() => { setScrollEnabled(false); measureSlots(); }}
+                                onDragEnd={(mx: number, my: number) => handleDragEnd(rowIdx, colIdx, mx, my)}
+                                setRef={(r: any) => { if (r) slotRefs.current[slotKey] = r; }}
+                             />
+                           </View>
+                        );
+                      })
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Substitutes ({bench.length}/7)</Text>
+              {bench.length === 0 && <Text style={styles.emptyNote}>Long-press a reserve to designate as sub</Text>}
+              {bench.map(p => renderCompactPlayer(p, false, false, true))}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Reserves ({reserves.length})</Text>
+              {reserves.length === 0 && <Text style={styles.emptyNote}>All players assigned to XI or bench</Text>}
+              {reserves.map(p => renderCompactPlayer(p, false, false, false))}
+            </View>
+          </>
+        ) : (
+          <View style={styles.tacticsPane}>
+            {renderTacticSection('Mentality', 'mentality', ['Defensive', 'Balanced', 'Attacking'], {
+              Defensive: 'Focus on shape and discipline. Lower goal threat but 15% better defense.',
+              Balanced: 'Standard approach. No specific stat bonuses or penalties.',
+              Attacking: 'Push players forward. Increased shooting accuracy but vulnerable to counters.',
+            })}
+            {renderTacticSection('Passing Style', 'passingStyle', ['Short', 'Mixed', 'Direct'], {
+              Short: 'Patient buildup. Higher pass completion but fewer direct balls.',
+              Mixed: 'A balanced blend of short and direct passing.',
+              Direct: 'Bypass midfield more often. More through-balls, more risk.',
+            })}
+            {renderTacticSection('Tempo', 'tempo', ['Slow', 'Normal', 'Fast'], {
+              Slow: 'Control the game and conserve more energy.',
+              Normal: 'Standard rhythm and frequency of play.',
+              Fast: 'Higher intensity and chance creation, but burns more energy.',
+            })}
+            {renderTacticSection('Defensive Line', 'defensiveLine', ['Deep', 'Standard', 'High'], {
+              Deep: 'Protect space behind the defense but concede more midfield territory.',
+              Standard: 'Balanced defensive positioning.',
+              High: 'Compress the pitch, but risk through-balls behind.',
+            })}
+            {renderTacticSection('Pressing', 'pressing', ['None', 'Medium', 'High'], {
+              None: 'Sit off and conserve energy.',
+              Medium: 'Press selectively.',
+              High: 'Aggressive pressure with higher energy cost.',
+            })}
+          </View>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -513,6 +593,18 @@ const styles = StyleSheet.create({
   dropdownLabel: { fontSize: 11, color: '#64748b', fontWeight: '700', marginRight: 6, textTransform: 'uppercase' },
   dropdownValue: { flex: 1, fontSize: 16, fontWeight: '900', color: '#f8fafc' },
   dropdownCaret: { fontSize: 14, color: '#64748b' },
+  paneSwitch: {
+    flexDirection: 'row',
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+    padding: 4,
+  },
+  paneSwitchBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 7 },
+  paneSwitchBtnActive: { backgroundColor: '#38bdf8' },
+  paneSwitchText: { color: '#94a3b8', fontSize: 12, fontWeight: '900' },
+  paneSwitchTextActive: { color: '#0f172a' },
 
   stratTextActive:   { color: '#fff' },
   stratArrow:        { fontSize: 12, color: '#64748b' },
@@ -597,6 +689,15 @@ const styles = StyleSheet.create({
     marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#1e293b',
   },
   seasonStat:      { fontSize: 12, color: '#94a3b8', fontWeight: '700' },
+  tacticsPane: { padding: 16, gap: 18 },
+  tacticsSection: { gap: 10 },
+  tacticsSectionTitle: { color: '#94a3b8', fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1.5 },
+  tacticsOptionsRow: { flexDirection: 'row', backgroundColor: '#1e293b', borderRadius: 10, padding: 4, borderWidth: 1, borderColor: '#334155' },
+  tacticsOptBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 6 },
+  tacticsOptBtnActive: { backgroundColor: '#38bdf8' },
+  tacticsOptText: { color: '#94a3b8', fontSize: 13, fontWeight: '800' },
+  tacticsOptTextActive: { color: '#0f172a' },
+  tacticsHintText: { color: '#475569', fontSize: 11, fontStyle: 'italic', paddingHorizontal: 4, lineHeight: 16 },
 
   // Formation dropdown modal
   modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: 40 },
