@@ -1,3 +1,24 @@
+# Changelog - v3.0.1 (Simulation Integrity & Tactical Evolution)
+
+## What's New
+- **Slot-Aware Tactical Identity**: Wired formation-slot structure into possession phases so shape differences now influence build-up lanes, central shielding, and final-third access.
+- **State-Aware Substitutions**: Reworked quick-sim substitution logic to react to match state (chasing, protecting a lead, neutral) instead of purely random changes.
+- **Season Tracking Automation**: Added `track:season` tooling and structured season audits for match-level integrity checks, tactical volatility, and formation usage trends.
+- **Formation Adaptation for AI Teams**: Added fit-based formation switching in progression logic so AI teams can move between back-3/back-4/back-5 structures over a season.
+
+## Bug Fixes
+- **Second-Yellow Accounting**: Fixed yellow-card undercount on second-booking red-card paths in both quick sim and live sim.
+- **Live Match Minute Integrity**: Tracked sent-off minutes and applied minute-aware post-match stats so dismissed players no longer receive automatic full-match minutes.
+- **Clean Sheet Attribution Logic**: Replaced team-final-score clean-sheet assignment with player-window clean-sheet logic (based on on-pitch windows vs concession minutes).
+- **Quick vs Live Tactical Parity**: Aligned live possession simulation with quick-sim tactical shape inputs to remove behavior drift between modes.
+
+## Technical Notes
+- Added `tsx` dev dependency and updated analysis scripts to use `detailed_season_sim.ts`.
+- Added `.gitignore` rules for generated simulation output files.
+- Recalibrated engine constants after tactical model expansion to preserve realistic goal volume.
+
+---
+
 # Changelog - v3.0.0 (The Engine Overhaul)
 
 ## What's New
