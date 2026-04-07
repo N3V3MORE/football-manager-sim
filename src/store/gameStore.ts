@@ -5,10 +5,29 @@ import { GameState, Team, Player, Formation, TeamTactics } from '../models/types
 import { initGameData, generateBoardObjectives } from '../utils/initGame';
 import { getSlotsForFormation } from '../constants/formations';
 import { ENGINE_CONFIG } from '../config/engineConfig';
-import { autoAssignLineup, simulatePossession, getFormModifier, getMoraleModifier, quickSimMatch } from '../core/matchEngine';
+import {
+  autoAssignLineup,
+  simulatePossession,
+  quickSimMatch,
+  getFormModifier,
+  getMoraleModifier,
+  buildTeamShapeProfile,
+} from '../core/matchEngine';
 import { computeWeeklyTransfers, computeWeeklyProgression } from '../core/progressionEngine';
 
+type LiveMatchState = {
+  initialized: boolean;
+  yellowCardPlayerIds: string[];
+  sentOffPlayerIds: string[];
+  sentOffMinutes?: Record<string, number>;
+  homeGoalMinutes?: number[];
+  awayGoalMinutes?: number[];
+  homeStarterIds: string[];
+  awayStarterIds: string[];
+};
+
 interface GameStore extends GameState {
+  liveMatches: Record<string, LiveMatchState>;
   initializeGame: (userTeamId: string) => void;
   advanceWeek: () => void;
   playMatch: (fixtureId: string) => void;
@@ -31,6 +50,162 @@ interface GameStore extends GameState {
   processMatchMinute: (fixtureId: string, minute: number) => { event: string | null };
   finishLiveMatch: (fixtureId: string) => void;
 }
+
+type PlayerCounterStat = 'goals' | 'assists' | 'cleanSheets' | 'yellowCards' | 'redCards';
+
+const LIVE_MATCH_MINUTES = 90;
+
+const addPlayerStat = (
+  players: Record<string, Player>,
+  playerId: string,
+  stat: PlayerCounterStat,
+  amount = 1
+) => {
+  const player = players[playerId];
+  if (!player) return;
+  players[playerId] = { ...player, [stat]: player[stat] + amount };
+};
+
+const getPossessionIndexForMinute = (minute: number) => {
+  const current = Math.floor((minute * ENGINE_CONFIG.TOTAL_POSSESSIONS) / LIVE_MATCH_MINUTES);
+  const previous = Math.floor(((minute - 1) * ENGINE_CONFIG.TOTAL_POSSESSIONS) / LIVE_MATCH_MINUTES);
+  return current > previous ? current - 1 : null;
+};
+
+const getPlayersByIds = (players: Record<string, Player>, ids: string[]) => (
+  ids.map(id => players[id]).filter((player): player is Player => Boolean(player))
+);
+
+const scaleMatchPlayers = (players: Player[], formMultiplier: number, moraleMultiplier: number, homeAdvantage = 1) => (
+  players.map(player => ({
+    ...player,
+    stats: {
+      ...player.stats,
+      passing: player.stats.passing * formMultiplier * moraleMultiplier * homeAdvantage,
+      shooting: player.stats.shooting * formMultiplier * moraleMultiplier * homeAdvantage,
+      defending: (player.stats.defending || 50) * formMultiplier * moraleMultiplier * homeAdvantage,
+      dribbling: (player.stats.dribbling || 50) * formMultiplier * moraleMultiplier * homeAdvantage,
+    },
+  }))
+);
+
+const getEligibleStarters = (
+  players: Record<string, Player>,
+  teamId: string,
+  sentOffPlayers: Set<string>
+) => Object.values(players)
+  .filter(player => (
+    player.teamId === teamId &&
+    player.isStarting &&
+    player.matchesSuspended === 0 &&
+    !sentOffPlayers.has(player.id)
+  ));
+
+const ensureLiveTeamStarters = (
+  teamId: string,
+  teams: Record<string, Team>,
+  players: Record<string, Player>,
+  sentOffPlayers: Set<string>,
+  allowAutoAssign: boolean
+) => {
+  let starters = getEligibleStarters(players, teamId, sentOffPlayers);
+  if (!allowAutoAssign || starters.length >= 11) return starters;
+
+  const team = teams[teamId];
+  const lineupUpdates = autoAssignLineup(teamId, players, team.activeFormation);
+  Object.entries(lineupUpdates).forEach(([playerId, updates]) => {
+    players[playerId] = { ...players[playerId], ...updates };
+  });
+  starters = getEligibleStarters(players, teamId, sentOffPlayers);
+  return starters;
+};
+
+const drainLiveMatchEnergy = (players: Record<string, Player>, starters: Player[]) => {
+  starters.forEach(player => {
+    players[player.id] = {
+      ...players[player.id],
+      energy: Math.max(0, players[player.id].energy - ENGINE_CONFIG.ENERGY_DRAIN_PER_MINUTE),
+    };
+  });
+};
+
+const removeLiveMatchFixture = (
+  liveMatches: Record<string, LiveMatchState>,
+  fixtureId: string
+) => {
+  const nextLiveMatches = { ...liveMatches };
+  delete nextLiveMatches[fixtureId];
+  return nextLiveMatches;
+};
+
+const applyLivePostMatchStats = (
+  players: Record<string, Player>,
+  teamStarters: Player[],
+  minuteMap: Record<string, number>,
+  concededGoalMinutes: number[],
+  oppGoals: number,
+  isWin: boolean,
+  isDraw: boolean
+) => {
+  const concededInWindow = (startMinute: number, endMinute: number) => {
+    if (endMinute <= startMinute) return true;
+    if (concededGoalMinutes.length === 0) return oppGoals > 0;
+    return concededGoalMinutes.some(minute => minute > startMinute && minute <= endMinute);
+  };
+
+  teamStarters.forEach(player => {
+    const minutes = Math.max(0, Math.min(90, minuteMap[player.id] ?? 90));
+    if (minutes <= 0) return;
+    let rating = 6.0 + (Math.random() * 1.2 - 0.4);
+    if (isWin) rating += 0.8;
+    if (isDraw) rating += 0.2;
+    if (!isWin && !isDraw) rating -= 0.6;
+
+    let cleanSheetBonus = 0;
+    if (
+      (player.position === 'DEF' || player.position === 'GK') &&
+      !concededInWindow(0, minutes)
+    ) {
+      cleanSheetBonus = 1;
+      rating += 1.0;
+    }
+
+    rating += (player.impactCoefficient - 1.0);
+    if (minutes < 30) rating -= 0.3;
+    rating = Math.max(1.0, Math.min(10.0, Math.round(rating * 10) / 10));
+
+    players[player.id] = {
+      ...players[player.id],
+      cleanSheets: players[player.id].cleanSheets + cleanSheetBonus,
+      minutesPlayed: (players[player.id].minutesPlayed || 0) + minutes,
+      matchRatingHistory: [...(players[player.id].matchRatingHistory || []), rating],
+    };
+  });
+};
+
+const updateTeamStats = (team: Team, goalsFor: number, goalsAgainst: number) => {
+  let points = 0;
+  let wins = 0;
+  let draws = 0;
+  let losses = 0;
+
+  if (goalsFor > goalsAgainst) { points = 3; wins = 1; }
+  else if (goalsFor === goalsAgainst) { points = 1; draws = 1; }
+  else { losses = 1; }
+
+  const formToken = wins ? 'W' : draws ? 'D' : 'L';
+  return {
+    ...team,
+    points: team.points + points,
+    goalsFor: team.goalsFor + goalsFor,
+    goalsAgainst: team.goalsAgainst + goalsAgainst,
+    wins: team.wins + wins,
+    draws: team.draws + draws,
+    losses: team.losses + losses,
+    played: team.played + 1,
+    form: [...(team.form || []), formToken].slice(-5),
+  };
+};
 
 
 
@@ -58,6 +233,7 @@ export const useGameStore = create<GameStore>()(
       fixtures: {},
       news: [],
       boardObjectives: [],
+      liveMatches: {},
 
       initializeGame: (userTeamId) => {
         const data = initGameData();
@@ -85,16 +261,20 @@ export const useGameStore = create<GameStore>()(
           fixtures: data.fixtures,
           boardObjectives: objectives,
           news: ['Season begins! The Premier League simulation is underway.'],
+          liveMatches: {},
         });
       },
 
       playMatch: (fixtureId: string) => {
         set((state) => {
-          const { players, teams, fixture } = quickSimMatch(fixtureId, state.players, state.teams, state.fixtures);
+          const { players, teams, fixture } = quickSimMatch(fixtureId, state.players, state.teams, state.fixtures, state.userTeamId);
+          const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);
+
           return {
             players,
             teams,
-            fixtures: { ...state.fixtures, [fixtureId]: fixture }
+            fixtures: { ...state.fixtures, [fixtureId]: fixture },
+            liveMatches,
           };
         });
       },
@@ -112,63 +292,116 @@ export const useGameStore = create<GameStore>()(
 
           const homeTeam = state.teams[fixture.homeTeamId];
           const awayTeam = state.teams[fixture.awayTeamId];
-          
-          const getTeamStarters = (teamId: string) => {
-            let starters = Object.values(updatedPlayers).filter(p => p.teamId === teamId && p.isStarting && p.matchesSuspended === 0);
-            if (starters.length < 11) {
-              const team = state.teams[teamId];
-              const lineupUpdates = autoAssignLineup(teamId, updatedPlayers, team.activeFormation);
-              Object.keys(lineupUpdates).forEach(id => {
-                 updatedPlayers[id] = { ...updatedPlayers[id], ...lineupUpdates[id] };
-              });
-              starters = Object.values(updatedPlayers).filter(p => p.teamId === teamId && p.isStarting && p.matchesSuspended === 0);
-            }
-            return starters;
-          };
+          const storedLiveState = state.liveMatches?.[fixtureId];
+          const sentOffPlayers = new Set(storedLiveState?.sentOffPlayerIds || []);
+          const sentOffMinutes = { ...(storedLiveState?.sentOffMinutes || {}) };
+          const homeGoalMinutes = [...(storedLiveState?.homeGoalMinutes || [])];
+          const awayGoalMinutes = [...(storedLiveState?.awayGoalMinutes || [])];
+          const matchYellowCards = new Set(storedLiveState?.yellowCardPlayerIds || []);
+          const allowAutoAssign = !storedLiveState?.initialized;
 
-          const homeStarters = getTeamStarters(homeTeam.id);
-          const awayStarters = getTeamStarters(awayTeam.id);
+          const homeStarters = ensureLiveTeamStarters(homeTeam.id, state.teams, updatedPlayers, sentOffPlayers, allowAutoAssign);
+          const awayStarters = ensureLiveTeamStarters(awayTeam.id, state.teams, updatedPlayers, sentOffPlayers, allowAutoAssign);
 
           if (homeStarters.length === 0 || awayStarters.length === 0) return state;
 
           // Energy drain: driven by config
-          [...homeStarters, ...awayStarters].forEach(p => {
-            updatedPlayers[p.id].energy = Math.max(0, updatedPlayers[p.id].energy - ENGINE_CONFIG.ENERGY_DRAIN_PER_MINUTE);
-          });
+          drainLiveMatchEnergy(updatedPlayers, [...homeStarters, ...awayStarters]);
 
-          // Simulate 1 possession per minute
-          const isHomeAttacking = Math.random() > 0.5;
-          const attacker = isHomeAttacking ? homeTeam : awayTeam;
-          const defender = isHomeAttacking ? awayTeam : homeTeam;
-          const attPlayers = isHomeAttacking ? homeStarters : awayStarters;
-          const defPlayers = isHomeAttacking ? awayStarters : homeStarters;
+          const possessionIndex = getPossessionIndexForMinute(minute);
+          if (possessionIndex !== null) {
+            const homeFormMult = getFormModifier(homeTeam.form);
+            const awayFormMult = getFormModifier(awayTeam.form);
+            const homeMoraleMult = getMoraleModifier(homeStarters);
+            const awayMoraleMult = getMoraleModifier(awayStarters);
+            const scaledHome = scaleMatchPlayers(homeStarters, homeFormMult, homeMoraleMult, ENGINE_CONFIG.GLOBAL_HOME_ADVANTAGE);
+            const scaledAway = scaleMatchPlayers(awayStarters, awayFormMult, awayMoraleMult);
+            const isHomeAttacking = possessionIndex % 2 === 0;
+            const attacker = isHomeAttacking ? homeTeam : awayTeam;
+            const defender = isHomeAttacking ? awayTeam : homeTeam;
+            const attPlayers = isHomeAttacking ? scaledHome : scaledAway;
+            const defPlayers = isHomeAttacking ? scaledAway : scaledHome;
+            const homeShape = buildTeamShapeProfile(homeTeam, homeStarters);
+            const awayShape = buildTeamShapeProfile(awayTeam, awayStarters);
+            const attShape = isHomeAttacking ? homeShape : awayShape;
+            const defShape = isHomeAttacking ? awayShape : homeShape;
 
-          const res = simulatePossession(
-            attacker, 
-            defender, 
-            attPlayers, 
-            defPlayers, 
-            isHomeAttacking ? updatedFixture.homeScore! : updatedFixture.awayScore!, 
-            isHomeAttacking ? updatedFixture.awayScore! : updatedFixture.homeScore!
-          );
-          if (res.goal) {
-            if (isHomeAttacking) updatedFixture.homeScore!++; else updatedFixture.awayScore!++;
-            if (res.scorer) updatedPlayers[res.scorer.id].goals++;
-            if (res.assister) updatedPlayers[res.assister.id].assists++;
+            const sendOffPlayer = (playerId: string, message: string) => {
+              const player = updatedPlayers[playerId];
+              if (!player || sentOffPlayers.has(playerId)) return;
+              updatedPlayers[playerId] = {
+                ...player,
+                redCards: player.redCards + 1,
+                matchesSuspended: 3,
+              };
+              sentOffPlayers.add(playerId);
+              sentOffMinutes[playerId] = minute;
+              eventMsg = message;
+            };
+
+            const res = simulatePossession(
+              attacker,
+              defender,
+              attPlayers,
+              defPlayers,
+              isHomeAttacking ? updatedFixture.homeScore! : updatedFixture.awayScore!,
+              isHomeAttacking ? updatedFixture.awayScore! : updatedFixture.homeScore!,
+              attShape,
+              defShape
+            );
+            eventMsg = res.event;
+
+            if (res.goal) {
+              if (isHomeAttacking) {
+                updatedFixture.homeScore!++;
+                homeGoalMinutes.push(minute);
+              } else {
+                updatedFixture.awayScore!++;
+                awayGoalMinutes.push(minute);
+              }
+              if (res.scorer) addPlayerStat(updatedPlayers, res.scorer.id, 'goals');
+              if (res.assister) addPlayerStat(updatedPlayers, res.assister.id, 'assists');
+            }
+            if (res.foul) {
+              const playerId = res.foul.player.id;
+              if (!sentOffPlayers.has(playerId)) {
+                if (res.foul.type === 'Y') {
+                  if (matchYellowCards.has(playerId)) {
+                    if (Math.random() < ENGINE_CONFIG.SECOND_YELLOW_RED_CHANCE) {
+                      addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+                      sendOffPlayer(playerId, `${res.foul.player.name} receives a second yellow and is sent off.`);
+                    } else {
+                      eventMsg = `${res.foul.player.name} avoids a second yellow after the foul.`;
+                    }
+                  } else {
+                    addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+                    matchYellowCards.add(playerId);
+                  }
+                } else {
+                  sendOffPlayer(playerId, `${res.foul.player.name} is shown a straight red card.`);
+                }
+              }
+            }
           }
-          if (res.foul) {
-             if (res.foul.type === 'Y') updatedPlayers[res.foul.player.id].yellowCards++;
-             else {
-               updatedPlayers[res.foul.player.id].redCards++;
-               updatedPlayers[res.foul.player.id].matchesSuspended = 3;
-             }
-          }
-          
-          eventMsg = res.event;
           if (minute === 45 && !eventMsg) eventMsg = `⏱️ HALF TIME.`;
           if (minute === 90 && !eventMsg) eventMsg = `⏱️ FULL TIME.`;
 
-          return { fixtures: { ...state.fixtures, [fixtureId]: updatedFixture }, players: updatedPlayers };
+          const liveMatchState: LiveMatchState = {
+            initialized: true,
+            yellowCardPlayerIds: Array.from(matchYellowCards),
+            sentOffPlayerIds: Array.from(sentOffPlayers),
+            sentOffMinutes,
+            homeGoalMinutes,
+            awayGoalMinutes,
+            homeStarterIds: storedLiveState?.homeStarterIds || homeStarters.map(p => p.id),
+            awayStarterIds: storedLiveState?.awayStarterIds || awayStarters.map(p => p.id),
+          };
+
+          return {
+            fixtures: { ...state.fixtures, [fixtureId]: updatedFixture },
+            players: updatedPlayers,
+            liveMatches: { ...(state.liveMatches || {}), [fixtureId]: liveMatchState },
+          };
         });
         return { event: eventMsg };
       },
@@ -180,73 +413,63 @@ export const useGameStore = create<GameStore>()(
 
           const homeTeam = state.teams[fixture.homeTeamId];
           const awayTeam = state.teams[fixture.awayTeamId];
-          const homeTeamPlayers = Object.values(state.players).filter(p => p.teamId === homeTeam.id && p.isStarting && p.matchesSuspended === 0);
-          const awayTeamPlayers = Object.values(state.players).filter(p => p.teamId === awayTeam.id && p.isStarting && p.matchesSuspended === 0);
+          const liveMatchState = state.liveMatches?.[fixtureId];
+          const sentOffMinutes = liveMatchState?.sentOffMinutes || {};
+          const homeGoalMinutes = liveMatchState?.homeGoalMinutes || [];
+          const awayGoalMinutes = liveMatchState?.awayGoalMinutes || [];
+          const homeTeamPlayers = liveMatchState
+            ? getPlayersByIds(state.players, liveMatchState.homeStarterIds)
+            : Object.values(state.players).filter(p => p.teamId === homeTeam.id && p.isStarting && p.matchesSuspended === 0);
+          const awayTeamPlayers = liveMatchState
+            ? getPlayersByIds(state.players, liveMatchState.awayStarterIds)
+            : Object.values(state.players).filter(p => p.teamId === awayTeam.id && p.isStarting && p.matchesSuspended === 0);
+          const buildMinuteMap = (teamPlayers: Player[]) => (
+            Object.fromEntries(teamPlayers.map(player => [
+              player.id,
+              Math.max(0, Math.min(90, sentOffMinutes[player.id] ?? 90)),
+            ]))
+          );
 
           const updatedPlayers = { ...state.players };
 
           const hScore = fixture.homeScore || 0;
           const aScore = fixture.awayScore || 0;
+          const homeMinuteMap = buildMinuteMap(homeTeamPlayers);
+          const awayMinuteMap = buildMinuteMap(awayTeamPlayers);
 
-          const assignPostMatchStatsLive = (teamStarters: Player[], teamGoals: number, oppGoals: number, isWin: boolean, isDraw: boolean) => {
-            teamStarters.forEach(p => { 
-                let rating = 6.0 + (Math.random() * 1.2 - 0.4);
-                if (isWin) rating += 0.8;
-                if (isDraw) rating += 0.2;
-                if (!isWin && !isDraw) rating -= 0.6;
-                // Live match energy drains per minute, no bulk drain here
-
-                if (oppGoals === 0 && (p.position === 'DEF' || p.position === 'GK')) {
-                   updatedPlayers[p.id].cleanSheets++;
-                   rating += 1.0;
-                }
-                rating += (p.impactCoefficient - 1.0); 
-
-                rating = Math.max(1.0, Math.min(10.0, Math.round(rating * 10) / 10));
-
-                updatedPlayers[p.id] = {
-                   ...updatedPlayers[p.id],
-                   minutesPlayed: (updatedPlayers[p.id].minutesPlayed || 0) + 90,
-                   matchRatingHistory: [...(updatedPlayers[p.id].matchRatingHistory || []), rating]
-                };
-            });
-          };
-
-          assignPostMatchStatsLive(homeTeamPlayers, hScore, aScore, hScore > aScore, hScore === aScore);
-          assignPostMatchStatsLive(awayTeamPlayers, aScore, hScore, aScore > hScore, aScore === hScore);
+          applyLivePostMatchStats(
+            updatedPlayers,
+            homeTeamPlayers,
+            homeMinuteMap,
+            awayGoalMinutes,
+            aScore,
+            hScore > aScore,
+            hScore === aScore
+          );
+          applyLivePostMatchStats(
+            updatedPlayers,
+            awayTeamPlayers,
+            awayMinuteMap,
+            homeGoalMinutes,
+            hScore,
+            aScore > hScore,
+            aScore === hScore
+          );
 
           const updatedFixture = { ...fixture, isPlayed: true };
-
-          const updateTeamStats = (t: Team, goalsFor: number, goalsAgainst: number) => {
-            let pts = 0, w = 0, d = 0, l = 0;
-            if (goalsFor > goalsAgainst)      { pts = 3; w = 1; }
-            else if (goalsFor === goalsAgainst) { pts = 1; d = 1; }
-            else                               { l = 1; }
-            const formToken = w ? 'W' : d ? 'D' : 'L';
-            const newForm = [...(t.form || []), formToken].slice(-5);
-            return {
-              ...t,
-              points: t.points + pts,
-              goalsFor: t.goalsFor + goalsFor,
-              goalsAgainst: t.goalsAgainst + goalsAgainst,
-              wins:    t.wins + w,
-              draws:   t.draws + d,
-              losses:  t.losses + l,
-              played:  t.played + 1,
-              form:    newForm,
-            };
-          };
 
           const updatedTeams = {
             ...state.teams,
             [homeTeam.id]: { ...updateTeamStats(homeTeam, hScore, aScore), lastStartingXI: homeTeamPlayers.map(p => p.id) },
             [awayTeam.id]: { ...updateTeamStats(awayTeam, aScore, hScore), lastStartingXI: awayTeamPlayers.map(p => p.id) },
           };
+          const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);
 
           return {
             fixtures: { ...state.fixtures, [fixtureId]: updatedFixture },
             teams: updatedTeams,
             players: updatedPlayers,
+            liveMatches,
           };
         });
       },
@@ -258,12 +481,6 @@ export const useGameStore = create<GameStore>()(
           if (!fix.isPlayed) get().playMatch(fix.id);
         });
 
-        // Run AI transfers
-        get().processWeeklyTransfers();
-        
-        // Evaluate board objectives
-        get().checkBoardObjectives();
-
         set((state) => {
            return computeWeeklyProgression(
              state.currentWeek,
@@ -273,6 +490,10 @@ export const useGameStore = create<GameStore>()(
              state.news
            );
         });
+
+        // Match the analysis scripts: update week state before transfer decisions.
+        get().processWeeklyTransfers();
+        get().checkBoardObjectives();
       },
 
       setFormation: (teamId, formation) => {

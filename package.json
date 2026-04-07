@@ -9,7 +9,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "analyze": "npx tsx -r ./scripts/mock-env.js scripts/run_seasonal_analysis.ts"
+    "analyze": "tsx -r ./scripts/mock-env.js scripts/detailed_season_sim.ts",
+    "track:season": "tsx -r ./scripts/mock-env.js scripts/season_tracker.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -48,6 +49,7 @@
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "tsx": "^4.21.0",
     "typescript": "~5.9.2"
   },
   "private": true
