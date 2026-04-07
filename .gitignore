@@ -41,3 +41,7 @@ app-example
 # generated native folders
 /ios
 /android
+
+# local simulation outputs
+detailed_season_results.txt
+season_tracking_report.json
