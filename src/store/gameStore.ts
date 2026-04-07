@@ -13,6 +13,8 @@ import {
   getMoraleModifier,
   buildTeamShapeProfile,
 } from '../core/matchEngine';
+import { addPlayerStat } from '../core/matchUtils';
+import { qualifiesForWindowedCleanSheet } from '../core/postMatchAccounting';
 import { computeWeeklyTransfers, computeWeeklyProgression } from '../core/progressionEngine';
 
 type LiveMatchState = {
@@ -51,20 +53,7 @@ interface GameStore extends GameState {
   finishLiveMatch: (fixtureId: string) => void;
 }
 
-type PlayerCounterStat = 'goals' | 'assists' | 'cleanSheets' | 'yellowCards' | 'redCards';
-
 const LIVE_MATCH_MINUTES = 90;
-
-const addPlayerStat = (
-  players: Record<string, Player>,
-  playerId: string,
-  stat: PlayerCounterStat,
-  amount = 1
-) => {
-  const player = players[playerId];
-  if (!player) return;
-  players[playerId] = { ...player, [stat]: player[stat] + amount };
-};
 
 const getPossessionIndexForMinute = (minute: number) => {
   const current = Math.floor((minute * ENGINE_CONFIG.TOTAL_POSSESSIONS) / LIVE_MATCH_MINUTES);
@@ -147,12 +136,6 @@ const applyLivePostMatchStats = (
   isWin: boolean,
   isDraw: boolean
 ) => {
-  const concededInWindow = (startMinute: number, endMinute: number) => {
-    if (endMinute <= startMinute) return true;
-    if (concededGoalMinutes.length === 0) return oppGoals > 0;
-    return concededGoalMinutes.some(minute => minute > startMinute && minute <= endMinute);
-  };
-
   teamStarters.forEach(player => {
     const minutes = Math.max(0, Math.min(90, minuteMap[player.id] ?? 90));
     if (minutes <= 0) return;
@@ -164,7 +147,7 @@ const applyLivePostMatchStats = (
     let cleanSheetBonus = 0;
     if (
       (player.position === 'DEF' || player.position === 'GK') &&
-      !concededInWindow(0, minutes)
+      qualifiesForWindowedCleanSheet(concededGoalMinutes, 0, minutes, oppGoals)
     ) {
       cleanSheetBonus = 1;
       rating += 1.0;
@@ -210,7 +193,7 @@ const updateTeamStats = (team: Team, goalsFor: number, goalsAgainst: number) => 
 
 
 
-// Safe AsyncStorage wrapper — avoids "native module is null" during startup
+// Safe AsyncStorage wrapper: avoids "native module is null" during startup.
 const safeStorage = {
   getItem: async (key: string) => {
     try { return await AsyncStorage.getItem(key); } catch { return null; }
@@ -383,8 +366,8 @@ export const useGameStore = create<GameStore>()(
               }
             }
           }
-          if (minute === 45 && !eventMsg) eventMsg = `⏱️ HALF TIME.`;
-          if (minute === 90 && !eventMsg) eventMsg = `⏱️ FULL TIME.`;
+          if (minute === 45 && !eventMsg) eventMsg = `HALF TIME.`;
+          if (minute === 90 && !eventMsg) eventMsg = `FULL TIME.`;
 
           const liveMatchState: LiveMatchState = {
             initialized: true,
@@ -506,7 +489,7 @@ export const useGameStore = create<GameStore>()(
           const existingMap = team.formationMap || {};
           const hasExistingMap = Object.keys(existingMap).length > 0;
 
-          // If same base formation and map already exists — just rename, don't shuffle
+          // If same base formation and map already exists, just rename and do not shuffle.
           if (baseNew === baseOld && hasExistingMap) {
             return {
               teams: { ...state.teams, [teamId]: { ...team, activeFormation: formation } },
@@ -712,12 +695,12 @@ export const useGameStore = create<GameStore>()(
           }
 
           if (fee < player.askingPrice * 0.85) {
-             result = { success: false, message: `The club rejected your bid of £${fee}m.` };
+             result = { success: false, message: `The club rejected your bid of GBP ${fee}m.` };
              return state;
           }
 
           if (wageOffered > 0 && wageOffered < player.wage * 0.9) {
-             result = { success: false, message: `${player.name} rejected your wage offer of £${wageOffered}k/w.` };
+             result = { success: false, message: `${player.name} rejected your wage offer of GBP ${wageOffered}k/w.` };
              return state;
           }
 
@@ -726,7 +709,7 @@ export const useGameStore = create<GameStore>()(
           const updatedSellingTeam = sellingTeam ? { ...sellingTeam, budget: sellingTeam.budget + fee } : undefined;
           const updatedPlayer = { ...player, teamId: userTeam.id, wage: wageOffered > 0 ? wageOffered : player.wage, isStarting: false, isSub: false, isTransferListed: false, askingPrice: 0 };
 
-          result = { success: true, message: `Successfully purchased ${player.name} for £${fee}m.` };
+          result = { success: true, message: `Successfully purchased ${player.name} for GBP ${fee}m.` };
 
           return {
             teams: { ...state.teams, [userTeam.id]: updatedUserTeam, ...(updatedSellingTeam ? { [sellingTeam.id]: updatedSellingTeam } : {}) },

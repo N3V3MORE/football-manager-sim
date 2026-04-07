@@ -41,7 +41,7 @@ export interface Player {
   subPosition: string;      // primary FIFA position e.g. 'RB', 'RM', 'ST'
   altPositions: string[];   // all FIFA positions e.g. ['CAM', 'CM', 'LW']
   overallRating: number;
-  marketValue: number;      // value in millions £ e.g. 45.5
+  marketValue: number;      // value in millions GBP e.g. 45.5
   age: number;
   morale: number;           // 0 to 100
   energy: number;           // 0 to 100
@@ -49,7 +49,7 @@ export interface Player {
   isStarting: boolean;
   isSub: boolean;           // true = designated sub (bench)
   isTransferListed: boolean; // true = listed for sale
-  askingPrice: number;      // asking price in millions £ (0 if not listed)
+  askingPrice: number;      // asking price in millions GBP (0 if not listed)
   matchesSuspended: number; // dynamically used for suspensions
   wage: number;             // wage in thousands per week
   contractLeft: number;     // years remaining on contract
@@ -80,8 +80,8 @@ export interface Team {
   activeFormation: Formation;
   form: string[];            // ['W', 'D', 'L', 'W', 'W']
   tactics: TeamTactics;
-  budget: number;            // transfer budget in millions £
-  boardApproval: number;     // 0–100
+  budget: number;            // transfer budget in millions GBP
+  boardApproval: number;     // 0 to 100
   lastStartingXI?: string[]; // player IDs
   formationMap?: Record<string, string>; // Maps slot coordinate 'row-col' to playerId
 }

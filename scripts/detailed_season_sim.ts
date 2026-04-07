@@ -191,7 +191,7 @@ async function runDetailedSim() {
   outputLog.push('\n=== SEASON ANALYSIS ===');
   outputLog.push(`Matches: ${matchAudits.length}`);
   outputLog.push(`Total Goals: ${totalGoals}`);
-  outputLog.push(`Average Goals per Match: ${avgGoals.toFixed(2)} (Target: 2.7 - 2.8)`);
+  outputLog.push(`Average Goals per Match: ${avgGoals.toFixed(2)} (reference range: 2.5 - 2.8)`);
   outputLog.push(`Team Clean Sheets: ${teamCleanSheets}`);
   outputLog.push(`Matches With At Least One Clean Sheet: ${cleanSheetMatches}`);
   outputLog.push(`Yellow Cards: ${yellowCards}`);

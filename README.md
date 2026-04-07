@@ -1,61 +1,59 @@
-# Simple Football Sim 
+# Football Manager Sim
 
-Just a custom-built football sim made with **React Native** and **Zustand**. 
+Custom football manager sim built with React Native, Expo, and Zustand.
 
-I built this over the weekends because I wanted a straightforward manager game where I could just pick a team, drag players around a pitch, and see what happens over a 38-game season. No microtransactions or overly complicated mechanics.
+The current focus is a fast, inspectable match engine that can run full-season and multi-season simulations for tuning team/player realism.
 
----
+## Current Engine
 
-## The Basics
+- Slot-aware formations feed into possession phases, so shape affects build-up support, central shielding, width, final-third access, and box presence.
+- AI teams can adapt tactics and formations over the season, including back-3, back-4, and back-5 structures.
+- Quick sim and live sim share the same tactical-shape inputs to reduce behavior drift.
+- Card accounting tracks first yellows, second-yellow reds, straight reds, suspensions, and red-card event logs.
+- Clean sheets are awarded from player on-pitch windows against conceded goal minutes, with a 60-minute qualification to avoid short defensive cameos skewing player stats.
+- Season tracker audits score-log consistency, red-card logs, multi-yellow matches, formation usage, tactical changes, and player/team stat leaders.
 
-### 1. Hands-on Squad Selection
-You actually have to set up your team. Every player defaults to the reserves, and you just drag and drop them onto the pitch grid to build your starting 11. It won't let you put 11 strikers on the pitch, but you can try.
-- **7-Man Bench**: Pick your subs wisely. (Or don't. It's your club).
-- **Pitch Grid**: The UI uses a flexible grid system, so your 3-man midfield won't look weirdly stacked on top of your forwards anymore.
+## Gameplay
 
-### 2. Match Engine (v2 Updates)
-I recently threw out the old math and added a bit more chaos into the engine:
-- **Big Moments**: Good players (87+ overall) occasionally do cool stuff. You might get a 30-yard screamer from De Bruyne or a crazy triple-save from Alisson. 
-- **Pass the Ball**: Fixed a hilarious math error where one player would just hoard 70 assists a season. Now, the rest of the midfield actually remembers how to pass.
-- **20 Teams**: Fixed a data bug so Bournemouth and Fulham are actually in the game now. I also wrote a script to auto-generate some backup players just in case the real-world data was missing someone.
+- Pick a club and set a starting XI with the pitch grid.
+- Use 7-player benches and formation maps for manual lineup continuity.
+- Run live match minutes or quick-sim fixtures.
+- Track league table, player stats, awards, budgets, transfers, morale, energy, suspensions, and weekly news.
 
-### 3. UI and Stats
-- **Dark Mode**: Because looking at glaring white screens at 2 AM is awful.
-- **Awards Tab**: Check out who's winning the Golden Boot, Playmaker of the Season, and the Golden Glove. (I finally filtered the Golden Glove so a left-back can't accidentally win it).
+## Scripts
 
----
+```bash
+npm run start
+npm run lint
+npm run analyze
+npm run track:season
+npm run qa
+npm run turbo
+npm run test:regression
+```
 
-## 🛠️ How to run it
+- `analyze` runs a detailed single-season simulation report.
+- `track:season` runs season integrity and tactical tracking; set `SEASON_TRACKER_SEASONS=10` for larger batches.
+- `qa` runs the autonomous store-level QA stress script.
+- `turbo` runs fast multi-season simulation; set `TURBO_SEASONS=50` to override the default.
+- `test:regression` runs deterministic engine regression checks.
 
-### What you need
-- Node.js (v18+)
-- Expo Go on your phone or a simulator
+## Setup
 
-### Setup
-1. Download the code:
-   ```bash
-   git clone https://github.com/N3V3MORE/side-quest.git
-   ```
-2. Install the stuff:
-   ```bash
-   cd side-quest
-   npm install
-   ```
-3. Run it:
-   ```bash
-   npx expo start
-   ```
+Requirements:
 
----
+- Node.js 18+
+- Expo Go, Android emulator, iOS simulator, or web target
 
-## 📈 Updates
+```bash
+git clone https://github.com/N3V3MORE/football-manager-sim.git
+cd football-manager-sim
+npm install
+npm run start
+```
 
-I keep a log of changes in the **[CHANGELOG.md](./CHANGELOG.md)** if you want to read what broke and what got fixed.
+## Version
 
-**Current Version**: `v2.0.0`
+Current version: `v3.0.2`
 
----
-
-## 🤝 Contributing
-
-This is just a weekend project. Feel free to mess around with the code, add stuff, or open a pull request!
+See [CHANGELOG.md](./CHANGELOG.md) for release notes.

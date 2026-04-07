@@ -1,67 +1,72 @@
-# Changelog - v3.0.1 (Simulation Integrity & Tactical Evolution)
+# Changelog
 
-## What's New
-- **Slot-Aware Tactical Identity**: Wired formation-slot structure into possession phases so shape differences now influence build-up lanes, central shielding, and final-third access.
-- **State-Aware Substitutions**: Reworked quick-sim substitution logic to react to match state (chasing, protecting a lead, neutral) instead of purely random changes.
-- **Season Tracking Automation**: Added `track:season` tooling and structured season audits for match-level integrity checks, tactical volatility, and formation usage trends.
-- **Formation Adaptation for AI Teams**: Added fit-based formation switching in progression logic so AI teams can move between back-3/back-4/back-5 structures over a season.
+## v3.0.2 - Stabilize the sim and tidy the code
 
-## Bug Fixes
-- **Second-Yellow Accounting**: Fixed yellow-card undercount on second-booking red-card paths in both quick sim and live sim.
-- **Live Match Minute Integrity**: Tracked sent-off minutes and applied minute-aware post-match stats so dismissed players no longer receive automatic full-match minutes.
-- **Clean Sheet Attribution Logic**: Replaced team-final-score clean-sheet assignment with player-window clean-sheet logic (based on on-pitch windows vs concession minutes).
-- **Quick vs Live Tactical Parity**: Aligned live possession simulation with quick-sim tactical shape inputs to remove behavior drift between modes.
+What changed:
+- Added regression checks for clean-sheet windows, live red-card minutes, second-yellow accounting, quick/live shape parity, and formation diversity.
+- Added a 60-minute clean-sheet qualification so short substitute appearances do not inflate defender/keeper leaderboards.
+- Added package scripts for `qa`, `turbo`, and `test:regression`.
+- Updated the README with the current repo name, setup steps, version, and engine notes.
+- Split large match-engine code into smaller files for lineup selection, shape profiling, substitutions, match utilities, and post-match accounting.
+- Split weekly progression code so transfers and tactical adaptation live in their own modules.
+- Cleaned broken/garbled console output in the QA and turbo scripts.
+- Made turbo sim season count configurable with `TURBO_SEASONS`.
+- Updated detailed sim report wording so the goal-volume reference range matches current calibration.
 
-## Technical Notes
-- Added `tsx` dev dependency and updated analysis scripts to use `detailed_season_sim.ts`.
-- Added `.gitignore` rules for generated simulation output files.
-- Recalibrated engine constants after tactical model expansion to preserve realistic goal volume.
+## v3.0.1 - Fix match accounting and tactical behaviour
 
----
+What changed:
+- Formation slots now feed into possession simulation, so shape affects width, central cover, build-up support, final-third pressure, and box presence.
+- Quick-sim substitutions now react to match state instead of swapping players at random.
+- Added season tracking output for score/log integrity, red-card logs, tactical changes, and formation usage.
+- AI teams can now adapt formations over a season instead of staying locked to back-four setups.
 
-# Changelog - v3.0.0 (The Engine Overhaul)
+Fixes:
+- Fixed second-yellow reds so the second booking is counted as a yellow before the red.
+- Fixed live-match red-card minutes so sent-off players no longer get automatic 90-minute appearances.
+- Fixed clean-sheet attribution so it checks whether a player was on the pitch when goals were conceded.
+- Kept quick sim and live sim on the same tactical-shape inputs.
 
-## What's New
-- **Turbo Match Engine**: Decoupled the match logic from the state store, enabling pure functional simulations. The engine now clocks in at **~14,800 matches per second**, making 500-season statistical tests possible in under 13 seconds.
-- **Statistical Parity**: Calibrated the core scoring mechanics against historical Premier League data. Optimized the "Chaos Factor" and "Big Moment" triggers to achieve a natural **2.70 goals-per-match** average across the league.
-- **Advanced Positional Logic**: Refined the three-phase duel system (Build-up, Creation, Finishing). Midfield battles now correctly account for positional density, preventing "stat-lock" where lower-rated teams were previously unable to score.
-- **Simulation Tooling**: Integrated `turbo_sim.ts` for massive Monte Carlo testing and `detailed_season_sim.ts` for granular, match-by-match logical debugging.
-- **Disciplinary Realism**: Tuned the foul and card frequency to match professional standards (~4.0 yellow cards per match).
+Notes:
+- Added `tsx` for the simulation scripts.
+- Ignored generated simulation reports.
+- Rebalanced engine constants after the shape/tactics changes so goal volume stayed reasonable.
 
----
+## v3.0.0 - Move the match engine out of the store
 
-# Changelog - v2.0.0
+What changed:
+- Moved match simulation into a pure engine path so it can run without the Zustand store.
+- Added fast long-run simulation tooling with `turbo_sim.ts`.
+- Added detailed season analysis tooling with `detailed_season_sim.ts`.
+- Tuned scoring toward a realistic league-wide goals-per-match range.
+- Reworked midfield/build-up/chance creation logic so lower-rated teams are not locked out of matches by rating gaps alone.
+- Tuned foul and card volume closer to professional match levels.
 
-## What's New
-- **Better Match Engine**: Tweaked the match simulator so elite players (87+ rating) can actually pull off rare, match-winning plays like screamers or triple-saves. Finally, the big names feel like big names.
-- **Data Fixed**: Fixed a bug where teams like Bournemouth and Fulham were just completely missing from the CSV. The Premier League is back to 20 teams now, as it should be.
-- **Squad Fallback**: Threw in a quick script to auto-generate missing players. Even if the data is a bit thin, every team will at least have 15 players so the game doesn't break.
-- **Awards Dashboard**: Updated the stats screen names to "Golden Boot", "Playmaker of the Season", and "Golden Glove". Oh, and I added a filter so only actual goalkeepers can win the Golden Glove (sorry, left-backs).
-- **Pitch UI Fixed**: Rewrote the pitch grid math. The positions are perfectly aligned now, using 3-letter acronyms, and you can see player ratings right on the pitch.
+## v2.0.0 - Improve the basic game loop
 
-## Bug Fixes
-- **Assist Hoarding Bug**: Fixed a funny issue where top playmakers were racking up like 70 assists a season. Adjusted the math so normal players actually pass the ball too.
-- **League Table UI**: Fixed a bug where a massive goal difference (like +102) would wrap weirdly on small screens.
-- **ID Cleanup**: Cleaned up the player database by moving from bulky UUIDs to simple numbers. 
+What changed:
+- Reworked the match engine so top players can have a bigger impact without one player dominating every stat.
+- Fixed missing-team data issues so the league has the expected 20 teams.
+- Added fallback squad generation when source data is thin.
+- Updated awards naming and filtered Golden Glove candidates to goalkeepers.
+- Reworked pitch-grid layout and player labels.
 
----
+Fixes:
+- Reduced assist hoarding from individual creators.
+- Fixed league-table wrapping when goal difference was very large.
+- Simplified player IDs.
 
-# Changelog - v1.0.0
+## v1.0.0 - First playable version
 
-## What's New
-- **Manual Squads**: You actually have to pick your team now. Everyone starts on the bench, and you drag them onto the pitch to set your starting 11.
-- **Substitutes**: You can designate up to 7 subs per match now, complete with little badges.
-- **Match Tuning**: Tweaked the scoring logic so elite teams score around 80-110 goals a season instead of random numbers.
-- **AI Auto-fill**: Set up a basic routine so AI teams pick their best 11. Simming against ghost squads gets boring quickly.
-- **Clean Position Labels**: Swapped out the clunky 3-letter positions for standard 2-letter ones (DM, AM, etc.) to keep things tidy.
-- **Strategy Buttons**: Added simple color-coded buttons (Defend, Balanced, Attack) just to easily switch up how your team plays.
+What changed:
+- Added manual squad selection.
+- Added a 7-player bench.
+- Added basic match tuning for more reasonable season totals.
+- Added AI lineup auto-fill so simulated teams can field an XI.
+- Cleaned position labels.
+- Added simple tactical controls.
 
-## Bug Fixes
-- **AI Blowouts**: Stopped the simulator from playing games where the AI had no players.
-- **Goalie Discipline**: Told the referees to chill out; goalkeepers were getting way too many yellow cards.
-- **Position Alignment**: Finally fixed the visual glitch where LW and RW were mapped backwards on the pitch.
-
-## Technical Stuff
-- Moved the state management to work a bit better under the hood.
-- Added a param so I can spin up fresh saves based on who is playing.
-- Redesigned the squad page for a nice dark theme. Looks much better at 2 AM.
+Fixes:
+- Stopped matches from running against empty AI lineups.
+- Reduced goalkeeper card frequency.
+- Fixed left/right wide-position mapping on the pitch.
