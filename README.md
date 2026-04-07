@@ -1,4 +1,4 @@
-# Simple Football Sim ⚽
+# Simple Football Sim 
 
 Just a custom-built football sim made with **React Native** and **Zustand**. 
 
@@ -6,7 +6,7 @@ I built this over the weekends because I wanted a straightforward manager game w
 
 ---
 
-## 🚀 The Basics
+## The Basics
 
 ### 1. Hands-on Squad Selection
 You actually have to set up your team. Every player defaults to the reserves, and you just drag and drop them onto the pitch grid to build your starting 11. It won't let you put 11 strikers on the pitch, but you can try.
