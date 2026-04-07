@@ -104,9 +104,10 @@ export default function SquadScreen() {
   const slotRefs = useRef<Record<string, any>>({});
   const slotBounds = useRef<Record<string, {x: number, y: number, w: number, h: number}>>({});
 
-  if (!userTeamId) return null;
-  const myTeam  = teams[userTeamId];
-  const mySquad = Object.values(players).filter(p => p.teamId === userTeamId);
+  const myTeam  = userTeamId ? teams[userTeamId] : undefined;
+  const mySquad = userTeamId
+    ? Object.values(players).filter(p => p.teamId === userTeamId)
+    : [];
 
   const sortOrder: Record<string, number> = { GK: 1, DEF: 2, MID: 3, FWD: 4 };
   mySquad.sort((a, b) =>
@@ -123,7 +124,7 @@ export default function SquadScreen() {
   const bench     = mySquad.filter(p => p.isSub);
   const reserves  = mySquad.filter(p => !p.isStarting && !p.isSub);
 
-  const formationMap = myTeam?.formationMap || {};
+  const formationMap = useMemo(() => myTeam?.formationMap || {}, [myTeam?.formationMap]);
   const hasMap = Object.keys(formationMap).length > 0;
   
   const slotPlayers = useMemo(() => {
@@ -153,6 +154,8 @@ export default function SquadScreen() {
     }
     return arr;
   }, [slots, starters, hasMap, formationMap]);
+
+  if (!userTeamId) return null;
 
   const measureSlots = () => {
      Object.keys(slotRefs.current).forEach(key => {

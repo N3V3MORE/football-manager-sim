@@ -53,7 +53,7 @@ export default function TacticsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Tactics Board</Text>
-        <Text style={styles.subtitle}>Set your team's match instructions</Text>
+        <Text style={styles.subtitle}>Set your team&apos;s match instructions</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
