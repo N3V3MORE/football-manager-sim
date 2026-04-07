@@ -1,4 +1,4 @@
-import { Player } from '../models/types';
+import { Player, Team } from '../models/types';
 import { Slot } from '../constants/formations';
 
 const SLOT_SUBPOS: Record<string, string[]> = {
@@ -109,4 +109,17 @@ export const rebuildFormationMap = (
   });
 
   return rebuiltMap;
+};
+
+export const removePlayerFromTeamSelections = (team: Team, playerId: string): Team => {
+  const nextFormationMap = team.formationMap
+    ? Object.fromEntries(Object.entries(team.formationMap).filter(([, mappedId]) => mappedId !== playerId))
+    : team.formationMap;
+  const nextLastStartingXI = team.lastStartingXI?.filter(mappedId => mappedId !== playerId);
+
+  return {
+    ...team,
+    ...(team.formationMap ? { formationMap: nextFormationMap } : {}),
+    ...(team.lastStartingXI ? { lastStartingXI: nextLastStartingXI } : {}),
+  };
 };

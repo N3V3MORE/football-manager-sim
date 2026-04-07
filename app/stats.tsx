@@ -1,8 +1,10 @@
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import { router } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
 import { useState } from 'react';
 import { Player } from '@/src/models/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PageHeader } from '@/components/ui/page-header';
 
 type PlayerStatKey = 'goals' | 'assists' | 'cleanSheets' | 'yellowCards' | 'redCards';
 
@@ -88,11 +90,9 @@ export default function StatsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView>
-        <View style={styles.header}>
-            <Text style={styles.title}>League Stats</Text>
-        </View>
+      <PageHeader title="League Stats" backLabel="< Hub" onBack={() => router.replace('/')} />
 
+      <ScrollView contentContainerStyle={styles.scroll}>
         {renderPane('Golden Boot', 'goals', topScorers, 'goals')}
         {renderPane('Playmaker of the Season', 'assists', topAssisters, 'assists')}
         {renderPane('Golden Glove', 'cleanSheets', topCleanSheets, 'cleanSheets')}
@@ -109,26 +109,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0f172a',
-    padding: 16,
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 0,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#f8fafc',
-    marginBottom: 10,
-    marginTop: 8,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#e2e8f0',
-    marginBottom: 12,
-  },
+  scroll: { paddingHorizontal: 16, paddingBottom: 16 },
   card: {
     backgroundColor: '#1e293b',
     marginTop: 10,

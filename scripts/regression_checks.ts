@@ -3,6 +3,7 @@ import * as path from 'path';
 import { initGameData } from '../src/utils/initGame';
 import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
+import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 import { getSlotsForFormation } from '../src/constants/formations';
 import { rebuildFormationMap, rebuildFormationSlotPlayers } from '../src/core/formationMapUtils';
 import {
@@ -10,6 +11,7 @@ import {
   applyWindowedCleanSheets,
   qualifiesForWindowedCleanSheet,
 } from '../src/core/postMatchAccounting';
+import { advanceSeason } from '../src/core/seasonTransition';
 import { Player } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
 
@@ -172,6 +174,74 @@ const checkUserTeamProgressionDoesNotAdaptFormation = () => {
   }
 };
 
+const checkManagerProfilesLoaded = () => {
+  const data = initGameData();
+  const teams = Object.values(data.teams);
+  assert(teams.every(team => team.manager && team.manager.teamId === team.id), 'Every team should have a linked manager profile');
+  assert(teams.every(team => team.manager.preferredFormations.length > 0), 'Every manager should have at least one preferred formation');
+};
+
+const checkDivisionBootstrap = () => {
+  const data = initGameData();
+  const counts = Object.values(data.teams).reduce<Record<string, number>>((acc, team) => {
+    acc[team.division] = (acc[team.division] || 0) + 1;
+    return acc;
+  }, {});
+
+  assert(counts['Premier League'] === 20, `Expected 20 Premier League teams, got ${counts['Premier League'] || 0}`);
+  assert(counts['Championship'] === 24, `Expected 24 Championship teams, got ${counts['Championship'] || 0}`);
+  assert(counts['League One'] === 24, `Expected 24 League One teams, got ${counts['League One'] || 0}`);
+  assert(counts['League Two'] === 24, `Expected 24 League Two teams, got ${counts['League Two'] || 0}`);
+};
+
+const checkPromotionRelegation = () => {
+  const data = initGameData();
+  const teams = { ...data.teams };
+
+  (['Premier League', 'Championship', 'League One', 'League Two'] as const).forEach(division => {
+    const ordered = Object.values(teams)
+      .filter(team => team.division === division)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    ordered.forEach((team, index) => {
+      teams[team.id] = {
+        ...team,
+        points: 1000 - index,
+        goalsFor: 1000 - index,
+        goalsAgainst: index,
+        wins: 30 - index,
+        draws: 0,
+        losses: index,
+        played: 38,
+      };
+    });
+  });
+
+  const nextSeason = advanceSeason(data.players, teams, null, []);
+  const nextCounts = Object.values(nextSeason.teams).reduce<Record<string, number>>((acc, team) => {
+    acc[team.division] = (acc[team.division] || 0) + 1;
+    return acc;
+  }, {});
+
+  assert(nextSeason.currentWeek === 1, 'Season rollover should reset the week to 1');
+  assert(nextCounts['Premier League'] === 20, 'Premier League should keep 20 teams after promotion/relegation');
+  assert(nextCounts['Championship'] === 24, 'Championship should keep 24 teams after promotion/relegation');
+  assert(nextCounts['League One'] === 24, 'League One should keep 24 teams after promotion/relegation');
+  assert(nextCounts['League Two'] === 24, 'League Two should keep 24 teams after promotion/relegation');
+
+  const championshipTop = Object.values(teams)
+    .filter(team => team.division === 'Championship')
+    .sort((a, b) => b.points - a.points || b.goalsFor - a.goalsFor || a.name.localeCompare(b.name))
+    .slice(0, 3);
+  const premierBottom = Object.values(teams)
+    .filter(team => team.division === 'Premier League')
+    .sort((a, b) => a.points - b.points || a.goalsFor - b.goalsFor || a.name.localeCompare(b.name))
+    .slice(0, 3);
+
+  assert(championshipTop.every(team => nextSeason.teams[team.id].division === 'Premier League'), 'Top Championship teams should be promoted');
+  assert(premierBottom.every(team => nextSeason.teams[team.id].division === 'Championship'), 'Bottom Premier League teams should be relegated');
+};
+
 const checkStaleFormationMapRecoveryModel = () => {
   const data = initGameData();
   const team = Object.values(data.teams)[0];
@@ -239,9 +309,9 @@ const checkFormationMapRejectsWrongPositions = () => {
 };
 
 const checkSeededFormationDiversity = () => {
-  const originalRandom = Math.random;
-  Math.random = createSeededRandom(20260513);
-  const formationUsage = { back3: 0, back4: 0, back5: 0 };
+    const originalRandom = Math.random;
+    Math.random = createSeededRandom(20260513);
+    const formationUsage = { back3: 0, back4: 0, back5: 0 };
 
   try {
     for (let season = 1; season <= 5; season++) {
@@ -253,8 +323,9 @@ const checkSeededFormationDiversity = () => {
         currentWeek: 1,
         news: [] as string[],
       };
+      const seasonWeeks = getSeasonWeekLimit(state.fixtures);
 
-      for (let week = 1; week <= 38; week++) {
+      for (let week = 1; week <= seasonWeeks; week++) {
         const weekFixtures = Object.values(state.fixtures).filter(fixture => fixture.week === week);
         weekFixtures.forEach(fixture => {
           const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures);
@@ -299,6 +370,12 @@ const runRegressionChecks = () => {
   console.log('[OK] Second-yellow and shape parity guards passed');
   checkUserTeamProgressionDoesNotAdaptFormation();
   console.log('[OK] User team tactical adaptation guard passed');
+  checkManagerProfilesLoaded();
+  console.log('[OK] Manager profile loading passed');
+  checkDivisionBootstrap();
+  console.log('[OK] Division bootstrap check passed');
+  checkPromotionRelegation();
+  console.log('[OK] Promotion and relegation checks passed');
   checkStaleFormationMapRecoveryModel();
   console.log('[OK] Stale formation-map recovery model passed');
   checkFormationMapRejectsWrongPositions();

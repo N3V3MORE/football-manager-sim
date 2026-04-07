@@ -1,6 +1,7 @@
 import { initGameData } from '../src/utils/initGame';
 import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
+import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 import { ENGINE_CONFIG } from '../src/config/engineConfig';
 import { Player, Team } from '../src/models/types';
 import * as fs from 'fs';
@@ -425,8 +426,9 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
   );
   const tacticalChangeLog: TacticalChange[] = [];
   const formationUsage = { back3: 0, back4: 0, back5: 0, other: 0 };
+  const seasonWeeks = getSeasonWeekLimit(state.fixtures);
 
-  for (let week = 1; week <= 38; week++) {
+  for (let week = 1; week <= seasonWeeks; week++) {
     const weekMatches: MatchReport[] = [];
     const weekStartSetups = snapshotTeamSetups(state.teams);
     Object.values(weekStartSetups).forEach(setup => {

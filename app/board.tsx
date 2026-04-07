@@ -1,7 +1,9 @@
 import React from 'react';
 import { StyleSheet, Text, View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
+import { PageHeader } from '@/components/ui/page-header';
 
 export default function BoardScreen() {
   const userTeamId = useGameStore(s => s.userTeamId);
@@ -21,9 +23,7 @@ export default function BoardScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Board Room</Text>
-      </View>
+      <PageHeader title="Board Room" backLabel="< Hub" onBack={() => router.replace('/')} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.gaugeCard}>
@@ -57,8 +57,6 @@ export default function BoardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  header: { padding: 16, backgroundColor: '#1e293b', borderBottomWidth: 1, borderColor: '#334155' },
-  title: { fontSize: 24, fontWeight: '900', color: '#f8fafc' },
   scroll: { padding: 16, gap: 16 },
   gaugeCard: { backgroundColor: '#1e293b', padding: 20, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#334155' },
   gaugeLabel: { color: '#94a3b8', fontSize: 12, textTransform: 'uppercase', fontWeight: '900', letterSpacing: 1 },

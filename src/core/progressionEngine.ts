@@ -1,6 +1,7 @@
 import { Player, Team, Fixture } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { applyTacticalAdaptation } from './tacticalAdaptationEngine';
+import { getSeasonWeekLimit } from './leagueUtils';
 
 export { computeWeeklyTransfers } from './transferEngine';
 
@@ -13,6 +14,7 @@ export const computeWeeklyProgression = (
   userTeamId: string | null = null
 ): { players: Record<string, Player>, teams: Record<string, Team>, currentWeek: number, news: string[] } => {
   const playedFixtures = Object.values(fixtures).filter(f => f.week === currentWeek);
+  const seasonWeekLimit = getSeasonWeekLimit(fixtures);
   const newNews: string[] = [];
 
   const bigWins = playedFixtures.filter(f => Math.abs((f.homeScore ?? 0) - (f.awayScore ?? 0)) >= 3);
@@ -70,7 +72,7 @@ export const computeWeeklyProgression = (
     newNews.push(`Week ${currentWeek} concludes with intense scenes across the league.`);
   }
 
-  if (currentWeek === 38) {
+  if (currentWeek === seasonWeekLimit) {
     Object.values(updatedPlayers).forEach(player => {
       let overallRating = player.overallRating;
       if (player.age <= 24) {

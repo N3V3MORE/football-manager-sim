@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '@/src/store/gameStore';
 import { useRouter } from 'expo-router';
 import { getTeamTheme } from '@/src/constants/teamColors';
+import { getSeasonWeekLimit, sortTeamsByTable } from '@/src/core/leagueUtils';
 
 // Week 1 = Aug 10 2024. Each week adds 7 days.
 const SEASON_START = new Date(2024, 7, 10);
@@ -56,6 +57,7 @@ export default function HubScreen() {
   const players = useGameStore(state => state.players);
 
   const myTeam = userTeamId ? teams[userTeamId] : null;
+  const myDivision = myTeam?.division ?? 'Premier League';
 
   // Find next match
   const weekFixtures = Object.values(fixtures).filter(f => f.week === currentWeek);
@@ -80,12 +82,7 @@ export default function HubScreen() {
   const myTheme = getTeamTheme(myTeam.name);
 
   // Mini-Table logic
-  const sortedTeams = Object.values(teams).sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points;
-    const diffA = a.goalsFor - a.goalsAgainst;
-    const diffB = b.goalsFor - b.goalsAgainst;
-    return diffB - diffA;
-  });
+  const sortedTeams = sortTeamsByTable(Object.values(teams).filter(team => team.division === myDivision));
 
   const myIndex = sortedTeams.findIndex(t => t.id === userTeamId);
   let startIdx = Math.max(0, myIndex - 3);
@@ -100,7 +97,8 @@ export default function HubScreen() {
 
   // Upcoming fixtures for calendar pane (next 5 weeks)
   const upcomingFixtures = [];
-  for (let w = currentWeek; w <= Math.min(currentWeek + 4, 38); w++) {
+  const seasonWeekLimit = getSeasonWeekLimit(fixtures);
+  for (let w = currentWeek; w <= Math.min(currentWeek + 4, seasonWeekLimit); w++) {
     const match = Object.values(fixtures).find(
       f => f.week === w && (f.homeTeamId === userTeamId || f.awayTeamId === userTeamId)
     );
@@ -260,6 +258,9 @@ export default function HubScreen() {
               <Text style={{ color: myTeam.boardApproval >= 65 ? '#10B981' : (myTeam.boardApproval < 30 ? '#ef4444' : '#f59e0b'), fontSize: 24, fontWeight: '900', marginTop: 4 }}>
                 {Math.round(myTeam.boardApproval)}%
               </Text>
+              <Text style={{ color: '#cbd5e1', fontSize: 12, fontWeight: '800', marginTop: 6 }}>
+                {myTeam.manager.name}
+              </Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={styles.smallTapText}>Tap to view objectives</Text>
@@ -269,7 +270,7 @@ export default function HubScreen() {
 
         {/* Mini table */}
         <TouchableOpacity style={styles.card} onPress={() => router.push('/league')}>
-          <Text style={styles.cardTitle}>League Table</Text>
+          <Text style={styles.cardTitle}>{myDivision}</Text>
           {miniTable.map((team) => {
             const t = getTeamTheme(team.name);
             const isMe = team.id === userTeamId;
