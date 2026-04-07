@@ -1,9 +1,26 @@
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, type DimensionValue } from 'react-native';
 import { useGameStore } from '@/src/store/gameStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { useState } from 'react';
-import { Team } from '@/src/models/types';
+import { Player, Team } from '@/src/models/types';
+import { getSlotsForFormation } from '@/src/constants/formations';
+import { rebuildFormationSlotPlayers } from '@/src/core/formationMapUtils';
+import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
+
+const MINI_SLOT_WIDTH = 56;
+const MINI_DOT_SIZE = 32;
+
+const getMiniSlotPosition = (rowIdx: number, colIdx: number, rowLength: number, totalRows: number) => {
+  const rowPercent = totalRows > 1
+    ? 10 + (rowIdx / (totalRows - 1)) * 80
+    : 50;
+
+  return {
+    left: `${((colIdx + 1) / (rowLength + 1)) * 100}%` as DimensionValue,
+    top: `${rowPercent}%` as DimensionValue,
+  };
+};
 
 export default function LeagueTableScreen() {
   const teams = useGameStore(state => state.teams);
@@ -20,7 +37,41 @@ export default function LeagueTableScreen() {
 
   const getLastLineup = (team: Team) => {
     if (!team.lastStartingXI || team.lastStartingXI.length === 0) return null;
-    return team.lastStartingXI.map(id => players[id]).filter(Boolean);
+    return team.lastStartingXI.map(id => players[id]).filter(Boolean) as Player[];
+  };
+
+  const renderMiniPitch = (team: Team, lineup: Player[]) => {
+    const slots = getSlotsForFormation(team.activeFormation);
+    const slotPlayers = rebuildFormationSlotPlayers(slots, lineup, team.formationMap || {});
+
+    return (
+      <View style={styles.miniPitch}>
+        <View style={styles.miniPitchOutline} />
+        <View style={styles.miniPitchSlots}>
+          {slots.map((row, rowIdx) => row.map((slot, colIdx) => {
+            const assigned = slotPlayers[rowIdx]?.[colIdx];
+            const position = getMiniSlotPosition(rowIdx, colIdx, row.length, slots.length);
+
+            return (
+              <View key={`${rowIdx}-${colIdx}`} style={[styles.miniSlotAnchor, position]}>
+                <View style={[
+                  styles.miniDot,
+                  { backgroundColor: assigned ? getPosColor(assigned.position) : '#1e3a2f' },
+                ]}>
+                  <Text style={styles.miniDotLabel}>
+                    {assigned ? (assigned.subPosition || assigned.position).substring(0, 3) : slot.label}
+                  </Text>
+                </View>
+                <Text style={styles.miniDotName} numberOfLines={1}>
+                  {assigned ? assigned.name.split(' ').pop() : ''}
+                </Text>
+                {assigned && <Text style={styles.miniRating}>{assigned.overallRating}</Text>}
+              </View>
+            );
+          }))}
+        </View>
+      </View>
+    );
   };
 
   const getPosColor = (pos: string) => {
@@ -98,7 +149,9 @@ export default function LeagueTableScreen() {
             {selectedTeam && (() => {
               const theme = getTeamTheme(selectedTeam.name);
               const lineup = getLastLineup(selectedTeam);
-              const subPlayers = Object.values(players).filter(p => p.teamId === selectedTeam.id && !p.isStarting && p.isSub);
+              const subPlayers = sortPlayersByPositionGroup(
+                Object.values(players).filter(p => p.teamId === selectedTeam.id && !p.isStarting && p.isSub)
+              );
               return (
                 <>
                   <View style={styles.modalHeader}>
@@ -117,15 +170,7 @@ export default function LeagueTableScreen() {
                     {lineup ? (
                       <>
                         <Text style={styles.modalSectionTitle}>Last Starting XI</Text>
-                        {lineup.map(p => (
-                          <View key={p.id} style={styles.modalPlayerRow}>
-                            <View style={[styles.modalPosPill, { backgroundColor: getPosColor(p.position) }]}>
-                              <Text style={styles.modalPosText}>{p.subPosition || p.position}</Text>
-                            </View>
-                            <Text style={styles.modalPlayerName}>{p.name}</Text>
-                            <Text style={styles.modalPlayerRating}>{p.overallRating}</Text>
-                          </View>
-                        ))}
+                        {renderMiniPitch(selectedTeam, lineup)}
                         {subPlayers.length > 0 && (
                           <>
                             <Text style={styles.modalSectionTitle}>Substitutes</Text>
@@ -272,6 +317,73 @@ const styles = StyleSheet.create({
     color: '#38bdf8',
     width: 32,
     textAlign: 'right',
+  },
+  miniPitch: {
+    height: 300,
+    marginHorizontal: 14,
+    marginTop: 4,
+    marginBottom: 8,
+    backgroundColor: '#14532d',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#166534',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  miniPitchOutline: {
+    position: 'absolute',
+    top: 10,
+    bottom: 10,
+    left: 10,
+    right: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.55)',
+    borderRadius: 2,
+  },
+  miniPitchSlots: {
+    position: 'absolute',
+    top: 10,
+    bottom: 10,
+    left: 10,
+    right: 10,
+    zIndex: 10,
+  },
+  miniSlotAnchor: {
+    position: 'absolute',
+    width: MINI_SLOT_WIDTH,
+    marginLeft: -(MINI_SLOT_WIDTH / 2),
+    marginTop: -(MINI_DOT_SIZE / 2),
+    alignItems: 'center',
+  },
+  miniDot: {
+    width: MINI_DOT_SIZE,
+    height: MINI_DOT_SIZE,
+    borderRadius: MINI_DOT_SIZE / 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  miniDotLabel: { color: '#fff', fontSize: 8, fontWeight: '900' },
+  miniDotName: {
+    color: '#fff',
+    fontSize: 8,
+    marginTop: 3,
+    textAlign: 'center',
+    fontWeight: '700',
+    width: MINI_SLOT_WIDTH + 14,
+    alignSelf: 'center',
+  },
+  miniRating: {
+    backgroundColor: '#cbd5e1',
+    color: '#0f172a',
+    alignSelf: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    marginTop: 2,
+    fontSize: 8,
+    fontWeight: '900',
   },
   noLineupBox: { padding: 40, alignItems: 'center' },
   noLineupText: { color: '#64748b', fontStyle: 'italic', textAlign: 'center' },

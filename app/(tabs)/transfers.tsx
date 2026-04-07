@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '@/src/store/gameStore';
 import { getTransferWindowLabel, isTransferWindowOpen } from '@/src/utils/calendar';
 import { Player } from '@/src/models/types';
+import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
 
 type TransferDialog =
   | { type: 'buy'; player: Player; fee: string; wage: string }
@@ -28,8 +29,8 @@ export default function TransfersScreen() {
   if (!userTeamId) return <View style={styles.container} />;
   const userTeam = teams[userTeamId];
 
-  const marketPlayers = Object.values(players).filter(p => p.isTransferListed && p.teamId !== userTeamId);
-  const mySquad = Object.values(players).filter(p => p.teamId === userTeamId);
+  const marketPlayers = sortPlayersByPositionGroup(Object.values(players).filter(p => p.isTransferListed && p.teamId !== userTeamId));
+  const mySquad = sortPlayersByPositionGroup(Object.values(players).filter(p => p.teamId === userTeamId));
 
   const handleBuy = (player: Player) => {
     if (!windowOpen) {
@@ -134,7 +135,7 @@ export default function TransfersScreen() {
         )}
 
         {tab === 'squad' && (
-          [...mySquad].sort((a,b) => b.overallRating - a.overallRating).map(p => (
+          mySquad.map(p => (
             <View key={p.id} style={styles.card}>
               <View style={styles.cardLeft}>
                  <Text style={styles.pos}>{p.subPosition || p.position}</Text>

@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.2.0 - Fix lineup views and player ordering
+
+What changed:
+- Added shared formation-map cleanup so stale maps cannot put players in impossible slots like a striker at GK or a keeper at LW.
+- Reworked the last-starting-XI modal into a compact pitch view, with substitutes listed underneath.
+- Standardized player list ordering to GK, DEF, MID, FWD across squad, match, league lineup, and transfer screens.
+- Mirrored the away side of the next-fixture card so its team colours and AWAY tag sit on the away side.
+- Added regression coverage for wrong-position formation maps.
+
 ## v3.1.0 - Clean up the squad screen
 
 What changed:

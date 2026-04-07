@@ -4,6 +4,7 @@ import { initGameData } from '../src/utils/initGame';
 import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
 import { getSlotsForFormation } from '../src/constants/formations';
+import { rebuildFormationMap, rebuildFormationSlotPlayers } from '../src/core/formationMapUtils';
 import {
   didConcedeInWindow,
   applyWindowedCleanSheets,
@@ -205,6 +206,38 @@ const checkStaleFormationMapRecoveryModel = () => {
   assert(renderedIds.size === Math.min(starters.length, slots.flat().length), 'Stale formation maps should not hide starters');
 };
 
+const checkFormationMapRejectsWrongPositions = () => {
+  const data = initGameData('Arsenal');
+  const team = Object.values(data.teams).find(item => item.name === 'Arsenal');
+  assert(team, 'Regression setup needs Arsenal');
+
+  const squad = Object.values(data.players).filter(player => player.teamId === team!.id);
+  const keeper = squad.find(player => player.position === 'GK');
+  const striker = squad.find(player => player.subPosition === 'ST' || player.position === 'FWD');
+  const midfielder = squad.find(player => player.position === 'MID');
+
+  assert(keeper && striker && midfielder, 'Regression setup needs keeper, striker, and midfielder');
+
+  const starters = squad.map(player => ({
+    ...player,
+    isStarting: [keeper!.id, striker!.id, midfielder!.id].includes(player.id) || player.overallRating >= 80,
+  })).filter(player => player.isStarting).slice(0, 11);
+
+  const slots = getSlotsForFormation('4-3-3');
+  const corruptedMap = {
+    '0-0': keeper!.id,
+    '0-2': midfielder!.id,
+    '3-0': striker!.id,
+  };
+
+  const rebuiltSlots = rebuildFormationSlotPlayers(slots, starters, corruptedMap);
+  const rebuiltMap = rebuildFormationMap(slots, starters, corruptedMap);
+
+  assert(rebuiltSlots[3][0]?.position === 'GK', 'Corrupted formation map should put a keeper back in GK');
+  assert(rebuiltSlots[0].every(player => player?.position !== 'GK'), 'Corrupted formation map should not leave a keeper in the forward line');
+  assert(rebuiltMap['3-0'] === rebuiltSlots[3][0]?.id, 'Rebuilt map should persist the corrected GK slot');
+};
+
 const checkSeededFormationDiversity = () => {
   const originalRandom = Math.random;
   Math.random = createSeededRandom(20260513);
@@ -268,6 +301,8 @@ const runRegressionChecks = () => {
   console.log('[OK] User team tactical adaptation guard passed');
   checkStaleFormationMapRecoveryModel();
   console.log('[OK] Stale formation-map recovery model passed');
+  checkFormationMapRejectsWrongPositions();
+  console.log('[OK] Wrong-position formation-map recovery passed');
   checkSeededFormationDiversity();
   console.log('[OK] Seeded formation diversity check passed');
   console.log('--- REGRESSION CHECKS COMPLETE ---');

@@ -16,6 +16,7 @@ import {
 import { addPlayerStat } from '../core/matchUtils';
 import { qualifiesForWindowedCleanSheet } from '../core/postMatchAccounting';
 import { computeWeeklyTransfers, computeWeeklyProgression } from '../core/progressionEngine';
+import { rebuildFormationMap } from '../core/formationMapUtils';
 
 type LiveMatchState = {
   initialized: boolean;
@@ -492,8 +493,11 @@ export const useGameStore = create<GameStore>()(
 
           // If same base formation and map already exists, just rename and do not shuffle.
           if (baseNew === baseOld && hasExistingMap) {
+            const teamStarters = Object.values(state.players)
+              .filter(p => p.teamId === teamId && p.isStarting && p.matchesSuspended === 0);
+            const formationMap = rebuildFormationMap(getSlotsForFormation(formation), teamStarters, existingMap);
             return {
-              teams: { ...state.teams, [teamId]: { ...team, activeFormation: formation } },
+              teams: { ...state.teams, [teamId]: { ...team, activeFormation: formation, formationMap } },
             };
           }
 

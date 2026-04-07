@@ -14,23 +14,35 @@ const weekToDate = (week: number): string => {
 };
 
 // Dual-color team name badge component
-const TeamColorBadge = ({ name, isUser }: { name: string; isUser: boolean }) => {
+const TeamColorBadge = ({ name, isUser, mirrored = false }: { name: string; isUser: boolean; mirrored?: boolean }) => {
   const theme = getTeamTheme(name);
   return (
-    <View style={badge.row}>
-      <View style={[badge.chip, { backgroundColor: theme.primary }]} />
-      <View style={[badge.chip, { backgroundColor: theme.secondary === '#FFFFFF' ? '#e2e8f0' : theme.secondary }]} />
-      <Text style={[badge.name, isUser && { color: '#38bdf8', fontWeight: '900' }]} numberOfLines={2}>
+    <View style={[badge.row, mirrored && badge.rowMirrored]}>
+      {!mirrored && (
+        <>
+          <View style={[badge.chip, { backgroundColor: theme.primary }]} />
+          <View style={[badge.chip, { backgroundColor: theme.secondary === '#FFFFFF' ? '#e2e8f0' : theme.secondary }]} />
+        </>
+      )}
+      <Text style={[badge.name, mirrored && badge.nameMirrored, isUser && { color: '#38bdf8', fontWeight: '900' }]} numberOfLines={2}>
         {name}
       </Text>
+      {mirrored && (
+        <>
+          <View style={[badge.chip, { backgroundColor: theme.primary }]} />
+          <View style={[badge.chip, { backgroundColor: theme.secondary === '#FFFFFF' ? '#e2e8f0' : theme.secondary }]} />
+        </>
+      )}
     </View>
   );
 };
 
 const badge = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
+  rowMirrored: { justifyContent: 'flex-end' },
   chip: { width: 10, height: 10, borderRadius: 3 },
   name: { fontSize: 14, fontWeight: '800', color: '#f8fafc' },
+  nameMirrored: { textAlign: 'right' },
 });
 
 export default function HubScreen() {
@@ -231,8 +243,8 @@ export default function HubScreen() {
 
                 {/* Away team */}
                 <View style={[styles.matchupTeam, { alignItems: 'flex-end' }]}>
-                  <TeamColorBadge name={awayTeam.name} isUser={awayTeam.id === userTeamId} />
-                  <View style={[styles.haTag, { backgroundColor: '#2a1a1a' }]}>
+                  <TeamColorBadge name={awayTeam.name} isUser={awayTeam.id === userTeamId} mirrored />
+                  <View style={[styles.haTag, styles.haTagAway, { backgroundColor: '#2a1a1a' }]}>
                     <Text style={[styles.haTagText, { color: '#f87171' }]}>AWAY</Text>
                   </View>
                 </View>
@@ -425,6 +437,7 @@ const styles = StyleSheet.create({
   matchupRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   matchupTeam: { flex: 1, gap: 6 },
   haTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, alignSelf: 'flex-start' },
+  haTagAway: { alignSelf: 'flex-end' },
   haTagText: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   matchupVsBlock: { paddingHorizontal: 16, alignItems: 'center' },
   matchupVs: { fontSize: 22, fontWeight: '900', color: '#334155' },

@@ -1,10 +1,12 @@
 import { Team, Player, Fixture } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
+import { getSlotsForFormation } from '../constants/formations';
 import type { TeamShapeProfile } from './matchTypes';
 import { buildQuickSimLineup } from './lineupEngine';
 import { buildFallbackShapeProfile, buildTeamShapeProfile } from './shapeEngine';
 import { applySubstitutions } from './substitutionEngine';
 import { applyWindowedCleanSheets } from './postMatchAccounting';
+import { rebuildFormationMap } from './formationMapUtils';
 import {
   addPlayerStat,
   avgStat,
@@ -239,11 +241,13 @@ export const quickSimMatch = (
     const shouldPreserveManual = Boolean(userTeamId && teamId === userTeamId);
     if (shouldPreserveManual) {
       const eligibleTeamPlayers = Object.values(updatedPlayers).filter(p => p.teamId === teamId && p.matchesSuspended === 0);
-      const mappedStarterIds = Array.from(new Set(Object.values(team.formationMap || {})))
-        .filter(playerId => {
-          const player = updatedPlayers[playerId];
-          return Boolean(player && player.teamId === teamId && player.matchesSuspended === 0);
-        });
+      const cleanFormationMap = rebuildFormationMap(
+        getSlotsForFormation(team.activeFormation),
+        eligibleTeamPlayers.filter(player => player.isStarting),
+        team.formationMap || {}
+      );
+      updatedTeams[teamId] = { ...team, formationMap: cleanFormationMap };
+      const mappedStarterIds = Array.from(new Set(Object.values(cleanFormationMap)));
       if (mappedStarterIds.length > 0) {
         const mappedSet = new Set(mappedStarterIds.slice(0, 11));
         const enforceMapXi = mappedStarterIds.length >= 11;

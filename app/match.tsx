@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
 import { useState, useEffect, useRef } from 'react';
 import { getTeamTheme } from '@/src/constants/teamColors';
+import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function MatchScreen() {
@@ -76,14 +77,12 @@ export default function MatchScreen() {
 
   const stadium = homeTheme.stadium;
 
-  // Starting XIs are sorted FWD, MID, DEF, GK for display.
-  const posOrder: Record<string, number> = { FWD: 1, MID: 2, DEF: 3, GK: 4 };
-  const homePlayers = Object.values(players)
-    .filter(p => p.teamId === fixture.homeTeamId && p.isStarting)
-    .sort((a, b) => posOrder[a.position] - posOrder[b.position]);
-  const awayPlayers = Object.values(players)
-    .filter(p => p.teamId === fixture.awayTeamId && p.isStarting)
-    .sort((a, b) => posOrder[a.position] - posOrder[b.position]);
+  const homePlayers = sortPlayersByPositionGroup(
+    Object.values(players).filter(p => p.teamId === fixture.homeTeamId && p.isStarting)
+  );
+  const awayPlayers = sortPlayersByPositionGroup(
+    Object.values(players).filter(p => p.teamId === fixture.awayTeamId && p.isStarting)
+  );
 
   const handleStart = () => setIsPlaying(true);
   const handlePause = () => setIsPlaying(false);

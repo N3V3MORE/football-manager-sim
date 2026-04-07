@@ -2,26 +2,15 @@ import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, Pressable, Animated, PanResponder, type DimensionValue
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useGameStore } from '@/src/store/gameStore';
 import { Formation, Player } from '@/src/models/types';
 
 import { getSlotsForFormation, Slot } from '@/src/constants/formations';
+import { getSlotFitScore, rebuildFormationMap, rebuildFormationSlotPlayers } from '@/src/core/formationMapUtils';
+import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
 
 const FORMATIONS: Formation[] = ['4-3-3', '4-4-2', '4-2-3-1', '5-2-3', '3-5-2', '4-1-4-1', '4-3-2-1'];
-
-const SLOT_SUBPOS: Record<string, string[]> = {
-  GK: ['GK'],
-  LB: ['LB', 'LWB'], RB: ['RB', 'RWB'],
-  WB: ['WB', 'LWB', 'RWB', 'LB', 'RB'],
-  CB: ['CB'],
-  DM: ['CDM', 'CM'], AM: ['CAM', 'LM', 'CM', 'RM'],
-  CM: ['CM', 'CDM', 'CAM'],
-  LM: ['LM', 'LW'], RM: ['RM', 'RW'],
-  LW: ['LW', 'LM', 'LF'], RW: ['RW', 'RM', 'RF'],
-  LF: ['LF', 'LW'], RF: ['RF', 'RW'],
-  ST: ['ST', 'CF'], CF: ['CF', 'ST'],
-};
 
 const PITCH_SLOT_WIDTH = 68;
 const PITCH_SLOT_HEIGHT = 78;
@@ -130,36 +119,23 @@ export default function SquadScreen() {
     ? Object.values(players).filter(p => p.teamId === userTeamId)
     : [];
 
-  const sortOrder: Record<string, number> = { GK: 1, DEF: 2, MID: 3, FWD: 4 };
-  mySquad.sort((a, b) =>
-    sortOrder[a.position] !== sortOrder[b.position]
-      ? sortOrder[a.position] - sortOrder[b.position]
-      : b.overallRating - a.overallRating
-  );
+  const sortedSquad = sortPlayersByPositionGroup(mySquad);
 
   const activeFormation = myTeam?.activeFormation || '4-3-3';
   const baseFormation = activeFormation.split(' ')[0];
   const slots = getSlotsForFormation(activeFormation);
 
-  const starters  = mySquad.filter(p => p.isStarting);
-  const bench     = mySquad.filter(p => p.isSub);
-  const reserves  = mySquad.filter(p => !p.isStarting && !p.isSub);
+  const starters  = sortedSquad.filter(p => p.isStarting);
+  const bench     = sortedSquad.filter(p => p.isSub);
+  const reserves  = sortedSquad.filter(p => !p.isStarting && !p.isSub);
 
   const formationMap = useMemo(() => myTeam?.formationMap || {}, [myTeam?.formationMap]);
   const hasMap = Object.keys(formationMap).length > 0;
   
   const slotPlayers = useMemo(() => {
     const arr: (Player | null)[][] = slots.map((row: Slot[]) => row.map(() => null));
-    const assignedStarterIds = new Set<string>();
     if (hasMap) {
-      slots.forEach((row: Slot[], r: number) => {
-         row.forEach((_: any, c: number) => {
-            const pid = formationMap[`${r}-${c}`];
-            const mappedStarter = pid ? starters.find(p => p.id === pid) || null : null;
-            arr[r][c] = mappedStarter;
-            if (mappedStarter) assignedStarterIds.add(mappedStarter.id);
-         });
-      });
+      return rebuildFormationSlotPlayers(slots, starters, formationMap);
     } else {
       const available = [...starters];
       arr.forEach((row, r) => {
@@ -176,16 +152,16 @@ export default function SquadScreen() {
          });
       });
     }
-    if (hasMap) {
-      const missingStarters = starters.filter(player => !assignedStarterIds.has(player.id));
-      arr.forEach((row) => {
-         row.forEach((player, c) => {
-            if (!player && missingStarters.length > 0) row[c] = missingStarters.shift() || null;
-         });
-      });
-    }
     return arr;
   }, [slots, starters, hasMap, formationMap]);
+
+  useEffect(() => {
+    if (!userTeamId || !hasMap) return;
+    const rebuiltMap = rebuildFormationMap(slots, starters, formationMap);
+    if (JSON.stringify(rebuiltMap) !== JSON.stringify(formationMap)) {
+      setFormation(userTeamId, activeFormation as Formation);
+    }
+  }, [activeFormation, formationMap, hasMap, setFormation, slots, starters, userTeamId]);
 
   if (!userTeamId) return null;
 
@@ -237,12 +213,8 @@ export default function SquadScreen() {
   const getPickerSections = (slot: Slot, currentOccupantId: string | null) => {
     const pool = mySquad.filter(p => !p.isStarting)
       .sort((a, b) => b.overallRating - a.overallRating);
-    const allowedSubPos = SLOT_SUBPOS[slot.label] || [];
 
-    const recommended = pool.filter(p => {
-      const hasAltPos = p.altPositions?.some(alt => allowedSubPos.includes(alt));
-      return hasAltPos || allowedSubPos.includes(p.subPosition) || allowedSubPos.includes(p.position);
-    });
+    const recommended = pool.filter(p => getSlotFitScore(p, slot) > -Infinity);
     
     const recIds = new Set(recommended.map(p => p.id));
     const alternatives = pool.filter(p => !recIds.has(p.id) && p.position === slot.pos);
