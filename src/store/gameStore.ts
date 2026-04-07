@@ -470,7 +470,8 @@ export const useGameStore = create<GameStore>()(
              state.players,
              state.teams,
              state.fixtures,
-             state.news
+             state.news,
+             state.userTeamId
            );
         });
 

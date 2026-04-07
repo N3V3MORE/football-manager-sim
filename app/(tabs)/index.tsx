@@ -124,7 +124,7 @@ export default function HubScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* ── Header ── */}
+        {/* Header */}
         <View style={[styles.header, { borderBottomColor: myTheme.primary + '60' }]}>
           {/* Team identity top row */}
           <View style={styles.headerTop}>
@@ -136,10 +136,10 @@ export default function HubScreen() {
               <Text style={[styles.teamName, { color: myTheme.primary !== '#FFFFFF' ? myTheme.primary : '#f8fafc' }]}>
                 {myTeam.name}
               </Text>
-              <Text style={styles.subtitle}>{myTheme.stadium} · Est. {myTheme.founded}</Text>
+              <Text style={styles.subtitle}>{myTheme.stadium} | Est. {myTheme.founded}</Text>
             </View>
             <TouchableOpacity style={styles.devResetButton} onPress={() => setShowDevOptions(!showDevOptions)}>
-              <Text style={styles.devResetText}>⚙ DEV</Text>
+              <Text style={styles.devResetText}>DEV</Text>
             </TouchableOpacity>
           </View>
 
@@ -167,42 +167,42 @@ export default function HubScreen() {
           </View>
         </View>
 
-        {/* ── Dev Options Panel ── */}
+        {/* Dev options panel */}
         {showDevOptions && (
           <View style={styles.devPanel}>
-            <Text style={styles.devPanelTitle}>🛠 DEV TOOLS</Text>
+            <Text style={styles.devPanelTitle}>Dev Tools</Text>
             <View style={styles.devRow}>
               <TouchableOpacity style={styles.devBtn} onPress={() => { advanceWeek(); setShowDevOptions(false); }}>
-                <Text style={styles.devBtnText}>▶ Next Week</Text>
+                <Text style={styles.devBtnText}>Next Week</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.devBtn, { borderColor: '#F59E0B' }]} onPress={() => {
                 advanceWeek(); advanceWeek(); advanceWeek(); advanceWeek(); advanceWeek();
                 setShowDevOptions(false);
               }}>
-                <Text style={[styles.devBtnText, { color: '#F59E0B' }]}>⏩ +5 Weeks</Text>
+                <Text style={[styles.devBtnText, { color: '#F59E0B' }]}>+5 Weeks</Text>
               </TouchableOpacity>
             </View>
             <View style={[styles.devRow, { marginTop: 6 }]}>
               <TouchableOpacity style={[styles.devBtn, { borderColor: '#F59E0B' }]} onPress={() => { skipToEndOfSeason(); setShowDevOptions(false); }}>
-                <Text style={[styles.devBtnText, { color: '#F59E0B' }]}>⏭ Skip Season</Text>
+                <Text style={[styles.devBtnText, { color: '#F59E0B' }]}>Skip Season</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.devBtn} onPress={() => setShowChangeTeam(true)}>
-                <Text style={styles.devBtnText}>🔄 Change Team</Text>
+                <Text style={styles.devBtnText}>Change Team</Text>
               </TouchableOpacity>
             </View>
             <TouchableOpacity style={[styles.devBtn, { marginTop: 6, borderColor: '#ef4444' }]} onPress={handleDevReset}>
-              <Text style={[styles.devBtnText, { color: '#ef4444' }]}>⚠ Reset Season</Text>
+              <Text style={[styles.devBtnText, { color: '#ef4444' }]}>Reset Season</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* ── Breaking News ── */}
+        {/* Breaking news */}
         <View style={styles.card}>
-          <Text style={[styles.cardTitle, { color: '#ef4444' }]}>📰 LATEST</Text>
+          <Text style={[styles.cardTitle, { color: '#ef4444' }]}>Latest</Text>
           {news && news.length > 0 ? (
             news.slice(0, 3).map((n, idx) => (
               <View key={idx} style={styles.newsItem}>
-                <Text style={styles.newsTextFeatured}>• {n}</Text>
+                <Text style={styles.newsTextFeatured}>- {n}</Text>
               </View>
             ))
           ) : (
@@ -210,12 +210,12 @@ export default function HubScreen() {
           )}
         </View>
 
-        {/* ── Next Fixture Hero Card ── */}
+        {/* Next fixture hero card */}
         <TouchableOpacity style={styles.heroMatchCard} onPress={handlePlayMatch} activeOpacity={0.85}>
           <Text style={styles.heroMatchTitle}>NEXT FIXTURE</Text>
           {homeTeam && awayTeam ? (
             <>
-              <Text style={styles.heroStadium}>{homeTheme?.stadium || 'TBD'}  ·  {weekToDate(currentWeek)}</Text>
+              <Text style={styles.heroStadium}>{homeTheme?.stadium || 'TBD'} | {weekToDate(currentWeek)}</Text>
               <View style={styles.matchupRow}>
                 {/* Home team */}
                 <View style={styles.matchupTeam}>
@@ -238,18 +238,18 @@ export default function HubScreen() {
                 </View>
               </View>
               <View style={styles.playBtnRow}>
-                <Text style={styles.heroPlayBtn}>▶  TAP TO PLAY MATCH</Text>
+                <Text style={styles.heroPlayBtn}>Tap to play match</Text>
               </View>
             </>
           ) : (
             <View style={{ paddingVertical: 20, alignItems: 'center' }}>
               <Text style={styles.matchupSubtext}>No fixture this week.</Text>
-              <Text style={styles.heroPlayBtn}>▶  TAP TO ADVANCE WEEK</Text>
+              <Text style={styles.heroPlayBtn}>Tap to advance week</Text>
             </View>
           )}
         </TouchableOpacity>
 
-        {/* ── Upcoming Fixtures ── */}
+        {/* Upcoming fixtures */}
         <TouchableOpacity style={styles.card} onPress={() => router.push('/calendar')} activeOpacity={0.85}>
           <Text style={styles.cardTitle}>Upcoming Fixtures</Text>
           {upcomingFixtures.map(({ week, match }) => {
@@ -276,7 +276,7 @@ export default function HubScreen() {
                     <Text style={styles.calOpp} numberOfLines={1}>{opp.name}</Text>
                     {match && match.isPlayed && (
                       <Text style={styles.calScore}>
-                        {isHome ? `${match.homeScore}–${match.awayScore}` : `${match.awayScore}–${match.homeScore}`}
+                        {isHome ? `${match.homeScore}-${match.awayScore}` : `${match.awayScore}-${match.homeScore}`}
                       </Text>
                     )}
                   </View>
@@ -286,10 +286,10 @@ export default function HubScreen() {
               </View>
             );
           })}
-          <Text style={styles.smallTapText}>Tap to view full calendar ›</Text>
+          <Text style={styles.smallTapText}>Tap to view full calendar</Text>
         </TouchableOpacity>
 
-        {/* ── Board Room ── */}
+        {/* Board room */}
         <TouchableOpacity style={styles.card} onPress={() => router.push('/board')} activeOpacity={0.85}>
           <Text style={styles.cardTitle}>Board Room</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -300,12 +300,12 @@ export default function HubScreen() {
               </Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.smallTapText}>Tap to view objectives ›</Text>
+              <Text style={styles.smallTapText}>Tap to view objectives</Text>
             </View>
           </View>
         </TouchableOpacity>
 
-        {/* ── Mini Table ── */}
+        {/* Mini table */}
         <TouchableOpacity style={styles.card} onPress={() => router.push('/league')}>
           <Text style={styles.cardTitle}>League Table</Text>
           {miniTable.map((team) => {
@@ -324,32 +324,32 @@ export default function HubScreen() {
               </View>
             );
           })}
-          <Text style={styles.smallTapText}>Tap to view full table ›</Text>
+          <Text style={styles.smallTapText}>Tap to view full table</Text>
         </TouchableOpacity>
 
-        {/* ── Season Stats ── */}
+        {/* Season stats */}
         <TouchableOpacity style={styles.card} onPress={() => router.push('/stats')}>
           <Text style={styles.cardTitle}>Season Stats</Text>
           {[
-            { label: '⚽ Top Scorer', player: topScorer, stat: topScorer ? `${topScorer.goals} goals` : 'None yet' },
-            { label: '🅰️ Top Assister', player: topAssister, stat: topAssister ? `${topAssister.assists} assists` : 'None yet' },
-            { label: '🧤 Clean Sheets', player: topCS, stat: topCS ? `${topCS.cleanSheets} clean sheets` : 'None yet' },
+            { label: 'Top Scorer', player: topScorer, stat: topScorer ? `${topScorer.goals} goals` : 'None yet' },
+            { label: 'Top Assister', player: topAssister, stat: topAssister ? `${topAssister.assists} assists` : 'None yet' },
+            { label: 'Clean Sheets', player: topCS, stat: topCS ? `${topCS.cleanSheets} clean sheets` : 'None yet' },
           ].map(({ label, player, stat }) => (
             <View key={label} style={styles.statLeaderRow}>
               <Text style={styles.statLeaderLabel}>{label}</Text>
               <View style={styles.statLeaderInfo}>
-                <Text style={styles.statLeaderName}>{player ? player.name : '—'}</Text>
+                <Text style={styles.statLeaderName}>{player ? player.name : '-'}</Text>
                 <Text style={styles.statLeaderNum}>{stat}</Text>
               </View>
             </View>
           ))}
-          <Text style={styles.smallTapText}>Tap for full stats ›</Text>
+          <Text style={styles.smallTapText}>Tap for full stats</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ── Change Team Modal ── */}
+      {/* Change team modal */}
       <Modal visible={showChangeTeam} transparent animationType="slide" onRequestClose={() => setShowChangeTeam(false)}>
         <View style={styles.ctOverlay}>
           <View style={styles.ctSheet}>
@@ -381,7 +381,7 @@ export default function HubScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0f1e' },
 
-  // ── Header
+  // Header
   header: {
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14,
     backgroundColor: '#111827',
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
   statChipLabel: { fontSize: 9, color: '#64748b', fontWeight: '700', textTransform: 'uppercase', marginTop: 2 },
   statChipDivider: { width: 1, height: 28, backgroundColor: '#1e293b' },
 
-  // ── Cards
+  // Cards
   card: {
     backgroundColor: '#111827', marginHorizontal: 14, marginTop: 14,
     padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#1e293b',
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
   newsTextFeatured: { fontSize: 14, color: '#cbd5e1', lineHeight: 22, fontWeight: '600' },
   smallTapText: { fontSize: 11, color: '#38bdf8', fontWeight: '700', marginTop: 10, textAlign: 'right' },
 
-  // ── Hero match card
+  // Hero match card
   heroMatchCard: {
     backgroundColor: '#111827',
     marginHorizontal: 14, marginTop: 14,
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
   playBtnRow: { borderTopWidth: 1, borderTopColor: '#1e293b', paddingTop: 12, alignItems: 'center' },
   heroPlayBtn: { fontSize: 11, fontWeight: '900', color: '#38bdf8', letterSpacing: 1.5 },
 
-  // ── Upcoming fixtures
+  // Upcoming fixtures
   calRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1e293b',
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
   calScore: { fontSize: 13, fontWeight: '900', color: '#38bdf8' },
   calBye: { flex: 1, fontSize: 12, color: '#334155', fontStyle: 'italic' },
 
-  // ── Mini table
+  // Mini table
   miniRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#1e293b' },
   miniRowUser: { backgroundColor: '#0ea5e915', borderRadius: 6 },
   miniPos: { width: 24, fontWeight: '700', color: '#64748b', fontSize: 13 },
@@ -462,14 +462,14 @@ const styles = StyleSheet.create({
   miniStat: { width: 32, textAlign: 'center', color: '#64748b', fontWeight: '600', fontSize: 12 },
   miniPts: { fontWeight: '900', color: '#f8fafc', fontSize: 13 },
 
-  // ── Season stats
+  // Season stats
   statLeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   statLeaderLabel: { fontSize: 11, fontWeight: '700', color: '#64748b', width: 100 },
   statLeaderInfo: { flex: 1 },
   statLeaderName: { fontSize: 13, fontWeight: '800', color: '#f8fafc' },
   statLeaderNum: { fontSize: 11, color: '#64748b', fontWeight: '600' },
 
-  // ── Dev
+  // Dev
   devPanel: {
     backgroundColor: '#111827', borderBottomWidth: 1, borderBottomColor: '#1e293b',
     paddingHorizontal: 14, paddingVertical: 12,
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
   devBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#334155', alignItems: 'center' },
   devBtnText: { color: '#94a3b8', fontSize: 11, fontWeight: '900' },
 
-  // ── Change team modal
+  // Change team modal
   ctOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   ctSheet: { backgroundColor: '#111827', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '75%', paddingBottom: 30 },
   ctTitle: { fontSize: 18, fontWeight: '900', color: '#f8fafc', textAlign: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#1e293b' },

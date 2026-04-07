@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '@/src/store/gameStore';
 import { getTransferWindowLabel, isTransferWindowOpen } from '@/src/utils/calendar';
+import { Player } from '@/src/models/types';
+
+type TransferDialog =
+  | { type: 'buy'; player: Player; fee: string; wage: string }
+  | { type: 'sell'; player: Player; price: string }
+  | null;
 
 export default function TransfersScreen() {
   const currentWeek = useGameStore(s => s.currentWeek);
@@ -10,11 +16,14 @@ export default function TransfersScreen() {
   const teams = useGameStore(s => s.teams);
   const players = useGameStore(s => s.players);
   const buyPlayer = useGameStore(s => s.buyPlayer);
+  const listPlayerForSale = useGameStore(s => s.listPlayerForSale);
+  const unlistPlayer = useGameStore(s => s.unlistPlayer);
 
   const windowLabel = getTransferWindowLabel(currentWeek);
   const windowOpen = isTransferWindowOpen(currentWeek);
 
   const [tab, setTab] = useState<'market' | 'squad'>('market');
+  const [dialog, setDialog] = useState<TransferDialog>(null);
 
   if (!userTeamId) return <View style={styles.container} />;
   const userTeam = teams[userTeamId];
@@ -22,67 +31,70 @@ export default function TransfersScreen() {
   const marketPlayers = Object.values(players).filter(p => p.isTransferListed && p.teamId !== userTeamId);
   const mySquad = Object.values(players).filter(p => p.teamId === userTeamId);
 
-  const handleBuy = (player: typeof players[0]) => {
+  const handleBuy = (player: Player) => {
     if (!windowOpen) {
       Alert.alert('Transfer Window Closed', 'You cannot buy players outside of the transfer window.');
       return;
     }
-    
-    Alert.prompt(
-      'Transfer Bid (In Millions)',
-      `Asking Price: £${player.askingPrice.toFixed(1)}m. Your budget: £${userTeam.budget.toFixed(1)}m. Enter your bid:`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Next (Wage)', onPress: (feeStr?: string) => {
-           const fee = parseFloat(feeStr || '0');
-           if (fee <= 0) return;
-           
-           Alert.prompt(
-             'Contract Wage Offer (k/week)',
-             `Current Wage: £${player.wage}k/w. How much will you offer?`,
-             [
-               { text: 'Cancel', style: 'cancel' },
-               { text: 'Submit Bid', onPress: (wageStr?: string) => {
-                  const wage = parseInt(wageStr || '0', 10);
-                  const res = buyPlayer(player.id, fee, wage);
-                  Alert.alert(res.success ? 'Success' : 'Rejected', res.message);
-               }}
-             ],
-             'plain-text',
-             player.wage.toString()
-           );
-        }}
-      ],
-      'plain-text',
-      player.askingPrice.toString()
-    );
+    setDialog({
+      type: 'buy',
+      player,
+      fee: player.askingPrice.toString(),
+      wage: player.wage.toString(),
+    });
   };
 
-  const handleSellToggle = (player: typeof players[0]) => {
-     if (player.isTransferListed) {
-        useGameStore.getState().unlistPlayer(player.id);
-     } else {
-        Alert.prompt(
-           'List for Sale',
-           `Enter asking price in millions (Market Value: £${player.marketValue}m)`,
-           [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'List Player', onPress: (val?: string) => {
-                 const price = parseFloat(val || '0');
-                 if (price > 0) useGameStore.getState().listPlayerForSale(player.id, price);
-              }}
-           ],
-           'plain-text',
-           player.marketValue.toString()
-        );
-     }
+  const handleSellToggle = (player: Player) => {
+    if (player.isTransferListed) {
+      unlistPlayer(player.id);
+      return;
+    }
+    setDialog({ type: 'sell', player, price: player.marketValue.toString() });
+  };
+
+  const handleSubmitDialog = () => {
+    if (!dialog) return;
+
+    if (dialog.type === 'buy') {
+      const fee = Number(dialog.fee);
+      const wage = Number(dialog.wage);
+      if (!Number.isFinite(fee) || fee <= 0 || !Number.isFinite(wage) || wage <= 0) {
+        Alert.alert('Invalid Offer', 'Enter a positive transfer fee and wage.');
+        return;
+      }
+      const result = buyPlayer(dialog.player.id, fee, wage);
+      setDialog(null);
+      Alert.alert(result.success ? 'Success' : 'Rejected', result.message);
+      return;
+    }
+
+    const price = Number(dialog.price);
+    if (!Number.isFinite(price) || price <= 0) {
+      Alert.alert('Invalid Price', 'Enter a positive asking price.');
+      return;
+    }
+    listPlayerForSale(dialog.player.id, price);
+    setDialog(null);
+  };
+
+  const updateDialogValue = (field: 'fee' | 'wage' | 'price', value: string) => {
+    setDialog(current => {
+      if (!current) return current;
+      if (current.type === 'buy' && (field === 'fee' || field === 'wage')) {
+        return { ...current, [field]: value };
+      }
+      if (current.type === 'sell' && field === 'price') {
+        return { ...current, price: value };
+      }
+      return current;
+    });
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Transfer Market</Text>
-        <Text style={styles.budget}>Budget: £{userTeam.budget.toFixed(1)}m</Text>
+        <Text style={styles.budget}>Budget: GBP {userTeam.budget.toFixed(1)}m</Text>
         <View style={[styles.banner, windowOpen ? styles.bannerOpen : styles.bannerClosed]}>
           <Text style={styles.bannerText}>{windowLabel}</Text>
         </View>
@@ -104,9 +116,9 @@ export default function TransfersScreen() {
             <View key={p.id} style={styles.card}>
               <View style={styles.cardLeft}>
                  <Text style={styles.pos}>{p.subPosition || p.position}</Text>
-                 <View>
-                   <Text style={styles.name}>{p.name}</Text>
-                   <Text style={styles.club}>{teams[p.teamId]?.name}</Text>
+                 <View style={styles.playerTextBlock}>
+                   <Text style={styles.name} numberOfLines={1}>{p.name}</Text>
+                   <Text style={styles.club} numberOfLines={1}>{teams[p.teamId]?.name}</Text>
                  </View>
               </View>
               <View style={styles.cardRight}>
@@ -114,7 +126,7 @@ export default function TransfersScreen() {
                    <Text style={styles.rating}>{p.overallRating}</Text>
                 </View>
                 <TouchableOpacity style={styles.buyBtn} onPress={() => handleBuy(p)}>
-                   <Text style={styles.buyText}>£{p.askingPrice.toFixed(1)}m</Text>
+                   <Text style={styles.buyText}>GBP {p.askingPrice.toFixed(1)}m</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -122,25 +134,25 @@ export default function TransfersScreen() {
         )}
 
         {tab === 'squad' && (
-          mySquad.sort((a,b) => b.overallRating - a.overallRating).map(p => (
+          [...mySquad].sort((a,b) => b.overallRating - a.overallRating).map(p => (
             <View key={p.id} style={styles.card}>
               <View style={styles.cardLeft}>
                  <Text style={styles.pos}>{p.subPosition || p.position}</Text>
-                 <View>
-                   <Text style={styles.name}>{p.name}</Text>
-                   <Text style={styles.club}>Value: £{p.marketValue}m</Text>
+                 <View style={styles.playerTextBlock}>
+                   <Text style={styles.name} numberOfLines={1}>{p.name}</Text>
+                   <Text style={styles.club}>Value: GBP {p.marketValue}m</Text>
                  </View>
               </View>
               <View style={styles.cardRight}>
                 <View style={styles.ratingBox}>
                    <Text style={styles.rating}>{p.overallRating}</Text>
                 </View>
-                <TouchableOpacity 
-                   style={[styles.buyBtn, p.isTransferListed && { backgroundColor: '#ef4444' }]} 
+                <TouchableOpacity
+                   style={[styles.buyBtn, p.isTransferListed && { backgroundColor: '#ef4444' }]}
                    onPress={() => handleSellToggle(p)}
                 >
                    <Text style={[styles.buyText, p.isTransferListed && { color: '#fff' }]}>
-                     {p.isTransferListed ? `Unlist (£${p.askingPrice}m)` : 'List'}
+                     {p.isTransferListed ? `Unlist (GBP ${p.askingPrice}m)` : 'List'}
                    </Text>
                 </TouchableOpacity>
               </View>
@@ -148,6 +160,66 @@ export default function TransfersScreen() {
           ))
         )}
       </ScrollView>
+
+      <Modal visible={dialog !== null} transparent animationType="fade" onRequestClose={() => setDialog(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {dialog && (
+              <>
+                <Text style={styles.modalTitle}>{dialog.type === 'buy' ? 'Make Transfer Offer' : 'List Player'}</Text>
+                <Text style={styles.modalSubtitle}>{dialog.player.name}</Text>
+
+                {dialog.type === 'buy' ? (
+                  <>
+                    <Text style={styles.fieldLabel}>Transfer fee (GBP millions)</Text>
+                    <TextInput
+                      value={dialog.fee}
+                      onChangeText={value => updateDialogValue('fee', value)}
+                      keyboardType="decimal-pad"
+                      style={styles.input}
+                      placeholderTextColor="#64748b"
+                    />
+                    <Text style={styles.fieldHint}>
+                      Asking price: GBP {dialog.player.askingPrice.toFixed(1)}m | Budget: GBP {userTeam.budget.toFixed(1)}m
+                    </Text>
+
+                    <Text style={styles.fieldLabel}>Wage (GBP k/week)</Text>
+                    <TextInput
+                      value={dialog.wage}
+                      onChangeText={value => updateDialogValue('wage', value)}
+                      keyboardType="number-pad"
+                      style={styles.input}
+                      placeholderTextColor="#64748b"
+                    />
+                    <Text style={styles.fieldHint}>Current wage: GBP {dialog.player.wage}k/w</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.fieldLabel}>Asking price (GBP millions)</Text>
+                    <TextInput
+                      value={dialog.price}
+                      onChangeText={value => updateDialogValue('price', value)}
+                      keyboardType="decimal-pad"
+                      style={styles.input}
+                      placeholderTextColor="#64748b"
+                    />
+                    <Text style={styles.fieldHint}>Market value: GBP {dialog.player.marketValue}m</Text>
+                  </>
+                )}
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.modalCancel} onPress={() => setDialog(null)}>
+                    <Text style={styles.modalCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalSubmit} onPress={handleSubmitDialog}>
+                    <Text style={styles.modalSubmitText}>{dialog.type === 'buy' ? 'Submit Offer' : 'List Player'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -168,8 +240,9 @@ const styles = StyleSheet.create({
   tabTextActive: { color: '#38bdf8' },
   scroll: { padding: 16, gap: 10 },
   empty: { color: '#64748b', textAlign: 'center', marginTop: 20 },
-  card: { backgroundColor: '#1e293b', padding: 12, borderRadius: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  card: { backgroundColor: '#1e293b', padding: 12, borderRadius: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  cardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  playerTextBlock: { flex: 1, minWidth: 0 },
   pos: { width: 34, textAlign: 'center', backgroundColor: '#334155', color: '#fff', paddingVertical: 4, borderRadius: 4, fontSize: 10, fontWeight: '900' },
   name: { color: '#f8fafc', fontWeight: '700', fontSize: 15 },
   club: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
@@ -177,5 +250,17 @@ const styles = StyleSheet.create({
   ratingBox: { backgroundColor: '#cbd5e1', width: 28, height: 28, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
   rating: { color: '#0f172a', fontWeight: '900', fontSize: 12 },
   buyBtn: { backgroundColor: '#38bdf8', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  buyText: { color: '#0f172a', fontWeight: '900', fontSize: 12 }
+  buyText: { color: '#0f172a', fontWeight: '900', fontSize: 12 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
+  modalCard: { backgroundColor: '#1e293b', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#334155' },
+  modalTitle: { color: '#f8fafc', fontSize: 18, fontWeight: '900' },
+  modalSubtitle: { color: '#94a3b8', fontSize: 13, marginTop: 4, marginBottom: 16, fontWeight: '700' },
+  fieldLabel: { color: '#cbd5e1', fontSize: 12, fontWeight: '900', marginTop: 10, marginBottom: 6 },
+  fieldHint: { color: '#64748b', fontSize: 11, marginTop: 6, lineHeight: 16 },
+  input: { backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155', borderRadius: 10, color: '#f8fafc', fontSize: 16, fontWeight: '800', paddingHorizontal: 12, paddingVertical: 10 },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  modalCancel: { flex: 1, backgroundColor: '#334155', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  modalCancelText: { color: '#cbd5e1', fontWeight: '900' },
+  modalSubmit: { flex: 1, backgroundColor: '#38bdf8', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  modalSubmitText: { color: '#0f172a', fontWeight: '900' },
 });

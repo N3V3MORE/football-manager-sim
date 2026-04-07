@@ -1,12 +1,11 @@
 import {
-  StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, Pressable, Animated, PanResponder
+  StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, Pressable, Animated, PanResponder, type DimensionValue
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useRef, useMemo } from 'react';
 import { useGameStore } from '@/src/store/gameStore';
 import { Formation, Player } from '@/src/models/types';
 
-// ─── Formation slot definitions ──────────────────────────────────────────────
 import { getSlotsForFormation, Slot } from '@/src/constants/formations';
 
 const FORMATIONS: Formation[] = ['4-3-3', '4-4-2', '4-2-3-1', '5-2-3', '3-5-2', '4-1-4-1', '4-3-2-1'];
@@ -24,11 +23,26 @@ const SLOT_SUBPOS: Record<string, string[]> = {
   ST: ['ST', 'CF'], CF: ['CF', 'ST'],
 };
 
+const PITCH_SLOT_WIDTH = 68;
+const PITCH_SLOT_HEIGHT = 78;
+const PITCH_DOT_SIZE = 40;
+
+const getSlotPosition = (rowIdx: number, colIdx: number, rowLength: number, totalRows: number) => {
+  const rowPercent = totalRows > 1
+    ? 10 + (rowIdx / (totalRows - 1)) * 80
+    : 50;
+
+  return {
+    left: `${((colIdx + 1) / (rowLength + 1)) * 100}%` as DimensionValue,
+    top: `${rowPercent}%` as DimensionValue,
+  };
+};
+
 const DraggableDot = ({
-  slotKey, slot, assigned, getPosColor, onPress, onDragBegin, onDragEnd, setRef
+  slot, assigned, getPosColor, onPress, onDragBegin, onDragEnd, setRef
 }: any) => {
+  const [dragging, setDragging] = useState(false);
   const pan = useRef(new Animated.ValueXY()).current;
-  const isDragging = useRef(false);
   const assignedRef = useRef(assigned);
   assignedRef.current = assigned;
 
@@ -37,31 +51,38 @@ const DraggableDot = ({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (e, gesture) => !!assignedRef.current && (Math.abs(gesture.dx) > 10 || Math.abs(gesture.dy) > 10),
       onPanResponderGrant: () => {
-         isDragging.current = true;
+         setDragging(true);
          onDragBegin();
          pan.setOffset({ x: (pan.x as any)._value, y: (pan.y as any)._value });
          pan.setValue({ x: 0, y: 0 });
       },
       onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
       onPanResponderRelease: (e, gesture) => {
-         isDragging.current = false;
+         setDragging(false);
          pan.flattenOffset();
-         onDragEnd(gesture.moveX, gesture.moveY);
-         Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
+         const swapped = onDragEnd(gesture.moveX, gesture.moveY);
+
+         if (swapped) {
+           pan.setValue({ x: 0, y: 0 });
+         } else {
+           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
+         }
       }
     })
   ).current;
 
   return (
-    <View ref={setRef} style={[styles.pitchDot, { zIndex: isDragging.current ? 100 : 1 }]}>
+    <View ref={setRef} style={[styles.pitchDot, { zIndex: dragging ? 100 : 1, elevation: dragging ? 100 : 0 }]}>
       <Animated.View
-        style={{ transform: pan.getTranslateTransform() }}
+        style={[styles.pitchDotDraggable, { transform: pan.getTranslateTransform() }]}
         {...panResponder.panHandlers}
       >
         <TouchableOpacity 
+          style={styles.pitchDotTouch}
           onPress={onPress} 
           activeOpacity={0.8}
           delayPressIn={50}
+          disabled={dragging}
         >
           <View style={[
             styles.pitchDotCircle,
@@ -73,11 +94,11 @@ const DraggableDot = ({
             </Text>
           </View>
           <Text style={[styles.pitchDotName, !assigned && { color: '#4ade80' }]} numberOfLines={1}>
-            {assigned ? assigned.name.split(' ').pop() : '+'}
+            {assigned ? assigned.name.split(' ').pop() : ''}
           </Text>
           {assigned && (
-             <View style={{ backgroundColor: '#cbd5e1', alignSelf: 'center', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, marginTop: 2 }}>
-               <Text style={{ fontSize: 9, fontWeight: '900', color: '#0f172a' }}>{assigned.overallRating}</Text>
+             <View style={styles.pitchRatingBadge}>
+               <Text style={styles.pitchRatingText}>{assigned.overallRating}</Text>
              </View>
           )}
         </TouchableOpacity>
@@ -129,11 +150,14 @@ export default function SquadScreen() {
   
   const slotPlayers = useMemo(() => {
     const arr: (Player | null)[][] = slots.map((row: Slot[]) => row.map(() => null));
+    const assignedStarterIds = new Set<string>();
     if (hasMap) {
       slots.forEach((row: Slot[], r: number) => {
          row.forEach((_: any, c: number) => {
             const pid = formationMap[`${r}-${c}`];
-            arr[r][c] = pid ? starters.find(p => p.id === pid) || null : null;
+            const mappedStarter = pid ? starters.find(p => p.id === pid) || null : null;
+            arr[r][c] = mappedStarter;
+            if (mappedStarter) assignedStarterIds.add(mappedStarter.id);
          });
       });
     } else {
@@ -152,6 +176,14 @@ export default function SquadScreen() {
          });
       });
     }
+    if (hasMap) {
+      const missingStarters = starters.filter(player => !assignedStarterIds.has(player.id));
+      arr.forEach((row) => {
+         row.forEach((player, c) => {
+            if (!player && missingStarters.length > 0) row[c] = missingStarters.shift() || null;
+         });
+      });
+    }
     return arr;
   }, [slots, starters, hasMap, formationMap]);
 
@@ -167,16 +199,23 @@ export default function SquadScreen() {
 
   const handleDragEnd = (r: number, c: number, mx: number, my: number) => {
      setScrollEnabled(true);
-     let droppedKey: string | null = null;
+     let closestKey: string | null = null;
+     let minDistance = 50;
      Object.entries(slotBounds.current).forEach(([k, b]: [string, any]) => {
-        if (mx >= b.x - 20 && mx <= b.x + b.w + 20 &&
-            my >= b.y - 20 && my <= b.y + b.h + 20) {
-           droppedKey = k;
+        const centerX = b.x + b.w / 2;
+        const centerY = b.y + PITCH_DOT_SIZE / 2;
+        const distance = Math.hypot(mx - centerX, my - centerY);
+
+        if (distance < minDistance) {
+           minDistance = distance;
+           closestKey = k;
         }
      });
-     if (droppedKey && droppedKey !== `${r}-${c}`) {
-        swapStartingSlots(userTeamId, `${r}-${c}`, droppedKey);
+     if (closestKey && closestKey !== `${r}-${c}`) {
+        swapStartingSlots(userTeamId, `${r}-${c}`, closestKey);
+        return true;
      }
+     return false;
   };
 
   const handleFormationSelect = (f: string) => {
@@ -247,12 +286,12 @@ export default function SquadScreen() {
       </View>
       <View style={{ flex: 1 }}>
          <Text style={[styles.pickerName, warningColor && { color: warningColor }]} numberOfLines={1}>{item.name}</Text>
-         <Text style={styles.pickerNat}>{item.nationality} • {Math.floor(item.energy)}% NRG</Text>
+         <Text style={styles.pickerNat}>{item.nationality} | {Math.floor(item.energy)}% NRG</Text>
       </View>
       <View style={styles.pickerRating}>
         <Text style={styles.pickerRatingText}>{item.overallRating}</Text>
       </View>
-      {item.isStarting && <Text style={styles.pickerStarter}>★ In Selection</Text>}
+      {item.isStarting && <Text style={styles.pickerStarter}>In Selection</Text>}
       {isSuspended && <Text style={{ fontSize: 10, color: '#ef4444', fontWeight: 'bold' }}> SUSP</Text>}
     </TouchableOpacity>
     );
@@ -283,7 +322,7 @@ export default function SquadScreen() {
             <Text style={[styles.playerName, warningColor && { color: warningColor }]} numberOfLines={1}>
               {item.name} {isSuspended && <Text style={{fontSize: 10, color: '#ef4444'}}>[SUSP]</Text>}
             </Text>
-            <Text style={styles.nationality}>{item.nationality} • {Math.floor(item.energy)}% Energy</Text>
+            <Text style={styles.nationality}>{item.nationality} | {Math.floor(item.energy)}% Energy</Text>
           </View>
           <View style={styles.playerRowRight}>
             <View style={styles.ratingBox}>
@@ -321,11 +360,11 @@ export default function SquadScreen() {
               </View>
             )}
             <View style={styles.seasonStatsRow}>
-              <Text style={styles.seasonStat}>⚽ {item.goals}</Text>
-              <Text style={styles.seasonStat}>🅰️ {item.assists}</Text>
-              {(item.position === 'GK' || item.position === 'DEF') && <Text style={styles.seasonStat}>🧤 {item.cleanSheets}</Text>}
-              <Text style={[styles.seasonStat, { color: '#F59E0B' }]}>🟨 {item.yellowCards}</Text>
-              <Text style={[styles.seasonStat, { color: '#ef4444' }]}>🟥 {item.redCards}</Text>
+              <Text style={styles.seasonStat}>G {item.goals}</Text>
+              <Text style={styles.seasonStat}>A {item.assists}</Text>
+              {(item.position === 'GK' || item.position === 'DEF') && <Text style={styles.seasonStat}>CS {item.cleanSheets}</Text>}
+              <Text style={[styles.seasonStat, { color: '#F59E0B' }]}>YC {item.yellowCards}</Text>
+              <Text style={[styles.seasonStat, { color: '#ef4444' }]}>RC {item.redCards}</Text>
             </View>
           </View>
         )}
@@ -351,7 +390,7 @@ export default function SquadScreen() {
           <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowFormationDrop(true)}>
             <Text style={styles.dropdownLabel}>Formation</Text>
             <Text style={styles.dropdownValue}>{activeFormation}</Text>
-            <Text style={styles.dropdownCaret}>▾</Text>
+            <Text style={styles.dropdownCaret}>v</Text>
           </TouchableOpacity>
         </View>
 
@@ -360,16 +399,15 @@ export default function SquadScreen() {
           <View style={styles.pitch}>
             <View style={styles.pitchOutline} />
 
-            <View style={{ flex: 1, justifyContent: 'space-around', zIndex: 10, paddingVertical: 10 }}>
+            <View style={styles.pitchSlots}>
               {slots.map((row: Slot[], rowIdx: number) => (
-                <View key={rowIdx} style={{ flexDirection: 'row', justifyContent: row.length === 1 ? 'center' : 'space-evenly', alignItems: 'center' }}>
-                  {row.map((slot: Slot, colIdx: number) => {
+                row.map((slot: Slot, colIdx: number) => {
                     const assigned = slotPlayers[rowIdx]?.[colIdx];
                     const slotKey = `${rowIdx}-${colIdx}`;
+                    const position = getSlotPosition(rowIdx, colIdx, row.length, slots.length);
                     return (
-                       <View key={slotKey} style={{ zIndex: 10 }}>
+                       <View key={slotKey} style={[styles.pitchSlotAnchor, position]}>
                          <DraggableDot
-                            slotKey={slotKey}
                             slot={slot}
                             assigned={assigned}
                             getPosColor={getPosColor}
@@ -380,8 +418,7 @@ export default function SquadScreen() {
                          />
                        </View>
                     );
-                  })}
-                </View>
+                  })
               ))}
             </View>
           </View>
@@ -402,7 +439,7 @@ export default function SquadScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ── Formation Selection Modal ── */}
+      {/* Formation selection modal */}
       <Modal visible={showFormationDrop} transparent animationType="fade" onRequestClose={() => setShowFormationDrop(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowFormationDrop(false)}>
           <View style={styles.dropdownModal}>
@@ -417,7 +454,7 @@ export default function SquadScreen() {
                       onPress={() => handleFormationSelect(f)}
                     >
                       <Text style={[styles.dropdownItemText, isSelectedBase && styles.dropdownItemTextActive]}>{f}</Text>
-                      {isSelectedBase && <Text style={styles.activeCheck}>✓</Text>}
+                      {isSelectedBase && <Text style={styles.activeCheck}>Selected</Text>}
                     </TouchableOpacity>
                   </View>
                 );
@@ -427,7 +464,7 @@ export default function SquadScreen() {
         </Pressable>
       </Modal>
 
-      {/* ── Player Picker Modal ── */}
+      {/* Player picker modal */}
       <Modal visible={activeSlotIndex !== null} transparent animationType="slide" onRequestClose={() => setActiveSlotIndex(null)}>
         <View style={styles.pickerOverlay}>
           <View style={styles.pickerSheet}>
@@ -435,23 +472,23 @@ export default function SquadScreen() {
               <View style={[styles.modalPosPill, { backgroundColor: getPosColor(activeSlot?.pos || 'MID') }]}>
                 <Text style={styles.modalPosText}>{activeSlot?.label || '?'}</Text>
               </View>
-              <Text style={styles.pickerTitle}>{activeSlot?.label} — Select Player</Text>
+              <Text style={styles.pickerTitle}>{activeSlot?.label} - Select Player</Text>
               <TouchableOpacity onPress={() => setActiveSlotIndex(null)} style={styles.pickerClose}>
-                <Text style={styles.modalCloseText}>✕</Text>
+                <Text style={styles.modalCloseText}>X</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView>
               {pickerSections && (
                 <>
-                  <Text style={styles.pickerSection}>★ Recommended for {activeSlot?.label}</Text>
+                  <Text style={styles.pickerSection}>Recommended for {activeSlot?.label}</Text>
                   {pickerSections.recommended.length === 0
-                    ? <Text style={styles.emptyNote}>  No exact match — see alternatives below</Text>
+                    ? <Text style={styles.emptyNote}>No exact match - see alternatives below</Text>
                     : pickerSections.recommended.map(renderPlayerInPicker)}
 
                   {pickerSections.alternatives.length > 0 && (
                     <>
-                      <Text style={styles.pickerSection}>◆ Other {activeSlot?.pos}s</Text>
+                      <Text style={styles.pickerSection}>Other {activeSlot?.pos}s</Text>
                       {pickerSections.alternatives.map(renderPlayerInPicker)}
                     </>
                   )}
@@ -462,18 +499,18 @@ export default function SquadScreen() {
         </View>
       </Modal>
 
-      {/* ── Info Modal ── */}
+      {/* Info modal */}
       <Modal visible={showInfo} transparent animationType="fade" onRequestClose={() => setShowInfo(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', paddingHorizontal: 30 }}>
           <View style={{ backgroundColor: '#1e293b', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: '#334155' }}>
             <Text style={{ fontSize: 18, fontWeight: '900', color: '#f8fafc', marginBottom: 16 }}>How to Use</Text>
             <Text style={{ color: '#94a3b8', lineHeight: 22, fontSize: 14 }}>
-              {'• Tap a pitch circle to assign a player to that position.\n\n' +
-               '• Drag a pitch player to another slot to swap positions.\n\n' +
-               '• Tap any non-starting player in Reserves to add them to the Bench.\n\n' +
-               '• Long-press a Bench player to move them back to Reserves.\n\n' +
-               '• Use the Formation dropdown to switch formations.\n\n' +
-               '• Set DEFEND / BALANCED / ATTACK strategy to adjust your team\'s style.'}
+              {'- Tap a pitch circle to assign a player to that position.\n\n' +
+               '- Drag a pitch player to another slot to swap positions.\n\n' +
+               '- Tap any non-starting player in Reserves to add them to the Bench.\n\n' +
+               '- Long-press a Bench player to move them back to Reserves.\n\n' +
+               '- Use the Formation dropdown to switch formations.\n\n' +
+               '- Set DEFEND / BALANCED / ATTACK strategy to adjust your team\'s style.'}
             </Text>
             <TouchableOpacity
               onPress={() => setShowInfo(false)}
@@ -520,15 +557,35 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 12, bottom: 12, left: 12, right: 12, 
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)', borderRadius: 2
   },
-  pitchDot:     { alignItems: 'center', width: 54 },
+  pitchSlots: {
+    position: 'absolute',
+    top: 12,
+    bottom: 12,
+    left: 12,
+    right: 12,
+    zIndex: 10,
+  },
+  pitchSlotAnchor: {
+    position: 'absolute',
+    width: PITCH_SLOT_WIDTH,
+    height: PITCH_SLOT_HEIGHT,
+    marginLeft: -(PITCH_SLOT_WIDTH / 2),
+    marginTop: -(PITCH_DOT_SIZE / 2),
+    alignItems: 'center',
+  },
+  pitchDot:     { alignItems: 'center', width: PITCH_SLOT_WIDTH },
+  pitchDotDraggable: { alignItems: 'center', width: PITCH_SLOT_WIDTH },
+  pitchDotTouch: { alignItems: 'center', width: PITCH_SLOT_WIDTH + 20 },
   pitchDotCircle: {
-    width: 38, height: 38, borderRadius: 19,
+    width: PITCH_DOT_SIZE, height: PITCH_DOT_SIZE, borderRadius: PITCH_DOT_SIZE / 2,
     justifyContent: 'center', alignItems: 'center',
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)',
   },
   pitchDotEmpty: { borderStyle: 'dotted', borderColor: '#4ade80' },
   pitchDotLabel: { color: '#fff', fontSize: 9, fontWeight: '900' },
-  pitchDotName:  { color: '#fff', fontSize: 9, marginTop: 3, textAlign: 'center', fontWeight: '700' },
+  pitchDotName:  { color: '#fff', fontSize: 9, marginTop: 4, textAlign: 'center', fontWeight: '700', width: PITCH_SLOT_WIDTH + 20, alignSelf: 'center' },
+  pitchRatingBadge: { backgroundColor: '#cbd5e1', alignSelf: 'center', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 3, marginTop: 3 },
+  pitchRatingText: { fontSize: 9, fontWeight: '900', color: '#0f172a' },
 
   // Player cards
   section:       { paddingHorizontal: 12, paddingTop: 4 },

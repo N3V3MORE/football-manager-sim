@@ -3,6 +3,7 @@ import * as path from 'path';
 import { initGameData } from '../src/utils/initGame';
 import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
+import { getSlotsForFormation } from '../src/constants/formations';
 import {
   didConcedeInWindow,
   applyWindowedCleanSheets,
@@ -136,6 +137,74 @@ const checkBranchGuards = () => {
   );
 };
 
+const checkUserTeamProgressionDoesNotAdaptFormation = () => {
+  const data = initGameData();
+  const userTeam = Object.values(data.teams)[0];
+  const beforeFormation = userTeam.activeFormation;
+  const beforeTactics = JSON.stringify(userTeam.tactics);
+
+  const teams = {
+    ...data.teams,
+    [userTeam.id]: {
+      ...userTeam,
+      played: 6,
+      goalsFor: 4,
+      goalsAgainst: 14,
+      form: ['L', 'L', 'L', 'L', 'L'],
+    },
+  };
+
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    const result = computeWeeklyProgression(1, data.players, teams, data.fixtures, [], userTeam.id);
+    assert(
+      result.teams[userTeam.id].activeFormation === beforeFormation,
+      'User team formation should not be changed by AI tactical adaptation'
+    );
+    assert(
+      JSON.stringify(result.teams[userTeam.id].tactics) === beforeTactics,
+      'User team tactics should not be changed by AI tactical adaptation'
+    );
+  } finally {
+    Math.random = originalRandom;
+  }
+};
+
+const checkStaleFormationMapRecoveryModel = () => {
+  const data = initGameData();
+  const team = Object.values(data.teams)[0];
+  const starters = Object.values(data.players).filter(player => player.teamId === team.id && player.isStarting);
+  const slots = getSlotsForFormation('4-3-3');
+  const staleMap: Record<string, string> = {
+    '0-0': starters[0]?.id,
+    '0-1': 'missing-player-id',
+  };
+  const mappedStarterIds = new Set<string>();
+  const rendered = slots.map(row => row.map(() => null as string | null));
+
+  slots.forEach((row, rowIndex) => {
+    row.forEach((_, colIndex) => {
+      const playerId = staleMap[`${rowIndex}-${colIndex}`];
+      const mappedStarter = playerId ? starters.find(player => player.id === playerId) : null;
+      if (mappedStarter) {
+        rendered[rowIndex][colIndex] = mappedStarter.id;
+        mappedStarterIds.add(mappedStarter.id);
+      }
+    });
+  });
+
+  const missingStarters = starters.filter(player => !mappedStarterIds.has(player.id));
+  rendered.forEach(row => {
+    row.forEach((playerId, colIndex) => {
+      if (!playerId && missingStarters.length > 0) row[colIndex] = missingStarters.shift()?.id || null;
+    });
+  });
+
+  const renderedIds = new Set(rendered.flat().filter(Boolean));
+  assert(renderedIds.size === Math.min(starters.length, slots.flat().length), 'Stale formation maps should not hide starters');
+};
+
 const checkSeededFormationDiversity = () => {
   const originalRandom = Math.random;
   Math.random = createSeededRandom(20260513);
@@ -195,6 +264,10 @@ const runRegressionChecks = () => {
   console.log('[OK] Live sent-off minute check passed');
   checkBranchGuards();
   console.log('[OK] Second-yellow and shape parity guards passed');
+  checkUserTeamProgressionDoesNotAdaptFormation();
+  console.log('[OK] User team tactical adaptation guard passed');
+  checkStaleFormationMapRecoveryModel();
+  console.log('[OK] Stale formation-map recovery model passed');
   checkSeededFormationDiversity();
   console.log('[OK] Seeded formation diversity check passed');
   console.log('--- REGRESSION CHECKS COMPLETE ---');

@@ -1,6 +1,10 @@
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
 import { useGameStore } from '@/src/store/gameStore';
 import { useState } from 'react';
+import { Player } from '@/src/models/types';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+type PlayerStatKey = 'goals' | 'assists' | 'cleanSheets' | 'yellowCards' | 'redCards';
 
 export default function StatsScreen() {
   const players = useGameStore(state => state.players);
@@ -34,7 +38,7 @@ export default function StatsScreen() {
     .sort((a, b) => b.redCards - a.redCards || b.overallRating - a.overallRating)
     .slice(0, 10);
 
-  const getStatValue = (item: any, stat: string) => {
+  const getStatValue = (item: Player, stat: PlayerStatKey) => {
     switch (stat) {
       case 'goals': return item.goals;
       case 'assists': return item.assists;
@@ -45,7 +49,7 @@ export default function StatsScreen() {
     }
   };
 
-  const renderPlayerStat = (item: any, stat: 'goals' | 'assists' | 'cleanSheets' | 'yellowCards' | 'redCards', index: number) => {
+  const renderPlayerStat = (item: Player, stat: PlayerStatKey, index: number) => {
     const team = teams[item.teamId];
     return (
       <View key={item.id} style={styles.row}>
@@ -59,7 +63,7 @@ export default function StatsScreen() {
     );
   };
 
-  const renderPane = (title: string, id: string, data: any[], type: 'goals' | 'assists' | 'cleanSheets' | 'yellowCards' | 'redCards') => {
+  const renderPane = (title: string, id: string, data: Player[], type: PlayerStatKey) => {
       const isExpanded = expandedPane === id;
       const displayData = isExpanded ? data : data.slice(0, 3);
       
@@ -83,7 +87,7 @@ export default function StatsScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView>
         <View style={styles.header}>
             <Text style={styles.title}>League Stats</Text>
@@ -97,7 +101,7 @@ export default function StatsScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

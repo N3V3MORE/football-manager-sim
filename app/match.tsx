@@ -27,7 +27,7 @@ export default function MatchScreen() {
   const minuteRef = useRef(0);
 
   useEffect(() => {
-    let interval: any;
+    let interval: ReturnType<typeof setInterval>;
     if (isPlaying && !isHalfTime && !matchFinished) {
       interval = setInterval(() => {
         minuteRef.current += 1;
@@ -76,7 +76,7 @@ export default function MatchScreen() {
 
   const stadium = homeTheme.stadium;
 
-  // Starting 11s — sorted FWD → MID → DEF → GK for display
+  // Starting XIs are sorted FWD, MID, DEF, GK for display.
   const posOrder: Record<string, number> = { FWD: 1, MID: 2, DEF: 3, GK: 4 };
   const homePlayers = Object.values(players)
     .filter(p => p.teamId === fixture.homeTeamId && p.isStarting)

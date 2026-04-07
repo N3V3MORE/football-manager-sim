@@ -109,7 +109,7 @@ export default function LeagueTableScreen() {
                     <Text style={styles.modalTitle}>{selectedTeam.name}</Text>
                     <Text style={styles.modalSubtitle}>{theme.stadium}</Text>
                     <TouchableOpacity style={styles.modalClose} onPress={() => setSelectedTeam(null)}>
-                      <Text style={styles.modalCloseText}>✕</Text>
+                      <Text style={styles.modalCloseText}>X</Text>
                     </TouchableOpacity>
                   </View>
 

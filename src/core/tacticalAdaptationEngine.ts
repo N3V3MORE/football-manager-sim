@@ -95,9 +95,11 @@ const pickAdaptiveFormation = (
 
 export const applyTacticalAdaptation = (
   updatedPlayers: Record<string, Player>,
-  updatedTeams: Record<string, Team>
+  updatedTeams: Record<string, Team>,
+  excludedTeamIds = new Set<string>()
 ) => {
   Object.values(updatedTeams).forEach(team => {
+    if (excludedTeamIds.has(team.id)) return;
     if (team.played < 6 || team.played % 3 !== 0) return;
 
     const recentForm = (team.form || []).slice(-5);

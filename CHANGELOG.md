@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.1.0 - Clean up the squad screen
+
+What changed:
+- Fixed squad pitch drag-and-drop so players snap to the nearest slot instead of hitting overlapping drop boxes on narrow phones.
+- Improved Android drag layering by lifting the active player with state-driven `zIndex` and `elevation`.
+- Stopped the swapped player from flying back across the screen after a successful drag swap.
+- Spread formation rows more evenly over the pitch and tightened the dot/name/rating alignment.
+- Added recovery for stale formation maps so starters do not disappear from the pitch and reserves after a season skip.
+- Kept AI tactical/formation adaptation away from the user team during weekly progression.
+- Replaced native transfer prompts with in-app bid/listing modals and cleaned up a few rough UI labels.
+
 ## v3.0.2 - Stabilize the sim and tidy the code
 
 What changed:

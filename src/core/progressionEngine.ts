@@ -9,7 +9,8 @@ export const computeWeeklyProgression = (
   players: Record<string, Player>,
   teams: Record<string, Team>,
   fixtures: Record<string, Fixture>,
-  oldNews: string[]
+  oldNews: string[],
+  userTeamId: string | null = null
 ): { players: Record<string, Player>, teams: Record<string, Team>, currentWeek: number, news: string[] } => {
   const playedFixtures = Object.values(fixtures).filter(f => f.week === currentWeek);
   const newNews: string[] = [];
@@ -49,7 +50,11 @@ export const computeWeeklyProgression = (
     updatedTeams[team.id] = { ...team, budget: newBudget };
   });
 
-  applyTacticalAdaptation(updatedPlayers, updatedTeams);
+  applyTacticalAdaptation(
+    updatedPlayers,
+    updatedTeams,
+    userTeamId ? new Set([userTeamId]) : new Set<string>()
+  );
 
   const sortedByGoals = [...allPlayers].sort((a, b) => b.goals - a.goals);
   if (sortedByGoals.length > 0 && sortedByGoals[0].goals > 0) {

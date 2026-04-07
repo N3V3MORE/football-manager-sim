@@ -14,10 +14,10 @@ export default function BoardScreen() {
 
   let statusText = 'Stable';
   let statusColor = '#f59e0b'; // yellow
-  if (approval >= 80) { statusText = 'Untouchable'; statusColor = '#10B981'; }
-  else if (approval >= 65) { statusText = 'Secure'; statusColor = '#34d399'; }
+  if (approval < 15) { statusText = 'Sacking Risk'; statusColor = '#7f1d1d'; }
   else if (approval < 30) { statusText = 'Under Pressure'; statusColor = '#ef4444'; }
-  else if (approval < 15) { statusText = 'Sacked Imminent'; statusColor = '#7f1d1d'; }
+  else if (approval >= 80) { statusText = 'Untouchable'; statusColor = '#10B981'; }
+  else if (approval >= 65) { statusText = 'Secure'; statusColor = '#34d399'; }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
