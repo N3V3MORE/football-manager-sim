@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useGameStore } from '@/src/store/gameStore';
+import { getHydrationRepairs, hasHydrationRepairs } from '@/src/store/setup';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -35,20 +36,9 @@ export default function RootLayout() {
       return;
     }
 
-    if (Object.values(state.teams).some(team => !team.division)) {
-      useGameStore.setState({
-        teams: Object.fromEntries(
-          Object.entries(state.teams).map(([teamId, team]) => [
-            teamId,
-            {
-              ...team,
-              division: team.division || 'Premier League',
-              countryId: team.countryId || 'england',
-              clubClass: team.clubClass || 'C',
-            },
-          ])
-        ),
-      });
+    const repairs = getHydrationRepairs(state);
+    if (hasHydrationRepairs(repairs)) {
+      useGameStore.setState(repairs);
     }
   }, [hasHydrated, userTeamId]);
 
@@ -62,6 +52,7 @@ export default function RootLayout() {
         <Stack.Screen name="board" options={{ headerShown: false }} />
         <Stack.Screen name="calendar" options={{ headerShown: false }} />
         <Stack.Screen name="stats" options={{ headerShown: false }} />
+        <Stack.Screen name="trophies" options={{ headerShown: false }} />
         <Stack.Screen name="match" options={{ presentation: 'fullScreenModal', title: 'Match Day' }} />
       </Stack>
       <StatusBar style="auto" />

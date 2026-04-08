@@ -32,11 +32,11 @@ const createSeededRandom = (seed: number) => {
   };
 };
 
-const withSeededRandom = <T,>(seed: number, task: () => T) => {
+const withSeededRandom = async <T,>(seed: number, task: () => T | Promise<T>) => {
   const originalRandom = Math.random;
   Math.random = createSeededRandom(seed);
   try {
-    return task();
+    return await task();
   } finally {
     Math.random = originalRandom;
   }
@@ -121,7 +121,19 @@ const initializeUserTeam = (formation: Formation) => {
   return userTeam;
 };
 
-const checkSeasonSkipContinuity = () => {
+const waitForSeasonSkipToFinish = async (timeoutMs: number) => {
+  const deadline = Date.now() + timeoutMs;
+
+  while (useGameStore.getState().isSeasonSkipInProgress) {
+    if (Date.now() > deadline) {
+      throw new Error('Season skip did not finish within timeout');
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+};
+
+const checkSeasonSkipContinuity = async () => {
   const before = initializeUserTeam('4-3-3');
   const beforeTactics = JSON.stringify(before.tactics);
   const beforeFormation = before.activeFormation;
@@ -130,6 +142,7 @@ const checkSeasonSkipContinuity = () => {
   validateUserLineup('before skip', before);
 
   useGameStore.getState().skipToEndOfSeason();
+  await waitForSeasonSkipToFinish(120000);
 
   const state = useGameStore.getState();
   const after = state.teams[before.id];
@@ -193,11 +206,11 @@ const checkManagerProfilesLoaded = () => {
   });
 };
 
-const runSaveIntegrityCheck = () => withSeededRandom(20260407, () => {
+const runSaveIntegrityCheck = () => withSeededRandom(20260407, async () => {
   console.log('--- SAVE INTEGRITY CHECK ---');
   validateFormationDefinitions();
   console.log('[OK] Formation definitions cover every Formation value');
-  checkSeasonSkipContinuity();
+  await checkSeasonSkipContinuity();
   console.log('[OK] Season skip keeps user lineup, tactics, and references intact');
   checkCorruptedMapRecovery();
   console.log('[OK] Corrupted formation maps recover to valid player slots');
@@ -208,4 +221,7 @@ const runSaveIntegrityCheck = () => withSeededRandom(20260407, () => {
   console.log('--- SAVE INTEGRITY CHECK COMPLETE ---');
 });
 
-runSaveIntegrityCheck();
+runSaveIntegrityCheck().catch(error => {
+  console.error(error);
+  process.exit(1);
+});

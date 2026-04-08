@@ -12,7 +12,7 @@ import {
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '@/src/store/gameStore';
-import { getTeamTheme } from '@/src/constants/teamColors';
+import { getDisplayKitColor, getDisplaySecondaryColor, getTeamTheme } from '@/src/constants/teamColors';
 import { Player, Team } from '@/src/models/types';
 import { getSlotsForFormation } from '@/src/constants/formations';
 import { rebuildFormationSlotPlayers } from '@/src/core/formationMapUtils';
@@ -182,8 +182,8 @@ export default function LeagueTableScreen() {
                 <Text style={[styles.cell, styles.pos, isUser && styles.userText]}>{index + 1}</Text>
                 <View style={styles.nameCell}>
                   <View style={styles.kitStrip}>
-                    <View style={[styles.kitBlock, { backgroundColor: theme.primary }]} />
-                    <View style={[styles.kitBlock, { backgroundColor: theme.secondary === '#FFFFFF' ? '#e2e8f0' : theme.secondary }]} />
+                    <View style={[styles.kitBlock, { backgroundColor: getDisplayKitColor(theme.primary) }]} />
+                    <View style={[styles.kitBlock, { backgroundColor: getDisplaySecondaryColor(theme.secondary) }]} />
                   </View>
                   <Text style={[styles.cell, styles.name, isUser && styles.userText]} numberOfLines={1}>{team.name}</Text>
                 </View>
@@ -288,8 +288,8 @@ export default function LeagueTableScreen() {
                 <>
                   <View style={styles.modalHeader}>
                     <View style={styles.modalKitStrip}>
-                      <View style={[styles.modalKitBlock, { backgroundColor: theme.primary }]} />
-                      <View style={[styles.modalKitBlock, { backgroundColor: theme.secondary === '#FFFFFF' ? '#e2e8f0' : theme.secondary }]} />
+                      <View style={[styles.modalKitBlock, { backgroundColor: getDisplayKitColor(theme.primary) }]} />
+                      <View style={[styles.modalKitBlock, { backgroundColor: getDisplaySecondaryColor(theme.secondary) }]} />
                     </View>
                     <Text style={styles.modalTitle}>{selectedTeam.name}</Text>
                     <Text style={styles.modalSubtitle}>{theme.stadium}</Text>

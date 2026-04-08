@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getFixtureCompetitionLabel } from '@/src/core/competitionUtils';
 
 export default function MatchScreen() {
   const router = useRouter();
@@ -100,6 +101,11 @@ export default function MatchScreen() {
       }
       finishLiveMatch(fixtureId);
     }
+    if (minute > 0 || matchFinished) {
+      advanceWeek();
+      router.replace('/(tabs)');
+      return;
+    }
     router.back();
   };
 
@@ -116,6 +122,7 @@ export default function MatchScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.headerTitle}>Match Simulation</Text>
         <Text style={styles.stadiumText}>{stadium}</Text>
+        <Text style={styles.competitionText}>{getFixtureCompetitionLabel(currentFixture)}</Text>
         <Text style={styles.minuteClock}>{minute}&apos;</Text>
         
         <View style={styles.scoreboard}>
@@ -236,6 +243,15 @@ const styles = StyleSheet.create({
       textAlign: 'center',
       fontWeight: '600',
       marginBottom: 12,
+      letterSpacing: 1,
+  },
+  competitionText: {
+      color: '#38bdf8',
+      fontSize: 12,
+      textAlign: 'center',
+      fontWeight: '800',
+      marginBottom: 10,
+      textTransform: 'uppercase',
       letterSpacing: 1,
   },
   minuteClock: {

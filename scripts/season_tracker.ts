@@ -3,7 +3,7 @@ import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
 import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 import { ENGINE_CONFIG } from '../src/config/engineConfig';
-import { Player, Team } from '../src/models/types';
+import { Fixture, Player, Team } from '../src/models/types';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -36,6 +36,8 @@ type PlayerMatchDelta = {
 type MatchReport = {
   fixtureId: string;
   week: number;
+  competition: Fixture['competition'];
+  roundName?: string;
   homeTeamId: string;
   awayTeamId: string;
   homeTeam: string;
@@ -343,13 +345,12 @@ const buildLeaderboards = (players: Record<string, Player>, teams: Record<string
 };
 
 const createMatchReport = (
+  fixture: Fixture,
   fixtureId: string,
   week: number,
   preMatchPlayers: Record<string, PlayerStatSnapshot>,
   players: Record<string, Player>,
   teams: Record<string, Team>,
-  homeTeamId: string,
-  awayTeamId: string,
   homeScore: number,
   awayScore: number,
   eventMessages: string[]
@@ -383,12 +384,14 @@ const createMatchReport = (
   if (redCardCount > 0 && redCardEventCount === 0) auditFlags.push('red_card_log_mismatch');
 
   return {
+    competition: fixture.competition,
+    roundName: fixture.roundName,
     fixtureId,
     week,
-    homeTeamId,
-    awayTeamId,
-    homeTeam: teams[homeTeamId]?.name || homeTeamId,
-    awayTeam: teams[awayTeamId]?.name || awayTeamId,
+    homeTeamId: fixture.homeTeamId,
+    awayTeamId: fixture.awayTeamId,
+    homeTeam: teams[fixture.homeTeamId]?.name || fixture.homeTeamId,
+    awayTeam: teams[fixture.awayTeamId]?.name || fixture.awayTeamId,
     homeScore,
     awayScore,
     totalGoals,
@@ -444,13 +447,12 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
       state.fixtures[fixture.id] = result.fixture;
 
       const matchReport = createMatchReport(
+        fixture,
         fixture.id,
         week,
         preMatchPlayers,
         state.players,
         state.teams,
-        fixture.homeTeamId,
-        fixture.awayTeamId,
         result.fixture.homeScore ?? 0,
         result.fixture.awayScore ?? 0,
         result.events
@@ -498,11 +500,12 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
   }
 
   const finalTable = buildTable(state.teams);
-  const totalGoals = allMatches.reduce((sum, match) => sum + match.totalGoals, 0);
-  const yellowCards = allMatches.reduce((sum, match) => (
+  const leagueMatches = allMatches.filter(match => match.competition === 'League');
+  const totalGoals = leagueMatches.reduce((sum, match) => sum + match.totalGoals, 0);
+  const yellowCards = leagueMatches.reduce((sum, match) => (
     sum + match.cards.reduce((cardSum, card) => cardSum + card.yellowCards, 0)
   ), 0);
-  const redCards = allMatches.reduce((sum, match) => (
+  const redCards = leagueMatches.reduce((sum, match) => (
     sum + match.cards.reduce((cardSum, card) => cardSum + card.redCards, 0)
   ), 0);
   const lowScoringTeams = finalTable.filter(team => team.goalsFor < 20);
@@ -514,14 +517,14 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
     team.wins + team.draws + team.losses !== team.played ||
     team.wins * 3 + team.draws !== team.points
   ));
-  const seasonGoalCounts = countByPlayerId(allMatches.flatMap(match => (
+  const seasonGoalCounts = countByPlayerId(leagueMatches.flatMap(match => (
     match.scorers.map(scorer => ({
       playerId: scorer.playerId,
       name: scorer.name,
       value: scorer.goals,
     }))
   )));
-  const singlePlayerHauls = allMatches.flatMap(match => (
+  const singlePlayerHauls = leagueMatches.flatMap(match => (
     countByPlayerId(match.scorers.map(scorer => ({
       playerId: scorer.playerId,
       name: scorer.name,
@@ -541,19 +544,19 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
     seasonIndex,
     seed,
     summary: {
-      matches: allMatches.length,
+      matches: leagueMatches.length,
       totalGoals,
-      averageGoalsPerMatch: round(totalGoals / allMatches.length, 2),
+      averageGoalsPerMatch: round(totalGoals / leagueMatches.length, 2),
       yellowCards,
       redCards,
       topSinglePlayerGoalCount: Math.max(0, ...seasonGoalCounts.map(scorer => scorer.value)),
       auditCounts: {
-        scoreLogMismatches: allMatches.filter(match => match.auditFlags.includes('score_log_mismatch')).length,
-        highGoalMatches: allMatches.filter(match => match.auditFlags.includes('high_goal_match')).length,
-        bigMargins: allMatches.filter(match => match.auditFlags.includes('big_margin')).length,
+        scoreLogMismatches: leagueMatches.filter(match => match.auditFlags.includes('score_log_mismatch')).length,
+        highGoalMatches: leagueMatches.filter(match => match.auditFlags.includes('high_goal_match')).length,
+        bigMargins: leagueMatches.filter(match => match.auditFlags.includes('big_margin')).length,
         singlePlayerHauls: singlePlayerHauls.length,
-        multiYellowMatches: allMatches.filter(match => match.auditFlags.includes('multiple_yellows_same_player')).length,
-        redCardLogMismatches: allMatches.filter(match => match.auditFlags.includes('red_card_log_mismatch')).length,
+        multiYellowMatches: leagueMatches.filter(match => match.auditFlags.includes('multiple_yellows_same_player')).length,
+        redCardLogMismatches: leagueMatches.filter(match => match.auditFlags.includes('red_card_log_mismatch')).length,
         lowScoringTeams: lowScoringTeams.length,
         highScoringTeams: highScoringTeams.length,
         tableIntegrityIssues: tableIntegrityIssues.length,
@@ -573,8 +576,8 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
     finalTable,
     leaderboards: buildLeaderboards(state.players, state.teams),
     auditDetails: {
-      highGoalMatches: allMatches.filter(match => match.auditFlags.includes('high_goal_match')),
-      bigMargins: allMatches.filter(match => match.auditFlags.includes('big_margin')),
+      highGoalMatches: leagueMatches.filter(match => match.auditFlags.includes('high_goal_match')),
+      bigMargins: leagueMatches.filter(match => match.auditFlags.includes('big_margin')),
       singlePlayerHauls,
       lowScoringTeams,
       highScoringTeams,

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getTeamTheme } from '@/src/constants/teamColors';
+import { getDisplayKitColor, getDisplaySecondaryColor, getTeamTheme } from '@/src/constants/teamColors';
 import { useGameStore } from '@/src/store/gameStore';
 import { sortTeamsByDivisionAndName } from '@/src/core/leagueUtils';
 
@@ -9,7 +9,9 @@ export default function SettingsScreen() {
   const userTeamId = useGameStore(state => state.userTeamId);
   const teams = useGameStore(state => state.teams);
   const advanceWeek = useGameStore(state => state.advanceWeek);
+  const advanceMultipleWeeks = useGameStore(state => state.advanceMultipleWeeks);
   const skipToEndOfSeason = useGameStore(state => state.skipToEndOfSeason);
+  const isSeasonSkipInProgress = useGameStore(state => state.isSeasonSkipInProgress);
   const changeTeam = useGameStore(state => state.changeTeam);
   const initializeGame = useGameStore(state => state.initializeGame);
   const [showChangeTeam, setShowChangeTeam] = useState(false);
@@ -41,7 +43,6 @@ export default function SettingsScreen() {
               <Text style={styles.managerMeta}>
                 {manager.nationality} | Rep {manager.reputation}% | Fit {manager.clubFit}%
               </Text>
-              <Text style={styles.managerMeta}>{manager.tacticalIdentity}</Text>
             </View>
           )}
           <TouchableOpacity style={styles.primaryBtn} onPress={() => setShowChangeTeam(true)}>
@@ -58,15 +59,19 @@ export default function SettingsScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.devBtn, styles.warningBtn]}
-              onPress={() => {
-                advanceWeek(); advanceWeek(); advanceWeek(); advanceWeek(); advanceWeek();
-              }}
+              onPress={() => advanceMultipleWeeks(5)}
             >
               <Text style={[styles.devBtnText, styles.warningText]}>+5 Weeks</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={[styles.devBtn, styles.warningBtn]} onPress={skipToEndOfSeason}>
-            <Text style={[styles.devBtnText, styles.warningText]}>Skip Season</Text>
+          <TouchableOpacity
+            style={[styles.devBtn, styles.warningBtn, isSeasonSkipInProgress && styles.disabledBtn]}
+            onPress={skipToEndOfSeason}
+            disabled={isSeasonSkipInProgress}
+          >
+            <Text style={[styles.devBtnText, styles.warningText, isSeasonSkipInProgress && styles.disabledText]}>
+              {isSeasonSkipInProgress ? 'Skipping...' : 'Skip Season'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.devBtn, styles.dangerBtn]} onPress={handleResetSeason}>
             <Text style={[styles.devBtnText, styles.dangerText]}>Reset Season</Text>
@@ -91,8 +96,8 @@ export default function SettingsScreen() {
                       setShowChangeTeam(false);
                     }}
                     >
-                      <View style={[styles.kitChip, { backgroundColor: theme.primary }]} />
-                      <View style={[styles.kitChip, { backgroundColor: theme.secondary === '#FFFFFF' ? '#e2e8f0' : theme.secondary }]} />
+                      <View style={[styles.kitChip, { backgroundColor: getDisplayKitColor(theme.primary) }]} />
+                      <View style={[styles.kitChip, { backgroundColor: getDisplaySecondaryColor(theme.secondary) }]} />
                       <Text style={[styles.teamRowName, isCurrent && styles.currentText]}>{team.name}</Text>
                       <Text style={styles.teamRowDivision}>{team.division}</Text>
                       {isCurrent && <Text style={styles.currentBadge}>CURRENT</Text>}
@@ -156,6 +161,8 @@ const styles = StyleSheet.create({
   warningText: { color: '#F59E0B' },
   dangerBtn: { borderColor: '#ef4444' },
   dangerText: { color: '#ef4444' },
+  disabledBtn: { borderColor: '#475569' },
+  disabledText: { color: '#94a3b8' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: '#111827', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '75%', paddingBottom: 30 },
   sheetTitle: { fontSize: 18, fontWeight: '900', color: '#f8fafc', textAlign: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#1e293b' },

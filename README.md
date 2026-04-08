@@ -8,6 +8,7 @@ The current focus is a fast, inspectable match engine that can run full-season a
 
 - Slot-aware formations feed into possession phases, so shape affects build-up support, central shielding, width, final-third access, and box presence.
 - The English pyramid is bootstrapped from local JSON data in `src/data/english_league_players.json`, with Premier League, Championship, League One, and League Two each running their own fixture list and table.
+- FA Cup and Carabao Cup fixtures are also generated from the English clubs, and the calendar/match screens show competition and round labels.
 - The league screen now uses a country pager plus a vertical division reel, so future countries can be added without changing the screen structure again.
 - Every club now has a manager profile with reputation, trust, job security, preferred formations, tactical identity, and transfer style.
 - AI teams can adapt tactics and formations over the season, including back-3, back-4, and back-5 structures.
@@ -25,6 +26,7 @@ The current focus is a fast, inspectable match engine that can run full-season a
 - League and hub table views are filtered by the active division.
 - Use 7-player benches and formation maps for manual lineup continuity.
 - Run live match minutes or quick-sim fixtures.
+- Advance the week directly with the quick-sim week action when you want all fixtures in that round to resolve together.
 - Track league table, player stats, awards, budgets, transfers, morale, energy, suspensions, and weekly news.
 
 ## Scripts
@@ -64,6 +66,6 @@ npm run start
 
 ## Version
 
-Current version: `v3.2.2`
+Current version: `v3.2.3`
 
 See [CHANGELOG.md](./CHANGELOG.md) for release notes.

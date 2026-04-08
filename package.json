@@ -1,7 +1,7 @@
 {
   "name": "football-manager-sim",
   "main": "expo-router/entry",
-  "version": "3.2.2",
+  "version": "3.2.3",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -13,6 +13,7 @@
     "track:season": "tsx -r ./scripts/mock-env.js scripts/season_tracker.ts",
     "qa": "tsx -r ./scripts/mock-env.js scripts/autonomous_qa.ts",
     "turbo": "tsx -r ./scripts/mock-env.js scripts/turbo_sim.ts",
+    "bench:engine": "tsx -r ./scripts/mock-env.js scripts/engine_benchmark.ts",
     "test:regression": "tsx -r ./scripts/mock-env.js scripts/regression_checks.ts",
     "check:save": "tsx -r ./scripts/mock-env.js scripts/save_integrity_check.ts"
   },

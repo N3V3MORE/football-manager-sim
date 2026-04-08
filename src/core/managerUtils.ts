@@ -1,4 +1,5 @@
-import { Division, Formation, Manager, ManagerStatus } from '../models/types';
+import { Formation, LeagueId, Manager, ManagerStatus } from '../models/types';
+import { DEFAULT_LEAGUE_ID, getLeagueDefinition } from './domainRegistry';
 import { PremierLeagueManagerSource } from '../data/premier_league_managers';
 
 export const ratingToPercent = (value: number) => Math.max(0, Math.min(100, Math.round((value / 5) * 100)));
@@ -60,8 +61,8 @@ export const buildManager = (source: PremierLeagueManagerSource, teamId: string)
   },
 });
 
-const getGenericManagerIdentity = (division: Division, clubFit: number) => {
-  if (division === 'Premier League') {
+const getGenericManagerIdentity = (leagueId: LeagueId, clubFit: number) => {
+  if (leagueId === 'Premier League') {
     return {
       tacticalIdentity: clubFit >= 70 ? 'Balanced possession with a high defensive line' : 'Disciplined and direct',
       transferIdentity: 'Structured recruitment with selective upgrades',
@@ -69,7 +70,7 @@ const getGenericManagerIdentity = (division: Division, clubFit: number) => {
       preferredFormations: clubFit >= 70 ? ['4-3-3', '4-2-3-1'] : ['4-2-3-1', '4-4-2'],
     };
   }
-  if (division === 'Championship') {
+  if (leagueId === 'Championship') {
     return {
       tacticalIdentity: clubFit >= 68 ? 'Aggressive pressing and quick transitions' : 'Compact shape and counter attack',
       transferIdentity: 'Promotion-focused recruitment with loan market use',
@@ -77,7 +78,7 @@ const getGenericManagerIdentity = (division: Division, clubFit: number) => {
       preferredFormations: clubFit >= 68 ? ['4-2-3-1', '3-5-2'] : ['4-4-2', '4-2-3-1'],
     };
   }
-  if (division === 'League One') {
+  if (leagueId === 'League One') {
     return {
       tacticalIdentity: clubFit >= 64 ? 'Direct football with strong set-piece focus' : 'Compact shape and transition play',
       transferIdentity: 'Loans, free transfers and value signings',
@@ -96,11 +97,13 @@ const getGenericManagerIdentity = (division: Division, clubFit: number) => {
 export const buildGenericManager = (
   teamName: string,
   teamId: string,
-  division: Division,
+  leagueId: LeagueId,
   clubFit: number
 ): Manager => {
   const reputation = Math.max(35, Math.min(80, Math.round(45 + (clubFit * 0.5))));
-  const identity = getGenericManagerIdentity(division, clubFit);
+  const resolvedLeagueId = leagueId || DEFAULT_LEAGUE_ID;
+  const leagueLabel = getLeagueDefinition(resolvedLeagueId).displayName;
+  const identity = getGenericManagerIdentity(resolvedLeagueId, clubFit);
   const status: ManagerStatus = 'Permanent';
   const currentYear = new Date().getFullYear();
   return {
@@ -120,7 +123,7 @@ export const buildGenericManager = (
     transferIdentity: identity.transferIdentity,
     boardTrust: Math.max(30, Math.min(85, Math.round(clubFit * 0.8))),
     jobSecurity: Math.max(30, Math.min(85, Math.round(clubFit * 0.85))),
-    seasonExpectations: identity.seasonExpectations,
+    seasonExpectations: identity.seasonExpectations.replace('league', leagueLabel.toLowerCase()),
     clubFit,
     record: {
       played: 0,

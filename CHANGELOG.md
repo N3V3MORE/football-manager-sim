@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.2.3 - Add cup competitions and fix week flow
+
+What changed:
+- Added FA Cup and Carabao Cup fixtures from the English league pyramid.
+- Showed cup competition and round labels in the calendar and match screens.
+- Added a quick-sim week action and fixed live-match exit so the week advances cleanly after playing a fixture.
+- Kept cup fixtures out of league table updates and separated league-only tracker reporting from cup matches.
+
 ## v3.2.2 - Polish the league navigation
 
 What changed:

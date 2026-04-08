@@ -7,11 +7,24 @@ import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 import { getSlotsForFormation } from '../src/constants/formations';
 import { rebuildFormationMap, rebuildFormationSlotPlayers } from '../src/core/formationMapUtils';
 import {
+  getFixtureCompetitionId,
+  getTeamLeagueId,
+  registerCompetitionDefinition,
+  registerLeagueDefinition,
+} from '../src/core/domainRegistry';
+import {
   didConcedeInWindow,
   applyWindowedCleanSheets,
   qualifiesForWindowedCleanSheet,
 } from '../src/core/postMatchAccounting';
 import { advanceSeason } from '../src/core/seasonTransition';
+import { createEmptyTrophyCabinet } from '../src/core/trophyUtils';
+import { buildSimulationRuntime } from '../src/core/simulationRuntime';
+import {
+  compileMatchEffects,
+  registerPlayerTraitEffectModule,
+  registerTeamTacticEffectModule,
+} from '../src/core/tacticalEffects';
 import { Player } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
 
@@ -118,16 +131,37 @@ const checkLiveSentOffMinutes = () => {
   );
 };
 
+const checkCupCompetitionIntegration = () => {
+  const data = initGameData();
+  const cupFixture = Object.values(data.fixtures).find(fixture => getFixtureCompetitionId(fixture) !== 'League');
+  assert(cupFixture, 'Regression setup needs at least one cup fixture');
+
+  const homeBefore = data.teams[cupFixture!.homeTeamId];
+  const awayBefore = data.teams[cupFixture!.awayTeamId];
+  const result = quickSimMatch(cupFixture!.id, data.players, data.teams, data.fixtures, null);
+  const playedFixture = result.fixture;
+
+  assert(getFixtureCompetitionId(playedFixture) !== 'League', 'Cup fixture should stay marked as a cup');
+  assert(playedFixture.winnerTeamId, 'Cup fixture should resolve a winner');
+  assert(
+    result.teams[homeBefore.id].points === homeBefore.points &&
+      result.teams[awayBefore.id].points === awayBefore.points,
+    'Cup fixtures should not change league points'
+  );
+};
+
 const checkBranchGuards = () => {
   const matchEngine = readSource('src/core/matchEngine.ts');
   const gameStore = readSource('src/store/gameStore.ts');
+  const matchActions = readSource('src/store/actions/match.ts');
+  const liveMatchSource = `${gameStore}\n${matchActions}`;
 
   assert(
-    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\);[\s\S]*sendOffPlayer/.test(matchEngine),
+    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*(addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\)|incrementPlayerStatLocal\(playerId, 'yellowCards'\));[\s\S]*sendOffPlayer/.test(matchEngine),
     'Quick sim second-yellow branch must add yellow-card stat before red'
   );
   assert(
-    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\);[\s\S]*sendOffPlayer/.test(gameStore),
+    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\);[\s\S]*sendOffPlayer/.test(liveMatchSource),
     'Live sim second-yellow branch must add yellow-card stat before red'
   );
   assert(
@@ -135,7 +169,7 @@ const checkBranchGuards = () => {
     'Quick sim must pass formation shape into simulatePossession'
   );
   assert(
-    /buildTeamShapeProfile\(homeTeam, homeStarters\)[\s\S]*simulatePossession\([\s\S]*attShape,[\s\S]*defShape[\s\S]*\)/.test(gameStore),
+    /buildTeamShapeProfile\(homeTeam, homeStarters\)[\s\S]*simulatePossession\([\s\S]*attShape,[\s\S]*defShape[\s\S]*\)/.test(liveMatchSource),
     'Live sim must pass formation shape into simulatePossession'
   );
 };
@@ -184,7 +218,8 @@ const checkManagerProfilesLoaded = () => {
 const checkDivisionBootstrap = () => {
   const data = initGameData();
   const counts = Object.values(data.teams).reduce<Record<string, number>>((acc, team) => {
-    acc[team.division] = (acc[team.division] || 0) + 1;
+    const leagueId = getTeamLeagueId(team);
+    acc[leagueId] = (acc[leagueId] || 0) + 1;
     return acc;
   }, {});
 
@@ -200,7 +235,7 @@ const checkPromotionRelegation = () => {
 
   (['Premier League', 'Championship', 'League One', 'League Two'] as const).forEach(division => {
     const ordered = Object.values(teams)
-      .filter(team => team.division === division)
+      .filter(team => getTeamLeagueId(team) === division)
       .sort((a, b) => a.name.localeCompare(b.name));
 
     ordered.forEach((team, index) => {
@@ -217,9 +252,21 @@ const checkPromotionRelegation = () => {
     });
   });
 
-  const nextSeason = advanceSeason(data.players, teams, null, []);
+  const nextSeason = advanceSeason(
+    data.players,
+    teams,
+    data.fixtures,
+    data.cups,
+    null,
+    [],
+    1,
+    createEmptyTrophyCabinet(),
+    [],
+    []
+  );
   const nextCounts = Object.values(nextSeason.teams).reduce<Record<string, number>>((acc, team) => {
-    acc[team.division] = (acc[team.division] || 0) + 1;
+    const leagueId = getTeamLeagueId(team);
+    acc[leagueId] = (acc[leagueId] || 0) + 1;
     return acc;
   }, {});
 
@@ -230,16 +277,99 @@ const checkPromotionRelegation = () => {
   assert(nextCounts['League Two'] === 24, 'League Two should keep 24 teams after promotion/relegation');
 
   const championshipTop = Object.values(teams)
-    .filter(team => team.division === 'Championship')
+    .filter(team => getTeamLeagueId(team) === 'Championship')
     .sort((a, b) => b.points - a.points || b.goalsFor - a.goalsFor || a.name.localeCompare(b.name))
     .slice(0, 3);
   const premierBottom = Object.values(teams)
-    .filter(team => team.division === 'Premier League')
+    .filter(team => getTeamLeagueId(team) === 'Premier League')
     .sort((a, b) => a.points - b.points || a.goalsFor - b.goalsFor || a.name.localeCompare(b.name))
     .slice(0, 3);
 
-  assert(championshipTop.every(team => nextSeason.teams[team.id].division === 'Premier League'), 'Top Championship teams should be promoted');
-  assert(premierBottom.every(team => nextSeason.teams[team.id].division === 'Championship'), 'Bottom Premier League teams should be relegated');
+  assert(championshipTop.every(team => getTeamLeagueId(nextSeason.teams[team.id]) === 'Premier League'), 'Top Championship teams should be promoted');
+  assert(premierBottom.every(team => getTeamLeagueId(nextSeason.teams[team.id]) === 'Championship'), 'Bottom Premier League teams should be relegated');
+};
+
+const checkRegistryBackedDefinitions = () => {
+  registerLeagueDefinition({
+    id: 'Test League',
+    countryId: 'england',
+    displayName: 'Test League',
+    tier: 99,
+    teamCount: 10,
+    roundsPerOpponent: 2,
+    promotionSlots: 0,
+    relegationSlots: 0,
+    newsPriority: 1,
+  });
+  registerCompetitionDefinition({
+    id: 'Test Shield',
+    type: 'domestic-cup',
+    displayName: 'Test Shield',
+    countryScope: 'england',
+    trackedForTrophies: false,
+    fixtureStrategy: 'inactive',
+    roundNames: ['Final'],
+    startWeek: 1,
+    spacingWeeks: 1,
+  });
+
+  const data = initGameData();
+  assert(Object.values(data.teams).every(team => Boolean(team.leagueId)), 'Every team should have a leagueId');
+  assert(Object.values(data.fixtures).every(fixture => Boolean(fixture.competitionId)), 'Every fixture should have a competitionId');
+
+  const runtime = buildSimulationRuntime({
+    teams: data.teams,
+    players: data.players,
+    fixtures: data.fixtures,
+  });
+  assert(runtime.leagueDefinitionsById['Test League'], 'Registered leagues should be visible in runtime definitions');
+  assert(runtime.competitionDefinitionsById['Test Shield'], 'Registered competitions should be visible in runtime definitions');
+  assert((runtime.teamsByLeague['Premier League'] || []).length === 20, 'Runtime should index Premier League teams');
+  assert((runtime.fixturesByCompetition['League'] || []).length > 0, 'Runtime should index league fixtures');
+};
+
+const checkTacticAndTraitModuleRegistration = () => {
+  registerTeamTacticEffectModule({
+    id: 'test-system-module',
+    applies: ({ team }) => Boolean(team.tactics.systemIds?.includes('test-system')),
+    apply: effects => {
+      effects.chanceCreation.creatorBonusMultiplier *= 1.2;
+    },
+  });
+  registerPlayerTraitEffectModule({
+    id: 'test-trait-module',
+    applies: ({ traitCounts }) => Boolean(traitCounts['Test Trait']),
+    apply: effects => {
+      effects.energyDrain.multiplier *= 0.9;
+    },
+  });
+
+  const data = initGameData();
+  const team = Object.values(data.teams)[0];
+  const players = Object.values(data.players)
+    .filter(player => player.teamId === team.id)
+    .slice(0, 11);
+
+  const baseEffects = compileMatchEffects(
+    { ...team, tactics: { ...team.tactics, systemIds: [] } },
+    players.map(player => ({ ...player, traitIds: [] }))
+  );
+  const extendedEffects = compileMatchEffects(
+    { ...team, tactics: { ...team.tactics, systemIds: ['test-system'] } },
+    players.map((player, index) => ({
+      ...player,
+      traitIds: index === 0 ? ['Test Trait'] : [],
+    }))
+  );
+
+  assert(
+    extendedEffects.chanceCreation.creatorBonusMultiplier > baseEffects.chanceCreation.creatorBonusMultiplier,
+    'Registered team tactic modules should change compiled match effects'
+  );
+  assert(
+    extendedEffects.energyDrain.multiplier < baseEffects.energyDrain.multiplier,
+    'Registered player trait modules should change compiled match effects'
+  );
 };
 
 const checkStaleFormationMapRecoveryModel = () => {
@@ -366,6 +496,8 @@ const runRegressionChecks = () => {
   console.log('[OK] Clean-sheet window checks passed');
   checkLiveSentOffMinutes();
   console.log('[OK] Live sent-off minute check passed');
+  checkCupCompetitionIntegration();
+  console.log('[OK] Cup competition integration passed');
   checkBranchGuards();
   console.log('[OK] Second-yellow and shape parity guards passed');
   checkUserTeamProgressionDoesNotAdaptFormation();
@@ -376,6 +508,10 @@ const runRegressionChecks = () => {
   console.log('[OK] Division bootstrap check passed');
   checkPromotionRelegation();
   console.log('[OK] Promotion and relegation checks passed');
+  checkRegistryBackedDefinitions();
+  console.log('[OK] Registry-backed league and competition definitions passed');
+  checkTacticAndTraitModuleRegistration();
+  console.log('[OK] Tactical and trait effect registration passed');
   checkStaleFormationMapRecoveryModel();
   console.log('[OK] Stale formation-map recovery model passed');
   checkFormationMapRejectsWrongPositions();

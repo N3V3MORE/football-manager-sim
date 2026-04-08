@@ -1,5 +1,5 @@
 import {
-  StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, Pressable, Animated, PanResponder, type DimensionValue
+  StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, Pressable, PanResponder
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -9,6 +9,14 @@ import { Formation, Player, TeamTactics } from '@/src/models/types';
 import { getSlotsForFormation, Slot } from '@/src/constants/formations';
 import { getSlotFitScore, rebuildFormationMap, rebuildFormationSlotPlayers } from '@/src/core/formationMapUtils';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
+import {
+  DraggableDot,
+  getSlotPosition,
+  PITCH_DOT_SIZE,
+  PITCH_SLOT_HEIGHT,
+  PITCH_SLOT_WIDTH,
+  SlotBounds,
+} from '@/src/features/squad/components/DraggableDot';
 
 const FORMATIONS: Formation[] = [
   '4-3-3',
@@ -25,89 +33,30 @@ const FORMATIONS: Formation[] = [
   '4-3-2-1',
 ];
 
-const PITCH_SLOT_WIDTH = 68;
-const PITCH_SLOT_HEIGHT = 78;
-const PITCH_DOT_SIZE = 40;
+type SlotFitStatus = 'preferred' | 'alternate' | 'out';
 
-const getSlotPosition = (rowIdx: number, colIdx: number, rowLength: number, totalRows: number) => {
-  const rowPercent = totalRows > 1
-    ? 10 + (rowIdx / (totalRows - 1)) * 80
-    : 50;
-
-  return {
-    left: `${((colIdx + 1) / (rowLength + 1)) * 100}%` as DimensionValue,
-    top: `${rowPercent}%` as DimensionValue,
-  };
+const getPlayerSlotFitStatus = (player: Player, slot: Slot): SlotFitStatus => {
+  if (player.subPosition === slot.label) return 'preferred';
+  if (player.altPositions?.includes(slot.label)) return 'alternate';
+  return 'out';
 };
 
-const DraggableDot = ({
-  slot, assigned, getPosColor, onPress, onDragBegin, onDragEnd, setRef
-}: any) => {
-  const [dragging, setDragging] = useState(false);
-  const pan = useRef(new Animated.ValueXY()).current;
-  const assignedRef = useRef(assigned);
-  assignedRef.current = assigned;
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (e, gesture) => !!assignedRef.current && (Math.abs(gesture.dx) > 10 || Math.abs(gesture.dy) > 10),
-      onPanResponderGrant: () => {
-         setDragging(true);
-         onDragBegin();
-         pan.setOffset({ x: (pan.x as any)._value, y: (pan.y as any)._value });
-         pan.setValue({ x: 0, y: 0 });
-      },
-      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
-      onPanResponderRelease: (e, gesture) => {
-         setDragging(false);
-         pan.flattenOffset();
-         const swapped = onDragEnd(gesture.moveX, gesture.moveY);
-
-         if (swapped) {
-           pan.setValue({ x: 0, y: 0 });
-         } else {
-           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
-         }
-      }
-    })
-  ).current;
-
-  return (
-    <View ref={setRef} style={[styles.pitchDot, { zIndex: dragging ? 100 : 1, elevation: dragging ? 100 : 0 }]}>
-      <Animated.View
-        style={[styles.pitchDotDraggable, { transform: pan.getTranslateTransform() }]}
-        {...panResponder.panHandlers}
-      >
-        <TouchableOpacity 
-          style={styles.pitchDotTouch}
-          onPress={onPress} 
-          activeOpacity={0.8}
-          delayPressIn={50}
-          disabled={dragging}
-        >
-          <View style={[
-            styles.pitchDotCircle,
-            { backgroundColor: assigned ? getPosColor(slot.pos) : '#1e3a2f' },
-            !assigned && styles.pitchDotEmpty,
-          ]}>
-            <Text style={styles.pitchDotLabel}>
-              {assigned ? (assigned.subPosition || slot.pos).substring(0, 3) : slot.label}
-            </Text>
-          </View>
-          <Text style={[styles.pitchDotName, !assigned && { color: '#4ade80' }]} numberOfLines={1}>
-            {assigned ? assigned.name.split(' ').pop() : ''}
-          </Text>
-          {assigned && (
-             <View style={styles.pitchRatingBadge}>
-               <Text style={styles.pitchRatingText}>{assigned.overallRating}</Text>
-             </View>
-          )}
-        </TouchableOpacity>
-      </Animated.View>
-    </View>
-  );
+const getFitRatingColor = (fitStatus: SlotFitStatus) => {
+  switch (fitStatus) {
+    case 'preferred':
+    case 'alternate':
+      return '#22c55e';
+    default:
+      return '#ef4444';
+  }
 };
+
+const getSlotDisplayPosition = (player: Player, slot: Slot, fitStatus: SlotFitStatus) => (
+  fitStatus === 'alternate' ? slot.label : (player.subPosition || player.position)
+);
+
+type EditableTacticKey = 'mentality' | 'passingStyle' | 'tempo' | 'defensiveLine' | 'pressing';
+type EditableTacticOption = TeamTactics[EditableTacticKey];
 
 export default function SquadScreen() {
   const userTeamId    = useGameStore(s => s.userTeamId);
@@ -122,12 +71,13 @@ export default function SquadScreen() {
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [expandedCardId, setExpandedCardId]   = useState<string | null>(null);
   const [showFormationDrop, setShowFormationDrop] = useState(false);
+  const [formationBacklineFilter, setFormationBacklineFilter] = useState<'3' | '4' | '5'>('4');
   const [activeSlotIndex, setActiveSlotIndex] = useState<{ row: number; col: number } | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [activePane, setActivePane] = useState<'xi' | 'tactics'>('xi');
 
-  const slotRefs = useRef<Record<string, any>>({});
-  const slotBounds = useRef<Record<string, {x: number, y: number, w: number, h: number}>>({});
+  const slotRefs = useRef<Record<string, View | null>>({});
+  const slotBounds = useRef<Record<string, SlotBounds>>({});
 
   const myTeam  = userTeamId ? teams[userTeamId] : undefined;
   const mySquad = userTeamId
@@ -170,6 +120,23 @@ export default function SquadScreen() {
     return arr;
   }, [slots, starters, hasMap, formationMap]);
 
+  const starterSlotMeta = useMemo(() => {
+    const meta: Record<string, { slot: Slot; fitStatus: SlotFitStatus; displayPosition: string }> = {};
+    slots.forEach((row, rowIdx) => {
+      row.forEach((slot, colIdx) => {
+        const player = slotPlayers[rowIdx]?.[colIdx];
+        if (!player) return;
+        const fitStatus = getPlayerSlotFitStatus(player, slot);
+        meta[player.id] = {
+          slot,
+          fitStatus,
+          displayPosition: getSlotDisplayPosition(player, slot, fitStatus),
+        };
+      });
+    });
+    return meta;
+  }, [slotPlayers, slots]);
+
   useEffect(() => {
     if (!userTeamId || !hasMap) return;
     const rebuiltMap = rebuildFormationMap(slots, starters, formationMap);
@@ -178,12 +145,25 @@ export default function SquadScreen() {
     }
   }, [activeFormation, formationMap, hasMap, setFormation, slots, starters, userTeamId]);
 
+  const paneSwipeResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_event, gesture) => (
+        Math.abs(gesture.dx) > 24 && Math.abs(gesture.dx) > Math.abs(gesture.dy) + 8
+      ),
+      onPanResponderRelease: (_event, gesture) => {
+        if (gesture.dx < -40) setActivePane('tactics');
+        if (gesture.dx > 40) setActivePane('xi');
+      },
+    })
+  ).current;
+
   if (!userTeamId) return null;
 
   const measureSlots = () => {
      Object.keys(slotRefs.current).forEach(key => {
-        slotRefs.current[key]?.measure((x: number, y: number, w: number, h: number, px: number, py: number) => {
-           slotBounds.current[key] = { x: px, y: py, w, h };
+        const slotRef = slotRefs.current[key];
+        slotRef?.measure((x: number, y: number, w: number, h: number, px: number, py: number) => {
+          slotBounds.current[key] = { x: px, y: py, w, h };
         });
      });
   };
@@ -192,7 +172,7 @@ export default function SquadScreen() {
      setScrollEnabled(true);
      let closestKey: string | null = null;
      let minDistance = 50;
-     Object.entries(slotBounds.current).forEach(([k, b]: [string, any]) => {
+     Object.entries(slotBounds.current).forEach(([k, b]) => {
         const centerX = b.x + b.w / 2;
         const centerY = b.y + PITCH_DOT_SIZE / 2;
         const distance = Math.hypot(mx - centerX, my - centerY);
@@ -211,6 +191,7 @@ export default function SquadScreen() {
 
   const handleFormationSelect = (f: string) => {
     if (userTeamId) setFormation(userTeamId, f as Formation);
+    setFormationBacklineFilter((f.charAt(0) as '3' | '4' | '5') || '4');
     setShowFormationDrop(false);
   };
 
@@ -225,16 +206,34 @@ export default function SquadScreen() {
   };
 
 
-  const getPickerSections = (slot: Slot, currentOccupantId: string | null) => {
+  const getPickerSections = (slot: Slot, _currentOccupantId: string | null) => {
     const pool = mySquad.filter(p => !p.isStarting)
       .sort((a, b) => b.overallRating - a.overallRating);
 
-    const recommended = pool.filter(p => getSlotFitScore(p, slot) > -Infinity);
-    
-    const recIds = new Set(recommended.map(p => p.id));
-    const alternatives = pool.filter(p => !recIds.has(p.id) && p.position === slot.pos);
+    const scored = pool
+      .map(player => ({
+        player,
+        score: getSlotFitScore(player, slot),
+        fitStatus: getPlayerSlotFitStatus(player, slot),
+      }))
+      .filter(candidate => candidate.score > -Infinity)
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return b.player.overallRating - a.player.overallRating;
+      });
 
-    return { recommended, alternatives };
+    const recommended = scored
+      .filter(candidate => candidate.fitStatus !== 'out')
+      .map(candidate => candidate.player);
+    const alternatives = scored
+      .filter(candidate => candidate.fitStatus === 'out')
+      .map(candidate => candidate.player);
+
+    const recIds = new Set(recommended.map(player => player.id));
+    const extraAlternatives = pool.filter(player => !recIds.has(player.id) && player.position === slot.pos);
+    const mergedAlternatives = [...alternatives, ...extraAlternatives.filter(player => !alternatives.some(item => item.id === player.id))];
+
+    return { recommended, alternatives: mergedAlternatives };
   };
 
   const handleSlotPress = (rowIdx: number, colIdx: number) => {
@@ -289,6 +288,10 @@ export default function SquadScreen() {
     const isSuspended = item.matchesSuspended > 0;
     const isExhausted = item.energy < 70;
     const warningColor = (isSuspended || isExhausted) ? '#ef4444' : undefined;
+    const slotMeta = starterSlotMeta[item.id];
+    const displayPosition = slotMeta?.displayPosition || item.subPosition || item.position;
+    const positionColorKey = slotMeta?.slot.pos || item.position;
+    const ratingColor = slotMeta ? getFitRatingColor(slotMeta.fitStatus) : '#0f172a';
 
     return (
       <View key={item.id}>
@@ -302,8 +305,8 @@ export default function SquadScreen() {
           delayLongPress={400}
           activeOpacity={0.7}
         >
-          <View style={[styles.posTag, { backgroundColor: getPosColor(item.position) }]}>
-            <Text style={styles.posText}>{item.subPosition || item.position}</Text>
+          <View style={[styles.posTag, { backgroundColor: getPosColor(positionColorKey) }]}>
+            <Text style={styles.posText}>{displayPosition}</Text>
           </View>
           <View style={styles.playerMeta}>
             <Text style={[styles.playerName, warningColor && { color: warningColor }]} numberOfLines={1}>
@@ -312,8 +315,8 @@ export default function SquadScreen() {
             <Text style={styles.nationality}>{item.nationality} | {Math.floor(item.energy)}% Energy</Text>
           </View>
           <View style={styles.playerRowRight}>
-            <View style={styles.ratingBox}>
-              <Text style={styles.ratingText}>{item.overallRating}</Text>
+            <View style={[styles.ratingBox, slotMeta && styles.ratingBoxSlotFit, slotMeta && { borderColor: ratingColor }]}>
+              <Text style={[styles.ratingText, slotMeta && { color: ratingColor }]}>{item.overallRating}</Text>
             </View>
             {isBench && (
               <View style={styles.benchBadge}>
@@ -363,12 +366,12 @@ export default function SquadScreen() {
   const currentOccupant = activeSlotIndex !== null ? slotPlayers[activeSlotIndex.row]?.[activeSlotIndex.col] : null;
   const pickerSections = activeSlot ? getPickerSections(activeSlot, currentOccupant?.id ?? null) : null;
   const tactics = myTeam?.tactics;
+  const filteredFormations = FORMATIONS.filter(formation => formation.startsWith(`${formationBacklineFilter}-`));
 
   const renderTacticSection = (
     title: string,
-    key: keyof TeamTactics,
-    options: TeamTactics[keyof TeamTactics][],
-    descriptions: Record<string, string>
+    key: EditableTacticKey,
+    options: EditableTacticOption[]
   ) => {
     if (!tactics) return null;
 
@@ -389,7 +392,6 @@ export default function SquadScreen() {
             );
           })}
         </View>
-        <Text style={styles.tacticsHintText}>{descriptions[tactics[key]]}</Text>
       </View>
     );
   };
@@ -405,7 +407,13 @@ export default function SquadScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowFormationDrop(true)}>
+          <TouchableOpacity
+            style={styles.dropdownBtn}
+            onPress={() => {
+              setFormationBacklineFilter((activeFormation.charAt(0) as '3' | '4' | '5') || '4');
+              setShowFormationDrop(true);
+            }}
+          >
             <Text style={styles.dropdownLabel}>Formation</Text>
             <Text style={styles.dropdownValue}>{activeFormation}</Text>
             <Text style={styles.dropdownCaret}>v</Text>
@@ -427,79 +435,68 @@ export default function SquadScreen() {
           </View>
         </View>
 
-        {activePane === 'xi' ? (
-          <>
-            <View style={styles.pitchWrapper}>
-              {/* Football pitch */}
-              <View style={styles.pitch}>
-                <View style={styles.pitchOutline} />
+        <View {...paneSwipeResponder.panHandlers}>
+          {activePane === 'xi' ? (
+            <>
+              <View style={styles.pitchWrapper}>
+                {/* Football pitch */}
+                <View style={styles.pitch}>
+                  <View style={styles.pitchOutline} />
 
-                <View style={styles.pitchSlots}>
-                  {slots.map((row: Slot[], rowIdx: number) => (
-                    row.map((slot: Slot, colIdx: number) => {
-                        const assigned = slotPlayers[rowIdx]?.[colIdx];
-                        const slotKey = `${rowIdx}-${colIdx}`;
-                        const position = getSlotPosition(rowIdx, colIdx, row.length, slots.length);
-                        return (
-                           <View key={slotKey} style={[styles.pitchSlotAnchor, position]}>
-                             <DraggableDot
-                                slot={slot}
-                                assigned={assigned}
-                                getPosColor={getPosColor}
-                                onPress={() => handleSlotPress(rowIdx, colIdx)}
-                                onDragBegin={() => { setScrollEnabled(false); measureSlots(); }}
-                                onDragEnd={(mx: number, my: number) => handleDragEnd(rowIdx, colIdx, mx, my)}
-                                setRef={(r: any) => { if (r) slotRefs.current[slotKey] = r; }}
-                             />
-                           </View>
-                        );
-                      })
-                  ))}
+                  <View style={styles.pitchSlots}>
+                    {slots.map((row: Slot[], rowIdx: number) => (
+                      row.map((slot: Slot, colIdx: number) => {
+                          const assigned = slotPlayers[rowIdx]?.[colIdx];
+                          const fitStatus = assigned ? getPlayerSlotFitStatus(assigned, slot) : null;
+                          const ratingColor = fitStatus ? getFitRatingColor(fitStatus) : undefined;
+                          const displayPosition = assigned && fitStatus
+                            ? getSlotDisplayPosition(assigned, slot, fitStatus)
+                            : undefined;
+                          const slotKey = `${rowIdx}-${colIdx}`;
+                          const position = getSlotPosition(rowIdx, colIdx, row.length, slots.length);
+                          return (
+                            <View key={slotKey} style={[styles.pitchSlotAnchor, position]}>
+                              <DraggableDot
+                                  slot={slot}
+                                  assigned={assigned}
+                                  getPosColor={getPosColor}
+                                  displayPositionLabel={displayPosition}
+                                  ratingTextColor={ratingColor}
+                                  onPress={() => handleSlotPress(rowIdx, colIdx)}
+                                  onDragBegin={() => { setScrollEnabled(false); measureSlots(); }}
+                                  onDragEnd={(mx: number, my: number) => handleDragEnd(rowIdx, colIdx, mx, my)}
+                                  setRef={(ref: View | null) => { slotRefs.current[slotKey] = ref; }}
+                              />
+                            </View>
+                          );
+                        })
+                    ))}
+                  </View>
                 </View>
               </View>
-            </View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Substitutes ({bench.length}/7)</Text>
-              {bench.length === 0 && <Text style={styles.emptyNote}>Long-press a reserve to designate as sub</Text>}
-              {bench.map(p => renderCompactPlayer(p, false, false, true))}
-            </View>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Substitutes ({bench.length}/7)</Text>
+                {bench.length === 0 && <Text style={styles.emptyNote}>Long-press a reserve to designate as sub</Text>}
+                {bench.map(p => renderCompactPlayer(p, false, false, true))}
+              </View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Reserves ({reserves.length})</Text>
-              {reserves.length === 0 && <Text style={styles.emptyNote}>All players assigned to XI or bench</Text>}
-              {reserves.map(p => renderCompactPlayer(p, false, false, false))}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Reserves ({reserves.length})</Text>
+                {reserves.length === 0 && <Text style={styles.emptyNote}>All players assigned to XI or bench</Text>}
+                {reserves.map(p => renderCompactPlayer(p, false, false, false))}
+              </View>
+            </>
+          ) : (
+            <View style={styles.tacticsPane}>
+              {renderTacticSection('Mentality', 'mentality', ['Defensive', 'Balanced', 'Attacking'])}
+              {renderTacticSection('Passing Style', 'passingStyle', ['Short', 'Mixed', 'Direct'])}
+              {renderTacticSection('Tempo', 'tempo', ['Slow', 'Normal', 'Fast'])}
+              {renderTacticSection('Defensive Line', 'defensiveLine', ['Deep', 'Standard', 'High'])}
+              {renderTacticSection('Pressing', 'pressing', ['None', 'Medium', 'High'])}
             </View>
-          </>
-        ) : (
-          <View style={styles.tacticsPane}>
-            {renderTacticSection('Mentality', 'mentality', ['Defensive', 'Balanced', 'Attacking'], {
-              Defensive: 'Focus on shape and discipline. Lower goal threat but 15% better defense.',
-              Balanced: 'Standard approach. No specific stat bonuses or penalties.',
-              Attacking: 'Push players forward. Increased shooting accuracy but vulnerable to counters.',
-            })}
-            {renderTacticSection('Passing Style', 'passingStyle', ['Short', 'Mixed', 'Direct'], {
-              Short: 'Patient buildup. Higher pass completion but fewer direct balls.',
-              Mixed: 'A balanced blend of short and direct passing.',
-              Direct: 'Bypass midfield more often. More through-balls, more risk.',
-            })}
-            {renderTacticSection('Tempo', 'tempo', ['Slow', 'Normal', 'Fast'], {
-              Slow: 'Control the game and conserve more energy.',
-              Normal: 'Standard rhythm and frequency of play.',
-              Fast: 'Higher intensity and chance creation, but burns more energy.',
-            })}
-            {renderTacticSection('Defensive Line', 'defensiveLine', ['Deep', 'Standard', 'High'], {
-              Deep: 'Protect space behind the defense but concede more midfield territory.',
-              Standard: 'Balanced defensive positioning.',
-              High: 'Compress the pitch, but risk through-balls behind.',
-            })}
-            {renderTacticSection('Pressing', 'pressing', ['None', 'Medium', 'High'], {
-              None: 'Sit off and conserve energy.',
-              Medium: 'Press selectively.',
-              High: 'Aggressive pressure with higher energy cost.',
-            })}
-          </View>
-        )}
+          )}
+        </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -509,8 +506,22 @@ export default function SquadScreen() {
         <Pressable style={styles.modalOverlay} onPress={() => setShowFormationDrop(false)}>
           <View style={styles.dropdownModal}>
             <Text style={styles.dropdownModalTitle}>Choose Formation</Text>
+            <View style={styles.variantRow}>
+              {(['3', '4', '5'] as const).map(backline => {
+                const isActive = formationBacklineFilter === backline;
+                return (
+                  <TouchableOpacity
+                    key={backline}
+                    style={[styles.variantBtn, isActive && styles.variantBtnActive]}
+                    onPress={() => setFormationBacklineFilter(backline)}
+                  >
+                    <Text style={[styles.variantText, isActive && styles.variantTextActive]}>{backline} Back</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {FORMATIONS.map(f => {
+              {filteredFormations.map(f => {
                 const isSelectedBase = baseFormation === f;
                 return (
                   <View key={f}>
@@ -575,7 +586,7 @@ export default function SquadScreen() {
                '- Tap any non-starting player in Reserves to add them to the Bench.\n\n' +
                '- Long-press a Bench player to move them back to Reserves.\n\n' +
                '- Use the Formation dropdown to switch formations.\n\n' +
-               '- Set DEFEND / BALANCED / ATTACK strategy to adjust your team\'s style.'}
+               '- Swipe left/right on the squad area to switch between Starting XI and Tactics.'}
             </Text>
             <TouchableOpacity
               onPress={() => setShowInfo(false)}
@@ -650,19 +661,6 @@ const styles = StyleSheet.create({
     marginTop: -(PITCH_DOT_SIZE / 2),
     alignItems: 'center',
   },
-  pitchDot:     { alignItems: 'center', width: PITCH_SLOT_WIDTH },
-  pitchDotDraggable: { alignItems: 'center', width: PITCH_SLOT_WIDTH },
-  pitchDotTouch: { alignItems: 'center', width: PITCH_SLOT_WIDTH + 20 },
-  pitchDotCircle: {
-    width: PITCH_DOT_SIZE, height: PITCH_DOT_SIZE, borderRadius: PITCH_DOT_SIZE / 2,
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)',
-  },
-  pitchDotEmpty: { borderStyle: 'dotted', borderColor: '#4ade80' },
-  pitchDotLabel: { color: '#fff', fontSize: 9, fontWeight: '900' },
-  pitchDotName:  { color: '#fff', fontSize: 9, marginTop: 4, textAlign: 'center', fontWeight: '700', width: PITCH_SLOT_WIDTH + 20, alignSelf: 'center' },
-  pitchRatingBadge: { backgroundColor: '#cbd5e1', alignSelf: 'center', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 3, marginTop: 3 },
-  pitchRatingText: { fontSize: 9, fontWeight: '900', color: '#0f172a' },
 
   // Player cards
   section:       { paddingHorizontal: 12, paddingTop: 4 },
@@ -685,6 +683,7 @@ const styles = StyleSheet.create({
   nationality:   { fontSize: 10, color: '#64748b', fontWeight: '600' },
   playerRowRight:{ flexDirection: 'row', alignItems: 'center', gap: 6 },
   ratingBox:     { backgroundColor: '#cbd5e1', width: 30, height: 30, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+  ratingBoxSlotFit: { backgroundColor: '#111827', borderWidth: 1 },
   ratingText:    { color: '#0f172a', fontWeight: '900', fontSize: 13 },
   benchBadge:      { backgroundColor: '#1e3a5f', paddingVertical: 3, paddingHorizontal: 7, borderRadius: 6, borderWidth: 1, borderColor: '#3B82F6' },
   benchBadgeText:  { color: '#93c5fd', fontSize: 10, fontWeight: '900' },
@@ -710,7 +709,6 @@ const styles = StyleSheet.create({
   tacticsOptBtnActive: { backgroundColor: '#38bdf8' },
   tacticsOptText: { color: '#94a3b8', fontSize: 13, fontWeight: '800' },
   tacticsOptTextActive: { color: '#0f172a' },
-  tacticsHintText: { color: '#475569', fontSize: 11, fontStyle: 'italic', paddingHorizontal: 4, lineHeight: 16 },
 
   // Formation dropdown modal
   modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: 40 },

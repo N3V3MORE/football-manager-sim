@@ -11,9 +11,16 @@ type PlayerStatKey = 'goals' | 'assists' | 'cleanSheets' | 'yellowCards' | 'redC
 export default function StatsScreen() {
   const players = useGameStore(state => state.players);
   const teams = useGameStore(state => state.teams);
+  const userTeamId = useGameStore(state => state.userTeamId);
   const [expandedPane, setExpandedPane] = useState<string | null>(null);
 
-  const allPlayers = Object.values(players);
+  const userDivision = userTeamId ? teams[userTeamId]?.division : undefined;
+  const divisionTeamIds = new Set(
+    Object.values(teams)
+      .filter(team => !userDivision || team.division === userDivision)
+      .map(team => team.id)
+  );
+  const allPlayers = Object.values(players).filter(player => divisionTeamIds.has(player.teamId));
 
   const topScorers = [...allPlayers]
     .filter(p => p.goals > 0)
@@ -90,7 +97,7 @@ export default function StatsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <PageHeader title="League Stats" backLabel="< Hub" onBack={() => router.replace('/')} />
+      <PageHeader title={userDivision ? `${userDivision} Stats` : 'League Stats'} backLabel="< Hub" onBack={() => router.replace('/')} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {renderPane('Golden Boot', 'goals', topScorers, 'goals')}

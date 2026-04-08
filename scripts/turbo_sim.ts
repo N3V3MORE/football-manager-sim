@@ -2,6 +2,22 @@ import { initGameData } from '../src/utils/initGame';
 import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
 import { getSeasonWeekLimit } from '../src/core/leagueUtils';
+import { advanceCupCompetitions } from '../src/core/cupUtils';
+import { getFixtureCompetitionId, isLeagueCompetitionId } from '../src/core/domainRegistry';
+import {
+  appendRuntimeFixtures,
+  buildSimulationRuntime,
+  getRuntimeFixturesForWeek,
+  refreshRuntimeTeamPlayerIds,
+  refreshRuntimeTeamsByLeague,
+} from '../src/core/simulationRuntime';
+
+const getNextFixtureCounter = (fixtures: Record<string, unknown>) => (
+  Object.keys(fixtures).reduce((max, fixtureId) => {
+    const numericId = Number(fixtureId.slice(1));
+    return Number.isFinite(numericId) && numericId > max ? numericId : max;
+  }, 0) + 1
+);
 
 async function runTurboSim(seasons = 500) {
   console.log(`\nSTARTING TURBO SIMULATION (${seasons} seasons)`);
@@ -16,20 +32,40 @@ async function runTurboSim(seasons = 500) {
       players: data.players,
       teams: data.teams,
       fixtures: data.fixtures,
+      cups: data.cups,
       currentWeek: 1,
       news: [] as string[],
     };
+    let runtime = buildSimulationRuntime(state);
     const seasonWeeks = getSeasonWeekLimit(state.fixtures);
 
     for (let week = 1; week <= seasonWeeks; week++) {
-      const weekFixtures = Object.values(state.fixtures).filter(fixture => fixture.week === week);
+      const weekFixtures = getRuntimeFixturesForWeek(runtime, state.fixtures, week);
 
       for (const fixture of weekFixtures) {
-        const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures);
+        const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures, null, {
+          captureEvents: false,
+          runtime,
+        });
         state.players = result.players;
         state.teams = result.teams;
         state.fixtures[fixture.id] = result.fixture;
         totalMatches++;
+      }
+
+      const shouldProcessCupProgression = weekFixtures.some(fixture => !isLeagueCompetitionId(getFixtureCompetitionId(fixture))) ||
+        Object.values(state.cups).some(cup => !cup.completed && cup.scheduledWeek <= week);
+      if (shouldProcessCupProgression) {
+        const previousFixtures = state.fixtures;
+        const cupProgression = advanceCupCompetitions(
+          state.fixtures,
+          state.cups,
+          week,
+          getNextFixtureCounter(state.fixtures)
+        );
+        appendRuntimeFixtures(runtime, previousFixtures, cupProgression.fixtures);
+        state.fixtures = cupProgression.fixtures;
+        state.cups = cupProgression.cupStates;
       }
 
       const progression = computeWeeklyProgression(
@@ -37,7 +73,9 @@ async function runTurboSim(seasons = 500) {
         state.players,
         state.teams,
         state.fixtures,
-        state.news
+        state.news,
+        null,
+        { generateNews: false, runtime }
       );
       state.players = progression.players;
       state.teams = progression.teams;
@@ -47,6 +85,8 @@ async function runTurboSim(seasons = 500) {
       const transfers = computeWeeklyTransfers(state.players, state.teams, null);
       state.players = transfers.players;
       state.teams = transfers.teams;
+      refreshRuntimeTeamPlayerIds(runtime, state.players);
+      refreshRuntimeTeamsByLeague(runtime, state.teams);
     }
 
     if (season % 50 === 0 || season === seasons) {

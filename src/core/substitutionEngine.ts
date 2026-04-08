@@ -1,6 +1,7 @@
 import { Player, Team } from '../models/types';
 import { RoleTag } from './matchTypes';
 import { inferRoleTag } from './matchUtils';
+import { compileMatchEffects } from './tacticalEffects';
 
 export const applySubstitutions = (
   starters: Player[],
@@ -15,11 +16,13 @@ export const applySubstitutions = (
   const scoreDiff = goalsFor - goalsAgainst;
   const isChasing = scoreDiff < 0;
   const isProtectingLead = scoreDiff > 0;
+  const effects = compileMatchEffects(team, starters);
   let maxSubs = 2;
   if (isChasing) maxSubs = 3 + Math.floor(Math.random() * 3);
   else if (isProtectingLead) maxSubs = 2 + Math.floor(Math.random() * 3);
   else if (team.tactics.mentality === 'Attacking') maxSubs = 3 + Math.floor(Math.random() * 2);
   else if (team.tactics.mentality === 'Defensive') maxSubs = 2 + Math.floor(Math.random() * 2);
+  maxSubs += Math.round(effects.substitutionBias.attacking - effects.substitutionBias.defensive);
   maxSubs = Math.min(5, bench.length, maxSubs);
   const usedBench = new Set<string>();
   const usedOff = new Set<string>();
