@@ -33,6 +33,14 @@ const REAL_TEAMS = [
   { name: 'Wolves',             class: 'C' },
 ];
 
+export const buildDefaultUserTactics = (): TeamTactics => ({
+  mentality: 'Balanced',
+  passingStyle: 'Mixed',
+  tempo: 'Normal',
+  defensiveLine: 'Standard',
+  pressing: 'Medium',
+});
+
 const getRandomTactics = () => {
   const mentalities: TeamTactics['mentality'][] = ['Defensive', 'Balanced', 'Attacking'];
   const passingStyles: TeamTactics['passingStyle'][] = ['Short', 'Mixed', 'Direct'];
@@ -239,6 +247,8 @@ const buildPlayerRecord = (rp: SourcePlayerRow, teamId: string, playerId: string
     cleanSheets: 0,
     yellowCards: 0,
     redCards: 0,
+    seasonStatsByScope: {},
+    previousSeasonStatsByScope: {},
     nationality: rp.nationality || 'Unknown',
     ...(rawTraitString ? { playerTraits: rawTraitString } : {}),
     ...(traitIds && traitIds.length > 0 ? { traitIds } : {}),
@@ -318,7 +328,7 @@ export const initGameData = (userTeamName?: string) => {
       activeFormation: '4-3-3',
       form: [],
       tactics: teamData.name === userTeamName 
-        ? { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' }
+        ? buildDefaultUserTactics()
         : getRandomTactics(),
       budget: getBudgetForClass(teamData.class),
       boardApproval: deriveInitialBoardApproval(manager),
@@ -416,7 +426,7 @@ export const initGameData = (userTeamName?: string) => {
         activeFormation: manager.preferredFormations[0] || '4-2-3-1',
         form: [],
         tactics: club.clubName === userTeamName
-          ? { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' }
+          ? buildDefaultUserTactics()
           : getRandomTactics(),
         budget: getBudgetForClass(club.teamClass),
         boardApproval: deriveInitialBoardApproval(manager),
@@ -441,7 +451,7 @@ export const initGameData = (userTeamName?: string) => {
 };
 
 /** Generate board objectives for the user's team. */
-export const generateBoardObjectives = (teamClass: string, teamName: string, leagueId: LeagueId = DEFAULT_LEAGUE_ID): BoardObjective[] =>
+export const generateBoardObjectives = (teamClass: string, leagueId: LeagueId = DEFAULT_LEAGUE_ID): BoardObjective[] =>
   buildTeamObjectives(teamClass, leagueId);
 
 

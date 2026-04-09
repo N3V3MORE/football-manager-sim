@@ -138,7 +138,8 @@ export const getCurrentCompetitionStatuses = ({
     const cupState = cups[competitionId];
     if (!cupState) return [competitionId, 'Not active'];
     if (cupState.completed) {
-      return [competitionId, cupState.entrants[0] === userTeamId ? 'Winners' : 'Eliminated'];
+      const winnerTeamId = getCupWinnerTeamId(cups, competitionId);
+      return [competitionId, winnerTeamId === userTeamId ? 'Winners' : 'Eliminated'];
     }
     const stillInCup = cupState.entrants.includes(userTeamId) || cupState.currentRoundByeTeamId === userTeamId;
     return [competitionId, stillInCup ? `In ${cupState.roundName}` : 'Eliminated'];

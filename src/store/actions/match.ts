@@ -10,7 +10,7 @@ import {
   simulatePossession,
 } from '../../core/matchEngine';
 import { getFixtureCompetitionId, isLeagueCompetitionId } from '../../core/domainRegistry';
-import { addPlayerStat } from '../../core/matchUtils';
+import { getFixtureStatScopeId, recordPlayerScopedMinutes, recordPlayerScopedStat } from '../../core/playerStats';
 import { qualifiesForWindowedCleanSheet } from '../../core/postMatchAccounting';
 import { getTeamEnergyDrainMultiplier } from '../../core/tacticalEffects';
 import { Player, Team } from '../../models/types';
@@ -100,7 +100,8 @@ const applyLivePostMatchStats = (
   concededGoalMinutes: number[],
   oppGoals: number,
   isWin: boolean,
-  isDraw: boolean
+  isDraw: boolean,
+  statScopeId: string
 ) => {
   teamStarters.forEach(player => {
     const minutes = Math.max(0, Math.min(90, minuteMap[player.id] ?? 90));
@@ -123,10 +124,12 @@ const applyLivePostMatchStats = (
     if (minutes < 30) rating -= 0.3;
     rating = Math.max(1.0, Math.min(10.0, Math.round(rating * 10) / 10));
 
+    if (cleanSheetBonus > 0) {
+      recordPlayerScopedStat(players, player.id, statScopeId, 'cleanSheets', cleanSheetBonus);
+    }
+    recordPlayerScopedMinutes(players, player.id, statScopeId, minutes);
     players[player.id] = {
       ...players[player.id],
-      cleanSheets: players[player.id].cleanSheets + cleanSheetBonus,
-      minutesPlayed: (players[player.id].minutesPlayed || 0) + minutes,
       matchRatingHistory: [...(players[player.id].matchRatingHistory || []), rating],
     };
   });
@@ -179,6 +182,7 @@ export const createMatchActions = (set: SetState, get: GetState): Pick<GameStore
 
       const updatedPlayers = { ...state.players };
       const updatedFixture = { ...fixture };
+      const statScopeId = getFixtureStatScopeId(fixture);
       if (updatedFixture.homeScore === null) updatedFixture.homeScore = 0;
       if (updatedFixture.awayScore === null) updatedFixture.awayScore = 0;
 
@@ -236,9 +240,9 @@ export const createMatchActions = (set: SetState, get: GetState): Pick<GameStore
           if (!player || sentOffPlayers.has(playerId)) return;
           updatedPlayers[playerId] = {
             ...player,
-            redCards: player.redCards + 1,
             matchesSuspended: 3,
           };
+          recordPlayerScopedStat(updatedPlayers, playerId, statScopeId, 'redCards');
           sentOffPlayers.add(playerId);
           sentOffMinutes[playerId] = minute;
           eventMsg = message;
@@ -266,8 +270,8 @@ export const createMatchActions = (set: SetState, get: GetState): Pick<GameStore
             updatedFixture.awayScore!++;
             awayGoalMinutes.push(minute);
           }
-          if (res.scorer) addPlayerStat(updatedPlayers, res.scorer.id, 'goals');
-          if (res.assister) addPlayerStat(updatedPlayers, res.assister.id, 'assists');
+          if (res.scorer) recordPlayerScopedStat(updatedPlayers, res.scorer.id, statScopeId, 'goals');
+          if (res.assister) recordPlayerScopedStat(updatedPlayers, res.assister.id, statScopeId, 'assists');
         }
         if (res.foul) {
           if (!isLeagueCompetitionId(getFixtureCompetitionId(fixture))) {
@@ -278,13 +282,13 @@ export const createMatchActions = (set: SetState, get: GetState): Pick<GameStore
               if (res.foul.type === 'Y') {
                 if (matchYellowCards.has(playerId)) {
                   if (Math.random() < ENGINE_CONFIG.SECOND_YELLOW_RED_CHANCE) {
-                    addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+                    recordPlayerScopedStat(updatedPlayers, playerId, statScopeId, 'yellowCards');
                     sendOffPlayer(playerId, `${res.foul.player.name} receives a second yellow and is sent off.`);
                   } else {
                     eventMsg = `${res.foul.player.name} avoids a second yellow after the foul.`;
                   }
                 } else {
-                  addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+                  recordPlayerScopedStat(updatedPlayers, playerId, statScopeId, 'yellowCards');
                   matchYellowCards.add(playerId);
                 }
               } else {
@@ -342,6 +346,7 @@ export const createMatchActions = (set: SetState, get: GetState): Pick<GameStore
       );
 
       const updatedPlayers = { ...state.players };
+      const statScopeId = getFixtureStatScopeId(fixture);
 
       const hScore = fixture.homeScore || 0;
       const aScore = fixture.awayScore || 0;
@@ -355,7 +360,8 @@ export const createMatchActions = (set: SetState, get: GetState): Pick<GameStore
         awayGoalMinutes,
         aScore,
         hScore > aScore,
-        hScore === aScore
+        hScore === aScore,
+        statScopeId
       );
       applyLivePostMatchStats(
         updatedPlayers,
@@ -364,7 +370,8 @@ export const createMatchActions = (set: SetState, get: GetState): Pick<GameStore
         homeGoalMinutes,
         hScore,
         aScore > hScore,
-        aScore === hScore
+        aScore === hScore,
+        statScopeId
       );
 
       const updatedFixture = { ...fixture, isPlayed: true };

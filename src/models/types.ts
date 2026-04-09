@@ -122,6 +122,15 @@ export interface PlayerStats {
   [key: string]: number | undefined; // For detailed micro-stats
 }
 
+export interface PlayerCompetitionStats {
+  minutesPlayed: number;
+  goals: number;
+  assists: number;
+  cleanSheets: number;
+  yellowCards: number;
+  redCards: number;
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -150,6 +159,8 @@ export interface Player {
   cleanSheets: number;
   yellowCards: number;
   redCards: number;
+  seasonStatsByScope: Record<string, PlayerCompetitionStats>;
+  previousSeasonStatsByScope: Record<string, PlayerCompetitionStats>;
   nationality: string;
   playerTraits?: string;
   traitIds?: string[];

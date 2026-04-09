@@ -91,7 +91,8 @@ const checkCleanSheetWindows = () => {
     { [shortSubbedBeforeGoal.id]: 29, [qualifiedBeforeGoal.id]: 60, [playedThroughGoal.id]: 90 },
     [61],
     1,
-    updatedPlayers
+    updatedPlayers,
+    LEAGUE_IDS.PREMIER_LEAGUE
   );
 
   assert(updatedPlayers[shortSubbedBeforeGoal.id].cleanSheets === 0, 'Short subbed-off player should not get clean sheet');
@@ -175,7 +176,7 @@ const checkBranchGuards = () => {
     'Quick sim second-yellow branch must add yellow-card stat before red'
   );
   assert(
-    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\);[\s\S]*sendOffPlayer/.test(liveMatchSource),
+    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*(addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\)|recordPlayerScopedStat\(updatedPlayers, playerId, statScopeId, 'yellowCards'\));[\s\S]*sendOffPlayer/.test(liveMatchSource),
     'Live sim second-yellow branch must add yellow-card stat before red'
   );
   assert(

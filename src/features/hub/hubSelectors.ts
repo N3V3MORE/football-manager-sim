@@ -1,6 +1,7 @@
 import { getSeasonWeekLimit, sortTeamsByTable } from '@/src/core/leagueUtils';
 import { CupCompetition, CupState, Fixture, Player, Team } from '@/src/models/types';
 import { getCompetitionSortRank, getFixtureCompetitionId } from '@/src/core/domainRegistry';
+import { getCupWinnerTeamId } from '@/src/core/trophyUtils';
 
 const SEASON_START = new Date(2024, 7, 10);
 
@@ -67,8 +68,9 @@ export const getCupPaneStatus = ({
   const cupState = cups[competition];
   if (!cupState) return { round: 'Not Active', opponent: 'TBD' };
   if (cupState.completed) {
+    const winnerTeamId = getCupWinnerTeamId(cups, competition);
     return {
-      round: cupState.entrants[0] === activeUserTeamId ? 'Winners' : 'Eliminated',
+      round: winnerTeamId === activeUserTeamId ? 'Winners' : 'Eliminated',
       opponent: '-',
     };
   }
@@ -112,9 +114,9 @@ export const getMiniTableWindow = (
   if (myIndex < radius) endIdx = Math.min(sortedTeams.length - 1, radius * 2);
   else if (myIndex > sortedTeams.length - (radius + 1)) startIdx = Math.max(0, sortedTeams.length - (radius * 2 + 1));
 
-  return sortedTeams.slice(startIdx, endIdx + 1).map(team => ({
+  return sortedTeams.slice(startIdx, endIdx + 1).map((team, index) => ({
     ...team,
-    position: sortedTeams.findIndex(sorted => sorted.id === team.id) + 1,
+    position: startIdx + index + 1,
   }));
 };
 

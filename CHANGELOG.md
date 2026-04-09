@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.2.4 - Scoped season stats and screen cleanup
+
+What changed:
+- Split player season stats by league or competition scope so Premier League, FA Cup, and Carabao Cup numbers no longer share one leaderboard.
+- Preserved previous-season scoped stats across season rollover, so promoted or relegated clubs still see the old season under the correct league.
+- Reworked the stats screen to use scope chips for league and cup views, with clean-sheet leaders filtered to goalkeepers only.
+- Updated the hub season-stats summary to show a single top goalkeeper clean-sheet leader for the active scope.
+- Removed the squad swipe gesture to switch panes and kept the explicit Starting XI and Tactics controls.
+- Cleaned the settings screen by replacing the misleading objectives count with season/week context and removing manager style notes from that view.
+- Added scoped-stat hydration and regression coverage so old saves and both live/quick match paths stay consistent.
+
 ## v3.2.3 - Cups, engine foundations, and canonical world config
 
 What changed:

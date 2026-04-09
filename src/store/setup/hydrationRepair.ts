@@ -12,6 +12,7 @@ import {
   resolveCanonicalLeagueId,
 } from '../../core/domainRegistry';
 import { buildInitialCupStates } from '../../core/cupUtils';
+import { ensurePlayerCompetitionStatsShape } from '../../core/playerStats';
 import { extractTraitIds } from '../../core/tacticalEffects';
 import { createEmptyTrophyCabinet } from '../../core/trophyUtils';
 import { CupCompetition, CupState, Fixture, Player, SeasonResult, Team, TrophyCabinet, TrophyHistoryEntry } from '../../models/types';
@@ -58,7 +59,7 @@ const sanitizeTeam = (team: Team): Team => {
   };
 };
 
-const sanitizePlayer = (player: Player): Player => ({
+const sanitizePlayer = (player: Player): Player => ensurePlayerCompetitionStatsShape({
   ...player,
   traitIds: Array.isArray(player.traitIds) ? player.traitIds : extractTraitIds(player),
 });

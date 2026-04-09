@@ -6,6 +6,7 @@ import { buildQuickSimLineup } from './lineupEngine';
 import { buildFallbackShapeProfile, buildTeamShapeProfile } from './shapeEngine';
 import { applySubstitutions } from './substitutionEngine';
 import { applyWindowedCleanSheets } from './postMatchAccounting';
+import { getFixtureStatScopeId, recordPlayerScopedMinutes, recordPlayerScopedStat } from './playerStats';
 import { resolveCupWinnerTeamId } from './competitionUtils';
 import { getFixtureCompetitionId, isLeagueCompetitionId } from './domainRegistry';
 import { rebuildFormationMap } from './formationMapUtils';
@@ -429,6 +430,7 @@ export const quickSimMatch = (
   const updatedPlayers = { ...players };
   const updatedTeams = { ...teams };
   const matchEvents: string[] = [];
+  const statScopeId = getFixtureStatScopeId(fixture);
   const possessionCount = Math.max(1, Math.floor(options?.possessionCount || ENGINE_CONFIG.TOTAL_POSSESSIONS));
   const captureEvents = options?.captureEvents ?? true;
   const random = options?.random || options?.runtime?.random || Math.random;
@@ -474,9 +476,8 @@ export const quickSimMatch = (
     stat: PlayerCounterStat,
     amount = 1
   ) => {
-    const player = getMutablePlayer(playerId);
-    if (!player) return;
-    player[stat] += amount;
+    getMutablePlayer(playerId);
+    recordPlayerScopedStat(updatedPlayers, playerId, statScopeId, stat, amount);
   };
 
   const collectTeamPlayers = (
@@ -623,8 +624,8 @@ export const quickSimMatch = (
   const sendOffPlayer = (playerId: string, minute: number) => {
     const player = getMutablePlayer(playerId);
     if (!player || sentOffPlayers.has(playerId)) return;
-    player.redCards += 1;
     player.matchesSuspended = 3;
+    recordPlayerScopedStat(updatedPlayers, playerId, statScopeId, 'redCards');
     sentOffPlayers.add(playerId);
     sentOffMinutes[playerId] = minute;
     const wasHome = scaledHome.some(p => p.id === playerId);
@@ -736,9 +737,11 @@ export const quickSimMatch = (
         const player = getMutablePlayer(p.id);
         if (!player) return;
         player.energy = Math.max(0, player.energy - drain);
-        player.minutesPlayed = (player.minutesPlayed || 0) + minutes;
-        player.matchRatingHistory = player.matchRatingHistory
-          ? [...player.matchRatingHistory, rating]
+        recordPlayerScopedMinutes(updatedPlayers, p.id, statScopeId, minutes);
+        const nextPlayer = updatedPlayers[p.id];
+        if (!nextPlayer) return;
+        nextPlayer.matchRatingHistory = nextPlayer.matchRatingHistory
+          ? [...nextPlayer.matchRatingHistory, rating]
           : [rating];
     });
   };
@@ -751,7 +754,8 @@ export const quickSimMatch = (
     homeMinutes,
     awayGoalMinutes,
     aScore,
-    updatedPlayers
+    updatedPlayers,
+    statScopeId
   );
   applyWindowedCleanSheets(
     awayParticipants,
@@ -759,7 +763,8 @@ export const quickSimMatch = (
     awayMinutes,
     homeGoalMinutes,
     hScore,
-    updatedPlayers
+    updatedPlayers,
+    statScopeId
   );
   assignPostMatchStats(homeParticipants, homeMinutes, aScore, hScore > aScore, hScore === aScore, homeContext.energyDrainMultiplier);
   assignPostMatchStats(awayParticipants, awayMinutes, hScore, aScore > hScore, aScore === hScore, awayContext.energyDrainMultiplier);

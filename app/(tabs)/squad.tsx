@@ -1,5 +1,5 @@
 import {
-  StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, Pressable, PanResponder
+  StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, Pressable
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useRef, useMemo, useEffect } from 'react';
@@ -144,18 +144,6 @@ export default function SquadScreen() {
       setFormation(userTeamId, activeFormation as Formation);
     }
   }, [activeFormation, formationMap, hasMap, setFormation, slots, starters, userTeamId]);
-
-  const paneSwipeResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_event, gesture) => (
-        Math.abs(gesture.dx) > 24 && Math.abs(gesture.dx) > Math.abs(gesture.dy) + 8
-      ),
-      onPanResponderRelease: (_event, gesture) => {
-        if (gesture.dx < -40) setActivePane('tactics');
-        if (gesture.dx > 40) setActivePane('xi');
-      },
-    })
-  ).current;
 
   if (!userTeamId) return null;
 
@@ -435,7 +423,7 @@ export default function SquadScreen() {
           </View>
         </View>
 
-        <View {...paneSwipeResponder.panHandlers}>
+        <View>
           {activePane === 'xi' ? (
             <>
               <View style={styles.pitchWrapper}>
@@ -586,7 +574,7 @@ export default function SquadScreen() {
                '- Tap any non-starting player in Reserves to add them to the Bench.\n\n' +
                '- Long-press a Bench player to move them back to Reserves.\n\n' +
                '- Use the Formation dropdown to switch formations.\n\n' +
-               '- Swipe left/right on the squad area to switch between Starting XI and Tactics.'}
+               '- Use the Starting XI and Tactics buttons to switch panels.'}
             </Text>
             <TouchableOpacity
               onPress={() => setShowInfo(false)}

@@ -63,7 +63,15 @@ export default function MatchScreen() {
     }
   };
 
-  if (!fixture) return <Text>Loading...</Text>;
+  if (!fixture) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingWrap}>
+          <Text style={styles.loadingText}>Loading match...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const homeTeam = teams[fixture.homeTeamId];
   const awayTeam = teams[fixture.awayTeamId];
@@ -110,73 +118,109 @@ export default function MatchScreen() {
   };
 
   const currentFixture = fixtures[fixtureId];
+  const matchStateLabel =
+    matchFinished ? 'Full Time' :
+    isHalfTime ? 'Half Time' :
+    isPlaying ? 'Live' :
+    minute > 0 ? 'Paused' :
+    'Ready';
+  const matchStateColor =
+    matchFinished ? '#34d399' :
+    isHalfTime ? '#f59e0b' :
+    isPlaying ? '#38bdf8' :
+    '#94a3b8';
+  const minuteLabel =
+    matchFinished ? 'FT' :
+    isHalfTime ? 'HT' :
+    minute > 0 ? `${minute}'` :
+    'KO';
+  const controlHeadline =
+    matchFinished ? 'Match complete' :
+    isHalfTime ? 'Second half ready' :
+    isPlaying ? 'Simulation running' :
+    minute > 0 ? 'Simulation paused' :
+    'Ready for kick off';
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topNav}>
-          <TouchableOpacity onPress={handleExit} style={styles.exitBtn}>
-              <Text style={styles.exitText}>[ EXIT ]</Text>
-          </TouchableOpacity>
+        <TouchableOpacity onPress={handleExit} style={styles.exitBtn} activeOpacity={0.85}>
+          <Text style={styles.exitText}>Exit Match</Text>
+        </TouchableOpacity>
+        <View style={[styles.statusPill, { borderColor: `${matchStateColor}55`, backgroundColor: `${matchStateColor}15` }]}>
+          <Text style={[styles.statusPillText, { color: matchStateColor }]}>{matchStateLabel}</Text>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.headerTitle}>Match Simulation</Text>
-        <Text style={styles.stadiumText}>{stadium}</Text>
-        <Text style={styles.competitionText}>{getFixtureCompetitionLabel(currentFixture)}</Text>
-        <Text style={styles.minuteClock}>{minute}&apos;</Text>
-        
-        <View style={styles.scoreboard}>
-          <View style={styles.teamBox}>
-            <Text style={[styles.teamName, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
-            <Text style={styles.score}>
+        <View style={styles.heroCard}>
+          <Text style={styles.headerTitle}>Match Simulation</Text>
+          <Text style={styles.competitionText}>{getFixtureCompetitionLabel(currentFixture)}</Text>
+          <Text style={styles.stadiumText}>{stadium}</Text>
+          <Text style={[styles.minuteClock, { color: matchStateColor }]}>{minuteLabel}</Text>
+
+          <View style={styles.scoreboard}>
+            <View style={styles.teamBox}>
+              <Text style={[styles.teamName, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
+              <Text style={styles.score}>
                 {minute > 0 || currentFixture.isPlayed ? currentFixture.homeScore : '-'}
-            </Text>
-          </View>
-          <View style={styles.vsBox}>
-            <Text style={styles.vsText}>VS</Text>
-          </View>
-          <View style={styles.teamBox}>
-            <Text style={[styles.teamName, { color: awayPrimary }]}>{awayTeam.name}</Text>
-            <Text style={styles.score}>
+              </Text>
+            </View>
+            <View style={styles.vsBox}>
+              <Text style={styles.vsText}>VS</Text>
+            </View>
+            <View style={styles.teamBox}>
+              <Text style={[styles.teamName, { color: awayPrimary }]}>{awayTeam.name}</Text>
+              <Text style={styles.score}>
                 {minute > 0 || currentFixture.isPlayed ? currentFixture.awayScore : '-'}
-            </Text>
+              </Text>
+            </View>
           </View>
         </View>
 
-        <View style={styles.logBox}>
+        <View style={styles.feedCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Match Feed</Text>
+            <Text style={styles.sectionHint}>Latest incidents first</Text>
+          </View>
           {logs.map((log, idx) => (
-             <Text key={idx} style={[styles.logText, idx === 0 && styles.logTextLatest]}>
+            <View key={idx} style={[styles.logRow, idx === 0 && styles.logRowLatest]}>
+              <View style={[styles.logMarker, idx === 0 && styles.logMarkerLatest]} />
+              <Text style={[styles.logText, idx === 0 && styles.logTextLatest]}>
                 {log}
-             </Text>
+              </Text>
+            </View>
           ))}
         </View>
 
-        <View style={styles.lineupRow}>
-            <View style={styles.lineupCol}>
-                <Text style={[styles.lineupHeader, { color: homeTheme.primary }]}>Home XI</Text>
-                {homePlayers.map(p => (
-                    <View key={p.id} style={styles.lineupPlayerRow}>
-                        <View style={[styles.lineupPosPill, { backgroundColor: getPosColor(p.position) }]}>
-                            <Text style={styles.lineupPosText}>{p.subPosition || p.position}</Text>
-                        </View>
-                        <Text style={styles.lineupPlayerName} numberOfLines={1}>{p.name}</Text>
-                    </View>
-                ))}
+        <View style={styles.lineupCard}>
+          <Text style={[styles.lineupHeader, { color: homeTheme.primary }]}>Home XI</Text>
+          {homePlayers.map(p => (
+            <View key={p.id} style={styles.lineupPlayerRow}>
+              <View style={[styles.lineupPosPill, { backgroundColor: getPosColor(p.position) }]}>
+                <Text style={styles.lineupPosText}>{p.subPosition || p.position}</Text>
+              </View>
+              <Text style={styles.lineupPlayerName} numberOfLines={1}>{p.name}</Text>
             </View>
-            <View style={[styles.lineupCol, { alignItems: 'flex-end' }]}>
-                <Text style={[styles.lineupHeader, { color: awayPrimary, textAlign: 'right' }]}>Away XI</Text>
-                {awayPlayers.map(p => (
-                    <View key={p.id} style={[styles.lineupPlayerRow, { flexDirection: 'row-reverse' }]}>
-                        <View style={[styles.lineupPosPill, { backgroundColor: getPosColor(p.position) }]}>
-                            <Text style={styles.lineupPosText}>{p.subPosition || p.position}</Text>
-                        </View>
-                        <Text style={[styles.lineupPlayerName, { textAlign: 'right', marginRight: 6, marginLeft: 0 }]} numberOfLines={1}>{p.name}</Text>
-                    </View>
-                ))}
-            </View>
+          ))}
         </View>
 
-        <View style={styles.buttonContainer}>
+        <View style={styles.lineupCard}>
+          <Text style={[styles.lineupHeader, { color: awayPrimary }]}>Away XI</Text>
+          {awayPlayers.map(p => (
+            <View key={p.id} style={styles.lineupPlayerRow}>
+              <View style={[styles.lineupPosPill, { backgroundColor: getPosColor(p.position) }]}>
+                <Text style={styles.lineupPosText}>{p.subPosition || p.position}</Text>
+              </View>
+              <Text style={styles.lineupPlayerName} numberOfLines={1}>{p.name}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.actionCard}>
+          <Text style={styles.sectionTitle}>Controls</Text>
+          <Text style={styles.controlHeadline}>{controlHeadline}</Text>
+          <Text style={styles.controlHint}>Leaving mid-match will sim the rest automatically.</Text>
           {!isPlaying && !isHalfTime && !matchFinished && minute === 0 && (
             <TouchableOpacity style={styles.btnSimulate} onPress={handleStart}>
               <Text style={styles.btnText}>Kick Off</Text>
@@ -213,63 +257,82 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0f172a',
   },
+  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: '#94a3b8', fontSize: 16, fontWeight: '700' },
   topNav: {
-      paddingHorizontal: 20,
-      paddingTop: 10,
-      alignItems: 'flex-end',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   exitBtn: {
-      padding: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#111827',
   },
   exitText: {
-      color: '#ef4444',
-      fontWeight: 'bold',
-      fontSize: 16,
+    color: '#e2e8f0',
+    fontWeight: '900',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
+  statusPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  statusPillText: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
   scrollContent: {
-      padding: 24,
-      paddingTop: 10,
+    padding: 20,
+    paddingTop: 14,
+    paddingBottom: 40,
+  },
+  heroCard: {
+    backgroundColor: '#111827',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    padding: 18,
   },
   headerTitle: {
     color: '#fff',
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '900',
     textAlign: 'center',
     marginBottom: 4,
   },
   stadiumText: {
-      color: '#64748b',
-      fontSize: 14,
-      textAlign: 'center',
-      fontWeight: '600',
-      marginBottom: 12,
-      letterSpacing: 1,
+    color: '#94a3b8',
+    fontSize: 13,
+    textAlign: 'center',
+    fontWeight: '700',
+    marginBottom: 8,
   },
   competitionText: {
-      color: '#38bdf8',
-      fontSize: 12,
-      textAlign: 'center',
-      fontWeight: '800',
-      marginBottom: 10,
-      textTransform: 'uppercase',
-      letterSpacing: 1,
+    color: '#38bdf8',
+    fontSize: 11,
+    textAlign: 'center',
+    fontWeight: '900',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
   },
   minuteClock: {
-      color: '#ef4444',
-      fontSize: 32,
-      fontWeight: '900',
-      textAlign: 'center',
-      marginBottom: 20,
+    fontSize: 34,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginBottom: 16,
   },
   scoreboard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1e293b',
-    padding: 20,
+    backgroundColor: '#0f172a',
+    padding: 18,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#1e293b',
   },
   teamBox: {
     flex: 1,
@@ -294,79 +357,103 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
   },
-  logBox: {
+  feedCard: {
     marginTop: 24,
-    backgroundColor: '#1e293b',
+    backgroundColor: '#111827',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#334155',
-    minHeight: 120,
+    borderColor: '#1e293b',
   },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12 },
+  sectionTitle: { color: '#f8fafc', fontSize: 15, fontWeight: '900' },
+  sectionHint: { color: '#64748b', fontSize: 11, fontWeight: '700' },
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
+  },
+  logRowLatest: { borderTopWidth: 0, paddingTop: 0 },
+  logMarker: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#334155',
+    marginTop: 5,
+  },
+  logMarkerLatest: { backgroundColor: '#38bdf8' },
   logText: {
     color: '#94a3b8',
-    fontSize: 12,
-    marginBottom: 4,
+    fontSize: 13,
+    flex: 1,
+    lineHeight: 18,
   },
   logTextLatest: {
     color: '#38bdf8',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
-    marginBottom: 8,
   },
-  lineupRow: {
-      flexDirection: 'row',
-      marginTop: 24,
-      justifyContent: 'space-between',
-  },
-  lineupCol: {
-      flex: 1,
+  lineupCard: {
+    marginTop: 20,
+    backgroundColor: '#111827',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    padding: 16,
   },
   lineupHeader: {
-      fontSize: 14,
-      fontWeight: '900',
-      marginBottom: 12,
-      textTransform: 'uppercase',
+    fontSize: 14,
+    fontWeight: '900',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   lineupPlayerName: {
-      color: '#cbd5e1',
-      fontSize: 12,
-      marginBottom: 4,
+    color: '#cbd5e1',
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
   },
-  buttonContainer: {
-    marginTop: 48,
-    paddingBottom: 40,
+  actionCard: {
+    marginTop: 20,
+    backgroundColor: '#111827',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    padding: 16,
   },
+  controlHeadline: { color: '#e2e8f0', fontSize: 16, fontWeight: '900', marginTop: 8 },
+  controlHint: { color: '#64748b', fontSize: 12, marginTop: 6, marginBottom: 16, lineHeight: 18 },
   btnSimulate: {
     backgroundColor: '#38bdf8',
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 32,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
-    alignSelf: 'center',
     minWidth: 200,
   },
   btnPause: {
     backgroundColor: '#F59E0B',
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 32,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
-    alignSelf: 'center',
     minWidth: 200,
   },
   btnContinue: {
     backgroundColor: '#10B981',
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 32,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
-    alignSelf: 'center',
     minWidth: 200,
   },
   btnText: {
     color: '#0f172a',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
   },
   lineupPosPill: {
@@ -385,6 +472,6 @@ const styles = StyleSheet.create({
   lineupPlayerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 5,
+    marginBottom: 8,
   },
 });

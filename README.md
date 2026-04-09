@@ -18,6 +18,7 @@ The current focus is a fast, inspectable match engine that can run full-season a
 - Quick sim and live sim share the same tactical-shape inputs to reduce behavior drift.
 - Card accounting tracks first yellows, second-yellow reds, straight reds, suspensions, and red-card event logs.
 - Clean sheets are awarded from player on-pitch windows against conceded goal minutes, with a 60-minute qualification to avoid short defensive cameos skewing player stats.
+- Player season stats are now tracked per league or cup scope, and completed seasons keep their original competition buckets even after promotion or relegation.
 - Season tracker audits score-log consistency, red-card logs, multi-yellow matches, formation usage, tactical changes, and player/team stat leaders.
 
 ## Gameplay
@@ -26,6 +27,7 @@ The current focus is a fast, inspectable match engine that can run full-season a
 - Switch between Starting XI and Tactics inside the Squad tab.
 - Use the Settings tab for current-team controls and temporary dev tools.
 - League and hub table views are filtered by the active league.
+- Use the Stats screen scope chips to switch between league and cup leaderboards for the active or most recently completed season.
 - Use 7-player benches and formation maps for manual lineup continuity.
 - Run live match minutes or quick-sim fixtures.
 - Advance the week directly with the quick-sim week action when you want all fixtures in that round to resolve together.
@@ -70,6 +72,6 @@ npm run start
 
 ## Version
 
-Current version: `v3.2.3`
+Current version: `v3.2.4`
 
 See [CHANGELOG.md](./CHANGELOG.md) for release notes.

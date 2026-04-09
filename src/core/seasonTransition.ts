@@ -27,6 +27,7 @@ import {
 } from './leagueUtils';
 import { generateBoardObjectives } from '../utils/initGame';
 import { buildSeasonFixtures } from './seasonFixtureBuilder';
+import { resetPlayerSeasonStats } from './playerStats';
 import { ensureTrophyCabinetShape, getCupWinnerTeamId, recordTrophyWin } from './trophyUtils';
 
 const resetTeamStats = (team: Team): Team => ({
@@ -83,7 +84,7 @@ export const advanceSeason = (
   const nextPlayers = Object.fromEntries(
     Object.entries(players).map(([playerId, player]) => [
       playerId,
-      { ...player, matchesSuspended: 0 },
+      resetPlayerSeasonStats(player),
     ])
   );
 
@@ -188,7 +189,6 @@ export const advanceSeason = (
   const boardObjectives = userTeamId && resetTeams[userTeamId]
     ? generateBoardObjectives(
         resetTeams[userTeamId].clubClass || 'C',
-        resetTeams[userTeamId].name,
         getTeamLeagueId(resetTeams[userTeamId])
       )
     : [];

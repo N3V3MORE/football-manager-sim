@@ -14,13 +14,13 @@ import { COMPETITION_IDS, getCompetitionDisplayName, getFixtureCompetitionId, ge
 import { TeamColorBadge } from '@/src/features/hub/components/TeamColorBadge';
 import {
   getCupPaneStatus,
-  getDivisionSeasonLeaders,
   getMiniTableWindow,
   getTeamPosition,
   getUpcomingFixtures,
   weekToDate,
 } from '@/src/features/hub/hubSelectors';
-import { getExtraordinaryNewsItems, getLeaguePlayers, getLeagueTeams } from '@/src/features/world/worldSelectors';
+import { getPlayerStatValueForScope, getRankedPlayersForScope, resolveStatsView } from '@/src/features/stats/statSelectors';
+import { getExtraordinaryNewsItems, getLeagueTeams } from '@/src/features/world/worldSelectors';
 
 export default function HubScreen() {
   const router = useRouter();
@@ -32,6 +32,7 @@ export default function HubScreen() {
   const advanceWeek = useGameStore(state => state.advanceWeek);
   const news = useGameStore(state => state.news);
   const players = useGameStore(state => state.players);
+  const seasonResults = useGameStore(state => state.seasonResults);
 
   const myTeam = userTeamId ? teams[userTeamId] : null;
   const myLeagueId = myTeam?.leagueId;
@@ -46,6 +47,7 @@ export default function HubScreen() {
   const homeTeam = homeTeamId ? teams[homeTeamId] : null;
   const awayTeam = awayTeamId ? teams[awayTeamId] : null;
   const homeTheme = homeTeam ? getTeamTheme(homeTeam.name) : null;
+  const hasFixture = Boolean(myNextMatch && homeTeam && awayTeam);
 
   const handlePlayMatch = () => {
     if (!myNextMatch) {
@@ -54,13 +56,20 @@ export default function HubScreen() {
       router.push({ pathname: '/match', params: { fixtureId: myNextMatch.id } });
     }
   };
+  const handleSecondaryHeroAction = () => {
+    if (hasFixture) {
+      advanceWeek();
+      return;
+    }
+    router.push('/calendar');
+  };
 
   if (!myTeam) return <View style={styles.container}><Text style={{ color: '#fff', margin: 20 }}>Loading...</Text></View>;
 
   const myTheme = getTeamTheme(myTeam.name);
   const activeUserTeamId = userTeamId || '';
   const myLeagueTeams = getLeagueTeams(teams, myLeagueId);
-  const myLeaguePlayers = getLeaguePlayers(players, teams, myLeagueId);
+  const allPlayers = Object.values(players);
 
   const carabaoPane = getCupPaneStatus({
     competition: COMPETITION_IDS.CARABAO_CUP,
@@ -80,11 +89,25 @@ export default function HubScreen() {
   const latestNews = getExtraordinaryNewsItems(newsItems, teams, myLeagueId).slice(0, 3);
   const miniTable = getMiniTableWindow(myLeagueTeams, userTeamId);
   const upcomingFixtures = getUpcomingFixtures(fixtures, currentWeek, userTeamId);
-  const {
-    topScorer,
-    topAssister,
-    topCleanSheetGKs,
-  } = getDivisionSeasonLeaders(myLeaguePlayers);
+  const statsView = resolveStatsView({
+    players,
+    currentLeagueId: myLeagueId,
+    previousLeagueId: seasonResults[0]?.leagueId,
+  });
+  const activeStatsScopeId = statsView.defaultScopeId;
+  const activeStatsScopeLabel = statsView.scopeOptions.find(option => option.id === activeStatsScopeId)?.label;
+  const topScorer = activeStatsScopeId
+    ? getRankedPlayersForScope(allPlayers, activeStatsScopeId, 'goals', statsView.dataset, { limit: 1 })[0]
+    : undefined;
+  const topAssister = activeStatsScopeId
+    ? getRankedPlayersForScope(allPlayers, activeStatsScopeId, 'assists', statsView.dataset, { limit: 1 })[0]
+    : undefined;
+  const topGoalkeeper = activeStatsScopeId
+    ? getRankedPlayersForScope(allPlayers, activeStatsScopeId, 'cleanSheets', statsView.dataset, {
+        limit: 1,
+        filter: player => player.position === 'GK',
+      })[0]
+    : undefined;
 
   const myPosition = getTeamPosition(myLeagueTeams, userTeamId);
   const myRecord = `${myTeam.wins}W ${myTeam.draws}D ${myTeam.losses}L`;
@@ -105,6 +128,16 @@ export default function HubScreen() {
                 {myTeam.name}
               </Text>
               <Text style={styles.subtitle}>{myTheme.stadium} | Est. {myTheme.founded}</Text>
+            </View>
+          </View>
+          <View style={styles.headerMetaRow}>
+            <View style={styles.headerPill}>
+              <Text style={styles.headerPillText}>{myLeagueName}</Text>
+            </View>
+            <View style={[styles.headerPill, styles.headerPillAccent]}>
+              <Text style={[styles.headerPillText, styles.headerPillAccentText]}>
+                {Math.round(myTeam.boardApproval)}% approval
+              </Text>
             </View>
           </View>
 
@@ -134,11 +167,15 @@ export default function HubScreen() {
 
         {/* Breaking news */}
         <View style={styles.card}>
-          <Text style={[styles.cardTitle, { color: '#ef4444' }]}>Latest</Text>
+          <View style={styles.cardHeaderRow}>
+            <Text style={[styles.cardTitle, { color: '#ef4444', marginBottom: 0 }]}>Latest</Text>
+            <Text style={styles.cardHeaderMeta}>Newswire</Text>
+          </View>
           {latestNews.length > 0 ? (
             latestNews.map((n, idx) => (
               <View key={idx} style={styles.newsItem}>
-                <Text style={styles.newsTextFeatured}>- {n}</Text>
+                <View style={styles.newsMarker} />
+                <Text style={styles.newsTextFeatured}>{n}</Text>
               </View>
             ))
           ) : (
@@ -147,11 +184,15 @@ export default function HubScreen() {
         </View>
 
         {/* Next fixture hero card */}
-        <TouchableOpacity style={styles.heroMatchCard} onPress={handlePlayMatch} activeOpacity={0.85}>
-              {homeTeam && awayTeam ? (
-                <>
-                  <Text style={styles.heroCompetition}>{myNextMatch ? getFixtureCompetitionLabel(myNextMatch) : ''}</Text>
-                  <View style={styles.matchupRow}>
+        <View style={styles.heroMatchCard}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={[styles.cardTitle, { marginBottom: 0 }]}>Matchday Center</Text>
+            <Text style={styles.cardHeaderMeta}>Week {currentWeek}</Text>
+          </View>
+          {homeTeam && awayTeam ? (
+            <>
+              <Text style={styles.heroCompetition}>{myNextMatch ? getFixtureCompetitionLabel(myNextMatch) : ''}</Text>
+              <View style={styles.matchupRow}>
                 {/* Home team */}
                 <View style={styles.matchupTeam}>
                   <TeamColorBadge name={homeTeam.name} isUser={homeTeam.id === userTeamId} />
@@ -162,7 +203,7 @@ export default function HubScreen() {
 
                 <View style={styles.matchupVsBlock}>
                   <Text style={styles.matchupVs}>VS</Text>
-                  <Text style={styles.vsStadium}>{homeTheme?.stadium || 'TBD'}</Text>
+                  <Text style={styles.vsStadium}>{weekToDate(currentWeek)}</Text>
                 </View>
 
                 {/* Away team */}
@@ -173,22 +214,30 @@ export default function HubScreen() {
                   </View>
                 </View>
               </View>
-              <View style={styles.playBtnRow}>
-                <Text style={styles.heroPlayBtn}>Tap to play match</Text>
-              </View>
-              <View style={styles.quickSimRow}>
-                <TouchableOpacity style={styles.quickSimBtn} onPress={advanceWeek} activeOpacity={0.85}>
-                  <Text style={styles.quickSimText}>Quick Sim Week</Text>
+              <Text style={styles.heroVenueText}>{homeTheme?.stadium || 'TBD'}</Text>
+              <View style={styles.heroActionRow}>
+                <TouchableOpacity style={styles.heroPrimaryAction} onPress={handlePlayMatch} activeOpacity={0.85}>
+                  <Text style={styles.heroPrimaryActionText}>Open Match Center</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.heroSecondaryAction} onPress={handleSecondaryHeroAction} activeOpacity={0.85}>
+                  <Text style={styles.heroSecondaryActionText}>Quick Sim Week</Text>
                 </TouchableOpacity>
               </View>
             </>
           ) : (
-            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+            <View style={styles.noFixtureBlock}>
               <Text style={styles.matchupSubtext}>No fixture this week.</Text>
-              <Text style={styles.heroPlayBtn}>Tap to advance week</Text>
+              <View style={styles.heroActionRow}>
+                <TouchableOpacity style={styles.heroPrimaryAction} onPress={handlePlayMatch} activeOpacity={0.85}>
+                  <Text style={styles.heroPrimaryActionText}>Advance Week</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.heroSecondaryAction} onPress={handleSecondaryHeroAction} activeOpacity={0.85}>
+                  <Text style={styles.heroSecondaryActionText}>Open Calendar</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
-        </TouchableOpacity>
+        </View>
 
         <View style={styles.cupPaneRow}>
           <View style={styles.cupPane}>
@@ -300,16 +349,25 @@ export default function HubScreen() {
 
         {/* Season stats */}
         <TouchableOpacity style={styles.card} onPress={() => router.push('/stats')}>
-          <Text style={styles.cardTitle}>Season Stats</Text>
+          <View style={styles.cardHeaderRow}>
+            <Text style={[styles.cardTitle, { marginBottom: 0 }]}>Season Stats</Text>
+            {activeStatsScopeLabel ? <Text style={styles.cardHeaderMeta}>{activeStatsScopeLabel}</Text> : null}
+          </View>
           {[
-            { label: 'Top Scorer', name: topScorer ? topScorer.name : '-', stat: topScorer ? `${topScorer.goals} goals` : 'None yet' },
-            { label: 'Top Assister', name: topAssister ? topAssister.name : '-', stat: topAssister ? `${topAssister.assists} assists` : 'None yet' },
             {
-              label: 'Top 3 Clean Sheets (GK)',
-              name: topCleanSheetGKs.length > 0 ? topCleanSheetGKs.map(player => player.name).join(', ') : '-',
-              stat: topCleanSheetGKs.length > 0
-                ? topCleanSheetGKs.map(player => `${player.cleanSheets}`).join(', ')
-                : 'None yet'
+              label: 'Top Scorer',
+              name: topScorer ? topScorer.name : '-',
+              stat: topScorer && activeStatsScopeId ? `${getPlayerStatValueForScope(topScorer, activeStatsScopeId, 'goals', statsView.dataset)} goals` : 'None yet'
+            },
+            {
+              label: 'Top Assister',
+              name: topAssister ? topAssister.name : '-',
+              stat: topAssister && activeStatsScopeId ? `${getPlayerStatValueForScope(topAssister, activeStatsScopeId, 'assists', statsView.dataset)} assists` : 'None yet'
+            },
+            {
+              label: 'Top Goalkeeper',
+              name: topGoalkeeper ? topGoalkeeper.name : '-',
+              stat: topGoalkeeper && activeStatsScopeId ? `${getPlayerStatValueForScope(topGoalkeeper, activeStatsScopeId, 'cleanSheets', statsView.dataset)} clean sheets` : 'None yet'
             },
           ].map(({ label, name, stat }) => (
             <View key={label} style={styles.statLeaderRow}>
@@ -350,6 +408,18 @@ const styles = StyleSheet.create({
   kitBlock: { flex: 1 },
   teamName: { fontSize: 22, fontWeight: '900', letterSpacing: 0.5 },
   subtitle: { fontSize: 13, color: '#64748b', marginTop: 2, fontWeight: '600' },
+  headerMetaRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  headerPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+  },
+  headerPillAccent: { borderColor: '#0ea5e940', backgroundColor: '#0ea5e915' },
+  headerPillText: { color: '#94a3b8', fontSize: 11, fontWeight: '800' },
+  headerPillAccentText: { color: '#38bdf8' },
 
   // Stat chips
   statChipRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a', borderRadius: 10, padding: 10 },
@@ -364,8 +434,11 @@ const styles = StyleSheet.create({
     padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#1e293b',
   },
   cardTitle: { fontSize: 16, fontWeight: '900', marginBottom: 12, color: '#e2e8f0', letterSpacing: 0.5 },
-  newsItem: { marginBottom: 8 },
-  newsTextFeatured: { fontSize: 14, color: '#cbd5e1', lineHeight: 22, fontWeight: '600' },
+  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12 },
+  cardHeaderMeta: { color: '#64748b', fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.9 },
+  newsItem: { marginBottom: 10, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  newsMarker: { width: 8, height: 8, borderRadius: 999, backgroundColor: '#ef4444', marginTop: 7 },
+  newsTextFeatured: { flex: 1, fontSize: 14, color: '#cbd5e1', lineHeight: 22, fontWeight: '600' },
   smallTapText: { fontSize: 11, color: '#38bdf8', fontWeight: '700', marginTop: 10, textAlign: 'right' },
 
   // Hero match card
@@ -386,11 +459,27 @@ const styles = StyleSheet.create({
   matchupVs: { fontSize: 22, fontWeight: '900', color: '#334155' },
   vsStadium: { fontSize: 10, color: '#94a3b8', fontWeight: '700', marginTop: 4, textAlign: 'center' },
   matchupSubtext: { fontSize: 14, color: '#64748b', marginBottom: 8 },
-  playBtnRow: { borderTopWidth: 1, borderTopColor: '#1e293b', paddingTop: 12, alignItems: 'center' },
-  heroPlayBtn: { fontSize: 10, fontWeight: '900', color: '#38bdf8', letterSpacing: 1.2 },
-  quickSimRow: { alignItems: 'center', marginTop: 10 },
-  quickSimBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: '#1e293b', borderWidth: 1, borderColor: '#334155' },
-  quickSimText: { fontSize: 11, fontWeight: '800', color: '#cbd5e1', letterSpacing: 0.8, textTransform: 'uppercase' },
+  noFixtureBlock: { paddingVertical: 8, alignItems: 'center' },
+  heroVenueText: { color: '#94a3b8', fontSize: 12, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
+  heroActionRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  heroPrimaryAction: {
+    flex: 1,
+    backgroundColor: '#38bdf8',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  heroPrimaryActionText: { color: '#0f172a', fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8 },
+  heroSecondaryAction: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#334155',
+    alignItems: 'center',
+  },
+  heroSecondaryActionText: { color: '#cbd5e1', fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.8 },
 
   // Cup panes under play card
   cupPaneRow: {

@@ -15,7 +15,7 @@ import {
   SimulationRuntime,
 } from '../../core/simulationRuntime';
 import { createEmptyTrophyCabinet, ensureTrophyCabinetShape } from '../../core/trophyUtils';
-import { generateBoardObjectives, initGameData } from '../../utils/initGame';
+import { buildDefaultUserTactics, generateBoardObjectives, initGameData } from '../../utils/initGame';
 import { pauseGamePersistence, resumeGamePersistence } from '../setup';
 import { GameStore } from '../types';
 
@@ -183,8 +183,15 @@ export const createSeasonActions = (set: SetState, get: GetState): Pick<GameStor
     });
 
     const userTeam = data.teams[actualTeamId];
+    if (userTeam) {
+      data.teams[actualTeamId] = {
+        ...userTeam,
+        tactics: buildDefaultUserTactics(),
+      };
+    }
+
     const teamClass = data.teamClasses[actualTeamId] || 'C';
-    const objectives = userTeam ? generateBoardObjectives(teamClass, userTeam.name, getTeamLeagueId(userTeam)) : [];
+    const objectives = userTeam ? generateBoardObjectives(teamClass, getTeamLeagueId(userTeam)) : [];
 
     set({
       userTeamId: actualTeamId,
@@ -292,6 +299,14 @@ export const createSeasonActions = (set: SetState, get: GetState): Pick<GameStor
   },
 
   changeTeam: (teamId: string) => {
-    set({ userTeamId: teamId });
+    set(state => {
+      const team = state.teams[teamId];
+      if (!team) return state;
+
+      return {
+        userTeamId: teamId,
+        boardObjectives: generateBoardObjectives(team.clubClass || 'C', getTeamLeagueId(team)),
+      };
+    });
   },
 });

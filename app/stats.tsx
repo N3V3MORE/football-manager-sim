@@ -1,12 +1,12 @@
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Player } from '@/src/models/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PageHeader } from '@/components/ui/page-header';
-import { getLeagueDisplayName } from '@/src/core/domainRegistry';
-import { getLeaguePlayers, getUserLeagueId } from '@/src/features/world/worldSelectors';
+import { getPlayerStatValueForScope, getRankedPlayersForScope, resolveStatsView } from '@/src/features/stats/statSelectors';
+import { getUserLeagueId } from '@/src/features/world/worldSelectors';
 
 type PlayerStatKey = 'goals' | 'assists' | 'cleanSheets' | 'yellowCards' | 'redCards';
 
@@ -14,43 +14,67 @@ export default function StatsScreen() {
   const players = useGameStore(state => state.players);
   const teams = useGameStore(state => state.teams);
   const userTeamId = useGameStore(state => state.userTeamId);
+  const season = useGameStore(state => state.season);
+  const seasonResults = useGameStore(state => state.seasonResults);
   const [expandedPane, setExpandedPane] = useState<string | null>(null);
+  const [selectedScopeId, setSelectedScopeId] = useState<string | null>(null);
 
   const userLeagueId = getUserLeagueId(teams, userTeamId);
-  const allPlayers = getLeaguePlayers(players, teams, userLeagueId);
+  const previousLeagueId = seasonResults[0]?.leagueId;
+  const statsView = useMemo(() => resolveStatsView({
+    players,
+    currentLeagueId: userLeagueId,
+    previousLeagueId,
+  }), [players, previousLeagueId, userLeagueId]);
 
-  const topScorers = [...allPlayers]
-    .filter(p => p.goals > 0)
-    .sort((a, b) => b.goals - a.goals || b.overallRating - a.overallRating)
-    .slice(0, 10);
+  useEffect(() => {
+    if (!statsView.defaultScopeId) {
+      setSelectedScopeId(null);
+      return;
+    }
+    if (!selectedScopeId || !statsView.scopeOptions.some(option => option.id === selectedScopeId)) {
+      setSelectedScopeId(statsView.defaultScopeId);
+    }
+  }, [selectedScopeId, statsView.defaultScopeId, statsView.scopeOptions]);
 
-  const topAssisters = [...allPlayers]
-    .filter(p => p.assists > 0)
-    .sort((a, b) => b.assists - a.assists || b.overallRating - a.overallRating)
-    .slice(0, 10);
+  const activeScopeId = selectedScopeId || statsView.defaultScopeId;
+  const allPlayers = Object.values(players);
+  const activeScopeLabel = statsView.scopeOptions.find(option => option.id === activeScopeId)?.label || 'Stats';
+  const seasonSubtitle = statsView.dataset === 'current'
+    ? `Season ${season}`
+    : `Season ${Math.max(1, season - 1)} completed`;
 
-  const topCleanSheets = [...allPlayers]
-    .filter(p => p.position === 'GK' && p.cleanSheets && p.cleanSheets > 0)
-    .sort((a, b) => b.cleanSheets - a.cleanSheets || b.overallRating - a.overallRating)
-    .slice(0, 10);
+  const topScorers = activeScopeId
+    ? getRankedPlayersForScope(allPlayers, activeScopeId, 'goals', statsView.dataset, { limit: 10 })
+    : [];
 
-  const topYellowCards = [...allPlayers]
-    .filter(p => p.yellowCards && p.yellowCards > 0)
-    .sort((a, b) => b.yellowCards - a.yellowCards || b.overallRating - a.overallRating)
-    .slice(0, 10);
+  const topAssisters = activeScopeId
+    ? getRankedPlayersForScope(allPlayers, activeScopeId, 'assists', statsView.dataset, { limit: 10 })
+    : [];
 
-  const topRedCards = [...allPlayers]
-    .filter(p => p.redCards && p.redCards > 0)
-    .sort((a, b) => b.redCards - a.redCards || b.overallRating - a.overallRating)
-    .slice(0, 10);
+  const topCleanSheets = activeScopeId
+    ? getRankedPlayersForScope(allPlayers, activeScopeId, 'cleanSheets', statsView.dataset, {
+        limit: 10,
+        filter: player => player.position === 'GK',
+      })
+    : [];
+
+  const topYellowCards = activeScopeId
+    ? getRankedPlayersForScope(allPlayers, activeScopeId, 'yellowCards', statsView.dataset, { limit: 10 })
+    : [];
+
+  const topRedCards = activeScopeId
+    ? getRankedPlayersForScope(allPlayers, activeScopeId, 'redCards', statsView.dataset, { limit: 10 })
+    : [];
 
   const getStatValue = (item: Player, stat: PlayerStatKey) => {
+    if (!activeScopeId) return 0;
     switch (stat) {
-      case 'goals': return item.goals;
-      case 'assists': return item.assists;
-      case 'cleanSheets': return item.cleanSheets;
-      case 'yellowCards': return item.yellowCards;
-      case 'redCards': return item.redCards;
+      case 'goals': return getPlayerStatValueForScope(item, activeScopeId, 'goals', statsView.dataset);
+      case 'assists': return getPlayerStatValueForScope(item, activeScopeId, 'assists', statsView.dataset);
+      case 'cleanSheets': return getPlayerStatValueForScope(item, activeScopeId, 'cleanSheets', statsView.dataset);
+      case 'yellowCards': return getPlayerStatValueForScope(item, activeScopeId, 'yellowCards', statsView.dataset);
+      case 'redCards': return getPlayerStatValueForScope(item, activeScopeId, 'redCards', statsView.dataset);
       default: return 0;
     }
   };
@@ -94,9 +118,24 @@ export default function StatsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <PageHeader title={userLeagueId ? `${getLeagueDisplayName(userLeagueId)} Stats` : 'League Stats'} backLabel="< Hub" onBack={() => router.replace('/')} />
+      <PageHeader title={`${activeScopeLabel} Stats`} subtitle={seasonSubtitle} backLabel="< Hub" onBack={() => router.replace('/')} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.scopeRow}>
+          {statsView.scopeOptions.map(option => {
+            const isActive = option.id === activeScopeId;
+            return (
+              <TouchableOpacity
+                key={option.id}
+                style={[styles.scopeChip, isActive && styles.scopeChipActive]}
+                onPress={() => setSelectedScopeId(option.id)}
+              >
+                <Text style={[styles.scopeChipText, isActive && styles.scopeChipTextActive]}>{option.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         {renderPane('Golden Boot', 'goals', topScorers, 'goals')}
         {renderPane('Playmaker of the Season', 'assists', topAssisters, 'assists')}
         {renderPane('Golden Glove', 'cleanSheets', topCleanSheets, 'cleanSheets')}
@@ -115,6 +154,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
   },
   scroll: { paddingHorizontal: 16, paddingBottom: 16 },
+  scopeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12, marginBottom: 6 },
+  scopeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#1e293b',
+  },
+  scopeChipActive: { backgroundColor: '#38bdf8', borderColor: '#38bdf8' },
+  scopeChipText: { color: '#cbd5e1', fontSize: 12, fontWeight: '800' },
+  scopeChipTextActive: { color: '#0f172a' },
   card: {
     backgroundColor: '#1e293b',
     marginTop: 10,
