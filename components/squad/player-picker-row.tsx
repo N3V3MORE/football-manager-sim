@@ -1,0 +1,45 @@
+import React from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Player } from '@/src/models/types';
+import { getPositionColor } from '@/src/constants/positionColors';
+
+type PlayerPickerRowProps = {
+  item: Player;
+  onPress: () => void;
+};
+
+export function PlayerPickerRow({ item, onPress }: PlayerPickerRowProps) {
+  const isSuspended = item.matchesSuspended > 0;
+  const isExhausted = item.energy < 70;
+  const warningColor = (isSuspended || isExhausted) ? '#ef4444' : undefined;
+
+  return (
+    <TouchableOpacity style={[styles.pickerRow, warningColor && { borderColor: warningColor }]} onPress={onPress}>
+      <View style={[styles.modalPosPill, { backgroundColor: getPositionColor(item.position) }]}>
+        <Text style={styles.modalPosText}>{item.subPosition || item.position}</Text>
+      </View>
+      <View style={styles.playerMeta}>
+        <Text style={[styles.pickerName, warningColor && { color: warningColor }]} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.pickerNat}>{item.nationality} | {Math.floor(item.energy)}% NRG</Text>
+      </View>
+      <View style={styles.pickerRating}>
+        <Text style={styles.pickerRatingText}>{item.overallRating}</Text>
+      </View>
+      {item.isStarting && <Text style={styles.pickerStarter}>In Selection</Text>}
+      {isSuspended && <Text style={styles.suspensionText}> SUSP</Text>}
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  pickerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#334155', gap: 10 },
+  modalPosPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4, minWidth: 36, alignItems: 'center' },
+  modalPosText: { color: '#fff', fontSize: 10, fontWeight: '900' },
+  playerMeta: { flex: 1 },
+  pickerName: { flex: 1, fontSize: 14, fontWeight: '700', color: '#f1f5f9' },
+  pickerNat: { fontSize: 10, color: '#64748b', width: 60 },
+  pickerRating: { backgroundColor: '#cbd5e1', width: 32, height: 32, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+  pickerRatingText: { color: '#0f172a', fontWeight: '900', fontSize: 13 },
+  pickerStarter: { fontSize: 10, color: '#38bdf8', fontWeight: '900' },
+  suspensionText: { fontSize: 10, color: '#ef4444', fontWeight: 'bold' },
+});

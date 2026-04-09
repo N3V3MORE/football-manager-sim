@@ -1,8 +1,15 @@
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { Player } from '../models/types';
 import { PlayerCounterStat, RoleTag } from './matchTypes';
+import { RandomGenerator, resolveRandom } from './random';
 
-export const runDuel = (att: number, def: number, luck: number = 30) => {
+export const runDuel = (
+  att: number,
+  def: number,
+  luck: number = 30,
+  rng?: RandomGenerator
+) => {
+  const random = resolveRandom(rng);
   const curveStat = (s: number) => {
     const gamma = ENGINE_CONFIG.RATING_CURVE_GAMMA || 1.0;
     const clamped = Math.max(0, Math.min(100, s));
@@ -15,15 +22,23 @@ export const runDuel = (att: number, def: number, luck: number = 30) => {
       ? curved
       : ENGINE_CONFIG.STAT_COMPRESSION_BASE + (curved - ENGINE_CONFIG.STAT_COMPRESSION_BASE) * ENGINE_CONFIG.STAT_COMPRESSION_FACTOR;
   };
-  const rollA = compress(att) + (Math.random() * 2 - 1) * luck;
-  const rollB = compress(def) + (Math.random() * 2 - 1) * luck;
+  const rollA = compress(att) + (random() * 2 - 1) * luck;
+  const rollB = compress(def) + (random() * 2 - 1) * luck;
   return rollA > rollB;
 };
 
-export const weightedPick = <T>(items: T[], getWeight: (item: T) => number): T => {
+export const weightedPick = <T>(
+  items: T[],
+  getWeight: (item: T) => number,
+  rng?: RandomGenerator
+): T => {
+  if (items.length === 0) {
+    throw new RangeError('weightedPick requires at least one item.');
+  }
+  const random = resolveRandom(rng);
   const weights = items.map(item => Math.max(0.1, getWeight(item)));
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-  let roll = Math.random() * totalWeight;
+  let roll = random() * totalWeight;
 
   for (let i = 0; i < items.length; i++) {
     roll -= weights[i];
@@ -46,6 +61,7 @@ export const addPlayerStat = (
 
 export const inferRoleTag = (player: Player): RoleTag => {
   const raw = (player.subPosition || '').toUpperCase();
+  const alt = (player.altPositions || []).map(pos => pos.toUpperCase());
   if (player.position === 'GK') return 'GK';
   if (raw.includes('LWB') || raw.includes('RWB')) return 'WB';
   if (raw.includes('LB') || raw.includes('RB')) return 'FB';
@@ -56,7 +72,11 @@ export const inferRoleTag = (player: Player): RoleTag => {
   if (raw === 'LM' || raw === 'RM') return 'WIDE_MID';
   if (raw === 'LW' || raw === 'RW') return 'WINGER';
   if (raw === 'ST' || raw === 'CF') return 'ST';
-  if (player.position === 'DEF') return 'CB';
+  if (player.position === 'DEF') {
+    if (alt.some(pos => pos.includes('LWB') || pos.includes('RWB'))) return 'WB';
+    if (alt.some(pos => pos.includes('LB') || pos.includes('RB'))) return 'FB';
+    return 'CB';
+  }
   if (player.position === 'MID') return 'CM';
   return 'ST';
 };
@@ -99,3 +119,21 @@ export const getMoraleModifier = (teamPlayers: Player[]): number => {
   const avgMorale = teamPlayers.reduce((s, p) => s + p.morale, 0) / teamPlayers.length;
   return 1.0 + ((avgMorale - 50) / 50) * 0.05;
 };
+
+export const scaleLineupForMatch = (
+  players: Player[],
+  formMultiplier: number,
+  moraleMultiplier: number,
+  homeAdvantage = 1
+) => (
+  players.map(player => ({
+    ...player,
+    stats: {
+      ...player.stats,
+      passing: player.stats.passing * formMultiplier * moraleMultiplier * homeAdvantage,
+      shooting: player.stats.shooting * formMultiplier * moraleMultiplier * homeAdvantage,
+      defending: (player.stats.defending || 50) * formMultiplier * moraleMultiplier * homeAdvantage,
+      dribbling: (player.stats.dribbling || 50) * formMultiplier * moraleMultiplier * homeAdvantage,
+    },
+  }))
+);

@@ -1,6 +1,17 @@
 import { Player, Team } from '../models/types';
 import { RoleTag } from './matchTypes';
 import { inferRoleTag } from './matchUtils';
+import { RandomGenerator, resolveRandom } from './random';
+import { ENGINE_CONFIG } from '../config/engineConfig';
+
+type SubstitutionOptions = {
+  maxSubsOverride?: number;
+  minuteOverride?: number;
+  onSubstitution?: (offPlayer: Player, onPlayer: Player, minute: number) => void;
+  playerEntryMinutes?: Record<string, number>;
+};
+
+const substitutionEntryMinuteCache = new WeakMap<Record<string, number>, Record<string, number>>();
 
 export const applySubstitutions = (
   starters: Player[],
@@ -9,17 +20,27 @@ export const applySubstitutions = (
   playerMinutes: Record<string, number>,
   team: Team,
   goalsFor: number,
-  goalsAgainst: number
+  goalsAgainst: number,
+  rng?: RandomGenerator,
+  options?: SubstitutionOptions
 ) => {
+  const random = resolveRandom(rng);
+  const playerEntryMinutes = options?.playerEntryMinutes
+    || substitutionEntryMinuteCache.get(playerMinutes)
+    || {};
+  if (!options?.playerEntryMinutes && !substitutionEntryMinuteCache.has(playerMinutes)) {
+    substitutionEntryMinuteCache.set(playerMinutes, playerEntryMinutes);
+  }
   if (bench.length === 0) return;
   const scoreDiff = goalsFor - goalsAgainst;
   const isChasing = scoreDiff < 0;
   const isProtectingLead = scoreDiff > 0;
-  let maxSubs = 2;
-  if (isChasing) maxSubs = 3 + Math.floor(Math.random() * 3);
-  else if (isProtectingLead) maxSubs = 2 + Math.floor(Math.random() * 3);
-  else if (team.tactics.mentality === 'Attacking') maxSubs = 3 + Math.floor(Math.random() * 2);
-  else if (team.tactics.mentality === 'Defensive') maxSubs = 2 + Math.floor(Math.random() * 2);
+  let maxSubs = ENGINE_CONFIG.SUBS_BASE_MAX;
+  if (isChasing) maxSubs = 3 + Math.floor(random() * ENGINE_CONFIG.SUBS_CHASING_BONUS_RANGE);
+  else if (isProtectingLead) maxSubs = 2 + Math.floor(random() * ENGINE_CONFIG.SUBS_LEADING_BONUS_RANGE);
+  else if (team.tactics.mentality === 'Attacking') maxSubs = 3 + Math.floor(random() * ENGINE_CONFIG.SUBS_ATTACKING_BONUS_RANGE);
+  else if (team.tactics.mentality === 'Defensive') maxSubs = 2 + Math.floor(random() * ENGINE_CONFIG.SUBS_DEFENSIVE_BONUS_RANGE);
+  if (options?.maxSubsOverride !== undefined) maxSubs = options.maxSubsOverride;
   maxSubs = Math.min(5, bench.length, maxSubs);
   const usedBench = new Set<string>();
   const usedOff = new Set<string>();
@@ -29,8 +50,9 @@ export const applySubstitutions = (
   const preferredOnRoles: RoleTag[] = isChasing
     ? ['ST', 'WINGER', 'AM', 'CM']
     : (isProtectingLead ? ['DM', 'CB', 'FB', 'WB', 'CM'] : ['CM', 'AM', 'ST', 'DM']);
-  const minMinute = isChasing ? 50 : (isProtectingLead ? 60 : 55);
-  const maxMinute = isChasing ? 78 : (isProtectingLead ? 88 : 84);
+  const [minMinute, maxMinute] = isChasing
+    ? ENGINE_CONFIG.SUBS_CHASING_MINUTE_RANGE
+    : (isProtectingLead ? ENGINE_CONFIG.SUBS_LEADING_MINUTE_RANGE : ENGINE_CONFIG.SUBS_BALANCED_MINUTE_RANGE);
 
   for (let i = 0; i < maxSubs; i++) {
     const offPool = starters.filter(player =>
@@ -68,10 +90,17 @@ export const applySubstitutions = (
       })
       .sort((a, b) => b.score - a.score)[0].player;
 
-    const subMinute = minMinute + Math.floor(Math.random() * Math.max(1, maxMinute - minMinute + 1));
-    playerMinutes[offPlayer.id] = Math.min(playerMinutes[offPlayer.id] || 90, subMinute);
+    const subMinute = options?.minuteOverride ?? (minMinute + Math.floor(random() * Math.max(1, maxMinute - minMinute + 1)));
+    const offPlayerEntryMinute = playerEntryMinutes?.[offPlayer.id];
+    const offPlayerMinutes = playerMinutes[offPlayer.id] ?? 90;
+    playerMinutes[offPlayer.id] = offPlayerEntryMinute !== undefined
+      ? Math.max(0, subMinute - offPlayerEntryMinute)
+      : Math.min(offPlayerMinutes, subMinute);
+    if (playerEntryMinutes && offPlayerEntryMinute !== undefined) delete playerEntryMinutes[offPlayer.id];
+    if (playerEntryMinutes) playerEntryMinutes[onPlayer.id] = subMinute;
     playerMinutes[onPlayer.id] = Math.max(playerMinutes[onPlayer.id] || 0, 90 - subMinute);
     usedOff.add(offPlayer.id);
     usedBench.add(onPlayer.id);
+    options?.onSubstitution?.(offPlayer, onPlayer, subMinute);
   }
 };

@@ -1,5 +1,7 @@
-import { Player } from '../models/types';
+import { Player, TeamTactics } from '../models/types';
 import { addPlayerStat } from './matchUtils';
+import { RandomGenerator, resolveRandom } from './random';
+import { ENGINE_CONFIG } from '../config/engineConfig';
 
 export const CLEAN_SHEET_MINUTES_REQUIRED = 60;
 
@@ -10,7 +12,11 @@ export const didConcedeInWindow = (
   concededGoalsTotal: number
 ) => {
   if (windowEndMinute <= windowStartMinute) return true;
-  if (concededGoalMinutes.length === 0) return concededGoalsTotal > 0;
+  if (concededGoalMinutes.length === 0) {
+    if (concededGoalsTotal <= 0) return false;
+    // Without minute-level data, only deny clean sheets for full-match windows.
+    return windowStartMinute <= 0 && windowEndMinute >= 90;
+  }
   return concededGoalMinutes.some(minute => minute > windowStartMinute && minute <= windowEndMinute);
 };
 
@@ -45,4 +51,73 @@ export const applyWindowedCleanSheets = (
         addPlayerStat(updatedPlayers, player.id, 'cleanSheets');
       }
     });
+};
+
+type SharedPostMatchInput = {
+  teamParticipants: Player[];
+  teamStarterIds: Set<string>;
+  minuteMap: Record<string, number>;
+  concededGoalMinutes: number[];
+  concededGoalsTotal: number;
+  isWin: boolean;
+  isDraw: boolean;
+  teamTactics: TeamTactics;
+  updatedPlayers: Record<string, Player>;
+  rng?: RandomGenerator;
+  applyEnergyDrain?: boolean;
+};
+
+const clampToMatchMinutes = (value: number) => Math.max(0, Math.min(90, value));
+
+export const applySharedPostMatchAccounting = ({
+  teamParticipants,
+  teamStarterIds,
+  minuteMap,
+  concededGoalMinutes,
+  concededGoalsTotal,
+  isWin,
+  isDraw,
+  teamTactics,
+  updatedPlayers,
+  rng,
+  applyEnergyDrain = true,
+}: SharedPostMatchInput) => {
+  const random = resolveRandom(rng);
+  applyWindowedCleanSheets(
+    teamParticipants,
+    teamStarterIds,
+    minuteMap,
+    concededGoalMinutes,
+    concededGoalsTotal,
+    updatedPlayers
+  );
+
+  teamParticipants.forEach(player => {
+    const minutes = clampToMatchMinutes(minuteMap[player.id] || 0);
+    if (minutes <= 0) return;
+
+    const drainMultiplier =
+      (teamTactics.tempo === 'Fast' ? ENGINE_CONFIG.TEMPO_FAST_DRAIN_MULTIPLIER : 1.0) *
+      (teamTactics.pressing === 'High' ? ENGINE_CONFIG.PRESSING_HIGH_DRAIN_MULTIPLIER : 1.0);
+    const drain = ENGINE_CONFIG.BASE_POST_MATCH_ENERGY_DRAIN * (minutes / 90) * drainMultiplier;
+    let rating = ENGINE_CONFIG.BASE_MATCH_RATING + (random() * ENGINE_CONFIG.MATCH_RATING_RANDOM_SPREAD + ENGINE_CONFIG.MATCH_RATING_RANDOM_SHIFT);
+    if (isWin) rating += ENGINE_CONFIG.MATCH_RATING_WIN_BONUS;
+    if (isDraw) rating += ENGINE_CONFIG.MATCH_RATING_DRAW_BONUS;
+    if (!isWin && !isDraw) rating -= ENGINE_CONFIG.MATCH_RATING_LOSS_PENALTY;
+    if (concededGoalsTotal === 0 && (player.position === 'DEF' || player.position === 'GK')) {
+      rating += ENGINE_CONFIG.MATCH_RATING_CLEAN_SHEET_BONUS;
+    }
+    rating += (player.impactCoefficient - 1.0);
+    if (minutes < 30) rating -= ENGINE_CONFIG.MATCH_RATING_SHORT_CAMEO_PENALTY;
+    rating = Math.max(1.0, Math.min(10.0, Math.round(rating * 10) / 10));
+
+    updatedPlayers[player.id] = {
+      ...updatedPlayers[player.id],
+      energy: applyEnergyDrain
+        ? Math.max(0, updatedPlayers[player.id].energy - drain)
+        : updatedPlayers[player.id].energy,
+      minutesPlayed: (updatedPlayers[player.id].minutesPlayed || 0) + minutes,
+      matchRatingHistory: [...(updatedPlayers[player.id].matchRatingHistory || []), rating],
+    };
+  });
 };

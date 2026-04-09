@@ -124,6 +124,7 @@ export interface Team {
   form: string[];            // ['W', 'D', 'L', 'W', 'W']
   tactics: TeamTactics;
   budget: number;            // transfer budget in millions GBP
+  transferSpend: number;     // gross transfer spend in millions GBP this season
   boardApproval: number;     // 0 to 100
   lastStartingXI?: string[]; // player IDs
   formationMap?: Record<string, string>; // Maps slot coordinate 'row-col' to playerId

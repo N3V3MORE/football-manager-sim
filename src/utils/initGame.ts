@@ -46,36 +46,44 @@ const getRandomTactics = () => {
   };
 };
 
-type LowerLeaguePlayerRow = {
-  leagueId: number;
-  leagueName: Division;
-  clubName: string;
-  clubTeamId: number;
+type RawPlayerStats = {
+  pace: number;
+  shooting: number;
+  passing: number;
+  dribbling: number;
+  defending: number;
+  physic: number;
+  gk_diving?: number;
+  gk_handling?: number;
+  gk_kicking?: number;
+  gk_reflexes?: number;
+  gk_speed?: number;
+  gk_positioning?: number;
+};
+
+type BasePlayerRow = {
   name: string;
   longName?: string;
   position: Position;
   subPosition: string;
   altPositions: string[];
   overallRating: number;
-  marketValue: number;
+  marketValue?: number;
   age: number;
   nationality: string;
   clubJerseyNumber?: number | null;
-  stats: {
-    pace: number;
-    shooting: number;
-    passing: number;
-    dribbling: number;
-    defending: number;
-    physic: number;
-    gk_diving?: number;
-    gk_handling?: number;
-    gk_kicking?: number;
-    gk_reflexes?: number;
-    gk_speed?: number;
-    gk_positioning?: number;
-  };
+  stats: RawPlayerStats;
 };
+
+type LeaguePlayerRow = BasePlayerRow & {
+  leagueId: number;
+  leagueName: Division;
+  clubName: string;
+  clubTeamId: number;
+  playerTraits?: string;
+};
+
+type LowerLeaguePlayerRow = LeaguePlayerRow;
 
 const toLowerLeagueSourcePlayers = (rows: LowerLeaguePlayerRow[]) => rows.map(row => ({
   name: row.name,
@@ -172,7 +180,7 @@ const calculateImpactCoefficient = (overallRating: number) => {
   return 0.9 + ((overallRating - 70) * 0.01);
 };
 
-const buildPlayerRecord = (rp: any, teamId: string, playerId: string, includeLongName = false): Player => {
+const buildPlayerRecord = (rp: BasePlayerRow, teamId: string, playerId: string, includeLongName = false): Player => {
   const mv = rp.marketValue && rp.marketValue > 0 ? rp.marketValue : computeMarketValue(rp.overallRating, rp.age);
   return {
     id: playerId,
@@ -239,11 +247,12 @@ export const initGameData = (userTeamName?: string) => {
   const teamIds: string[] = [];
   const teamClasses: Record<string, string> = {}; // teamId -> class letter
 
-  const premierLeaguePlayers = (englishLeaguePlayers as any[]).filter(player => player.leagueId === 1);
-  const lowerLeaguePlayers = (englishLeaguePlayers as any[]).filter(
+  const sourcePlayers = englishLeaguePlayers as LeaguePlayerRow[];
+  const premierLeaguePlayers = sourcePlayers.filter(player => player.leagueId === 1);
+  const lowerLeaguePlayers = sourcePlayers.filter(
     player => player.leagueId === 11 || player.leagueId === 12 || player.leagueId === 13
   );
-  const playersByTeam: Record<string, any[]> = {};
+  const playersByTeam: Record<string, LeaguePlayerRow[]> = {};
   premierLeaguePlayers.forEach(player => {
     if (!playersByTeam[player.clubName]) playersByTeam[player.clubName] = [];
     playersByTeam[player.clubName].push(player);
@@ -283,11 +292,12 @@ export const initGameData = (userTeamName?: string) => {
         ? { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' }
         : getRandomTactics(),
       budget: getBudgetForClass(teamData.class),
+      transferSpend: 0,
       boardApproval: deriveInitialBoardApproval(manager),
     };
 
     const teamPlayers: Player[] = [];
-    let realPlayers = (playersByTeam[teamData.name] || []) as any[];
+    let realPlayers: BasePlayerRow[] = playersByTeam[teamData.name] || [];
     
     // Generate generic squad if missing from JSON
     if (realPlayers.length < 15) {
@@ -333,7 +343,7 @@ export const initGameData = (userTeamName?: string) => {
     }
   });
 
-  const lowerRows = lowerLeaguePlayers as LowerLeaguePlayerRow[];
+  const lowerRows = lowerLeaguePlayers;
   const lowerGroups = lowerRows.reduce<Record<Division, Record<string, LowerLeaguePlayerRow[]>>>((acc, row) => {
     if (!acc[row.leagueName]) acc[row.leagueName] = {};
     if (!acc[row.leagueName][row.clubName]) acc[row.leagueName][row.clubName] = [];
@@ -380,6 +390,7 @@ export const initGameData = (userTeamName?: string) => {
           ? { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' }
           : getRandomTactics(),
         budget: getBudgetForClass(club.teamClass),
+        transferSpend: 0,
         boardApproval: deriveInitialBoardApproval(manager),
       };
 

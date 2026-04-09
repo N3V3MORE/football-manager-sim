@@ -108,9 +108,13 @@ export const buildTeamShapeProfile = (
   const roleLoad = createRoleLoad();
   const gkAccumulator: ShapeAccumulator = { gkDistributionAccumulator: 0, gkSamples: 0 };
 
-  const available = starters
+  const uniqueStarters = Array.from(new Map(
+    starters.map(player => [player.id, player])
+  ).values());
+  const available = uniqueStarters
     .filter(player => player.matchesSuspended === 0)
     .sort((a, b) => (b.overallRating + b.energy * 0.1) - (a.overallRating + a.energy * 0.1));
+  if (available.length > 11) available.splice(11);
   const takeBy = (predicate: (player: Player) => boolean): Player | undefined => {
     const idx = available.findIndex(predicate);
     if (idx < 0) return undefined;

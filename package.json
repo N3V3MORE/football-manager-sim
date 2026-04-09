@@ -14,7 +14,8 @@
     "qa": "tsx -r ./scripts/mock-env.js scripts/autonomous_qa.ts",
     "turbo": "tsx -r ./scripts/mock-env.js scripts/turbo_sim.ts",
     "test:regression": "tsx -r ./scripts/mock-env.js scripts/regression_checks.ts",
-    "check:save": "tsx -r ./scripts/mock-env.js scripts/save_integrity_check.ts"
+    "check:save": "tsx -r ./scripts/mock-env.js scripts/save_integrity_check.ts",
+    "test:ci": "tsx -r ./scripts/mock-env.js scripts/ci_regression.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.2.3 - Fix backend accounting and modularize the frontend
+
+What changed:
+- Fixed live-match post-processing so starters do not lose energy twice compared with quick sim.
+- Corrected substitute minute tracking so players only get credit for the interval they actually played.
+- Fixed board-objective progression so generated `position` and `spend` objectives are evaluated properly.
+- Stopped `position` objectives from completing permanently off early tied-table ordering before the season meaningfully settles.
+- Split the Hub, Squad, Transfers, Calendar, Stats, and Settings screens into smaller feature components without changing the existing design.
+- Centralized repeated team-colour fallback handling and trimmed duplicated screen-level render code.
+
+Notes:
+- Re-ran `lint`, `tsc`, `test:ci`, and regression/QA checks after the cleanup passes to keep the refactor honest.
+
 ## v3.2.2 - Polish the league navigation
 
 What changed:

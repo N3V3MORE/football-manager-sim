@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
 import { useState, useEffect, useRef } from 'react';
 import { getTeamTheme } from '@/src/constants/teamColors';
+import { getPositionColor } from '@/src/constants/positionColors';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -51,16 +52,6 @@ export default function MatchScreen() {
     }
     return () => clearInterval(interval);
   }, [isPlaying, isHalfTime, matchFinished, fixtureId, processMatchMinute, finishLiveMatch]);
-
-  const getPosColor = (pos: string) => {
-    switch(pos) {
-      case 'GK': return '#F59E0B';
-      case 'DEF': return '#3B82F6';
-      case 'MID': return '#10B981';
-      case 'FWD': return '#EF4444';
-      default: return '#6B7280';
-    }
-  };
 
   if (!fixture) return <Text>Loading...</Text>;
 
@@ -149,7 +140,7 @@ export default function MatchScreen() {
                 <Text style={[styles.lineupHeader, { color: homeTheme.primary }]}>Home XI</Text>
                 {homePlayers.map(p => (
                     <View key={p.id} style={styles.lineupPlayerRow}>
-                        <View style={[styles.lineupPosPill, { backgroundColor: getPosColor(p.position) }]}>
+                        <View style={[styles.lineupPosPill, { backgroundColor: getPositionColor(p.position) }]}>
                             <Text style={styles.lineupPosText}>{p.subPosition || p.position}</Text>
                         </View>
                         <Text style={styles.lineupPlayerName} numberOfLines={1}>{p.name}</Text>
@@ -160,7 +151,7 @@ export default function MatchScreen() {
                 <Text style={[styles.lineupHeader, { color: awayPrimary, textAlign: 'right' }]}>Away XI</Text>
                 {awayPlayers.map(p => (
                     <View key={p.id} style={[styles.lineupPlayerRow, { flexDirection: 'row-reverse' }]}>
-                        <View style={[styles.lineupPosPill, { backgroundColor: getPosColor(p.position) }]}>
+                        <View style={[styles.lineupPosPill, { backgroundColor: getPositionColor(p.position) }]}>
                             <Text style={styles.lineupPosText}>{p.subPosition || p.position}</Text>
                         </View>
                         <Text style={[styles.lineupPlayerName, { textAlign: 'right', marginRight: 6, marginLeft: 0 }]} numberOfLines={1}>{p.name}</Text>

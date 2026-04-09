@@ -19,6 +19,7 @@ const resetTeamStats = (team: Team): Team => ({
   losses: 0,
   played: 0,
   form: [],
+  transferSpend: 0,
 });
 
 const getDivisionTeams = (teams: Record<string, Team>, division: Division) => (
@@ -26,6 +27,18 @@ const getDivisionTeams = (teams: Record<string, Team>, division: Division) => (
 );
 
 const formatTeamList = (teams: Team[]) => teams.map(team => team.name).join(', ');
+
+const resetPlayerSeasonStats = (player: Player): Player => ({
+  ...player,
+  matchesSuspended: 0,
+  minutesPlayed: 0,
+  goals: 0,
+  assists: 0,
+  cleanSheets: 0,
+  yellowCards: 0,
+  redCards: 0,
+  matchRatingHistory: [],
+});
 
 export const advanceSeason = (
   players: Record<string, Player>,
@@ -43,7 +56,7 @@ export const advanceSeason = (
   const nextPlayers = Object.fromEntries(
     Object.entries(players).map(([playerId, player]) => [
       playerId,
-      { ...player, matchesSuspended: 0 },
+      resetPlayerSeasonStats(player),
     ])
   );
 
@@ -59,9 +72,10 @@ export const advanceSeason = (
     const divisionTeams = divisionTables[division] || [];
     const upperDivision = DIVISION_ORDER[index - 1];
     const lowerDivision = DIVISION_ORDER[index + 1];
+    const promotedCount = upperDivision ? Math.min(PROMOTION_COUNT, divisionTeams.length) : 0;
 
     if (upperDivision) {
-      const promoted = divisionTeams.slice(0, PROMOTION_COUNT);
+      const promoted = divisionTeams.slice(0, promotedCount);
       promoted.forEach(team => {
         nextDivisionByTeamId[team.id] = upperDivision;
       });
@@ -69,7 +83,8 @@ export const advanceSeason = (
     }
 
     if (lowerDivision) {
-      const relegated = divisionTeams.slice(-RELEGATION_COUNT);
+      const relegationStart = Math.max(promotedCount, divisionTeams.length - RELEGATION_COUNT);
+      const relegated = divisionTeams.slice(relegationStart);
       relegated.forEach(team => {
         nextDivisionByTeamId[team.id] = lowerDivision;
       });

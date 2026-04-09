@@ -58,9 +58,10 @@ export const buildRoundRobinFixtures = (
   fixtureCounterStart = 1
 ) => {
   const fixtures: Record<string, Fixture> = {};
-  const numTeams = teamIds.length;
+  const hasOddTeamCount = teamIds.length % 2 !== 0;
+  const circleIds: (string | null)[] = hasOddTeamCount ? [...teamIds, null] : [...teamIds];
+  const numTeams = circleIds.length;
   const rounds = numTeams - 1;
-  const circleIds = [...teamIds];
   const firstHalf: { home: string; away: string; week: number }[] = [];
 
   for (let round = 0; round < rounds; round++) {
@@ -68,6 +69,7 @@ export const buildRoundRobinFixtures = (
     for (let i = 0; i < numTeams / 2; i++) {
       const teamA = circleIds[i];
       const teamB = circleIds[numTeams - 1 - i];
+      if (!teamA || !teamB) continue;
       const flipHome = (round + i) % 2 === 0;
       firstHalf.push({ home: flipHome ? teamA : teamB, away: flipHome ? teamB : teamA, week });
     }

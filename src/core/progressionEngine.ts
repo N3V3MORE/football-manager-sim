@@ -2,6 +2,7 @@ import { Player, Team, Fixture } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { applyTacticalAdaptation } from './tacticalAdaptationEngine';
 import { getSeasonWeekLimit } from './leagueUtils';
+import { RandomGenerator, resolveRandom } from './random';
 
 export { computeWeeklyTransfers } from './transferEngine';
 
@@ -11,15 +12,17 @@ export const computeWeeklyProgression = (
   teams: Record<string, Team>,
   fixtures: Record<string, Fixture>,
   oldNews: string[],
-  userTeamId: string | null = null
+  userTeamId: string | null = null,
+  rng?: RandomGenerator
 ): { players: Record<string, Player>, teams: Record<string, Team>, currentWeek: number, news: string[] } => {
+  const random = resolveRandom(rng);
   const playedFixtures = Object.values(fixtures).filter(f => f.week === currentWeek);
   const seasonWeekLimit = getSeasonWeekLimit(fixtures);
   const newNews: string[] = [];
 
   const bigWins = playedFixtures.filter(f => Math.abs((f.homeScore ?? 0) - (f.awayScore ?? 0)) >= 3);
   if (bigWins.length > 0) {
-    const fixture = bigWins[Math.floor(Math.random() * bigWins.length)];
+    const fixture = bigWins[Math.floor(random() * bigWins.length)];
     const winner = (fixture.homeScore! > fixture.awayScore!) ? teams[fixture.homeTeamId] : teams[fixture.awayTeamId];
     const loser = (fixture.homeScore! > fixture.awayScore!) ? teams[fixture.awayTeamId] : teams[fixture.homeTeamId];
     const winningScore = Math.max(fixture.homeScore!, fixture.awayScore!);
@@ -55,15 +58,17 @@ export const computeWeeklyProgression = (
   applyTacticalAdaptation(
     updatedPlayers,
     updatedTeams,
-    userTeamId ? new Set([userTeamId]) : new Set<string>()
+    userTeamId ? new Set([userTeamId]) : new Set<string>(),
+    rng
   );
 
   const sortedByGoals = [...allPlayers].sort((a, b) => b.goals - a.goals);
   if (sortedByGoals.length > 0 && sortedByGoals[0].goals > 0) {
     const top = sortedByGoals[0];
     newNews.push(`${top.name} (${teams[top.teamId]?.name}) leads the golden boot with ${top.goals} goals.`);
-    if (Math.random() > 0.5 && sortedByGoals.length > 2) {
-      const other = sortedByGoals[1 + Math.floor(Math.random() * 3)];
+    if (random() > 0.5 && sortedByGoals.length > 1) {
+      const contenderCount = Math.min(3, sortedByGoals.length - 1);
+      const other = sortedByGoals[1 + Math.floor(random() * contenderCount)];
       if (other && other.goals > 0) {
         newNews.push(`${other.name} continues his excellent form for ${teams[other.teamId]?.name}!`);
       }
@@ -76,9 +81,9 @@ export const computeWeeklyProgression = (
     Object.values(updatedPlayers).forEach(player => {
       let overallRating = player.overallRating;
       if (player.age <= 24) {
-        overallRating += Math.floor(Math.random() * 3) + 1;
+        overallRating += Math.floor(random() * 3) + 1;
       } else if (player.age >= 32) {
-        overallRating -= Math.floor(Math.random() * 2);
+        overallRating -= Math.floor(random() * 2);
       }
 
       updatedPlayers[player.id] = {

@@ -15,6 +15,7 @@ import { useGameStore } from '@/src/store/gameStore';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { Player, Team } from '@/src/models/types';
 import { getSlotsForFormation } from '@/src/constants/formations';
+import { getPositionColor } from '@/src/constants/positionColors';
 import { rebuildFormationSlotPlayers } from '@/src/core/formationMapUtils';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
 import { DEFAULT_COUNTRY_ID, LEAGUE_COUNTRIES, getLeagueCountry } from '@/src/core/leaguePyramids';
@@ -30,16 +31,6 @@ const getMiniSlotPosition = (rowIdx: number, colIdx: number, rowLength: number, 
     left: `${((colIdx + 1) / (rowLength + 1)) * 100}%` as DimensionValue,
     top: `${rowPercent}%` as DimensionValue,
   };
-};
-
-const getPosColor = (pos: string) => {
-  switch (pos) {
-    case 'GK': return '#F59E0B';
-    case 'DEF': return '#3B82F6';
-    case 'MID': return '#10B981';
-    case 'FWD': return '#EF4444';
-    default: return '#6B7280';
-  }
 };
 
 export default function LeagueTableScreen() {
@@ -114,7 +105,7 @@ export default function LeagueTableScreen() {
               <View key={`${rowIdx}-${colIdx}`} style={[styles.miniSlotAnchor, position]}>
                 <View style={[
                   styles.miniDot,
-                  { backgroundColor: assigned ? getPosColor(assigned.position) : '#1e3a2f' },
+                  { backgroundColor: assigned ? getPositionColor(assigned.position) : '#1e3a2f' },
                 ]}>
                   <Text style={styles.miniDotLabel}>
                     {assigned ? (assigned.subPosition || assigned.position).substring(0, 3) : slot.label}
@@ -308,7 +299,7 @@ export default function LeagueTableScreen() {
                             <Text style={styles.modalSectionTitle}>Substitutes</Text>
                             {subPlayers.map(p => (
                               <View key={p.id} style={styles.modalPlayerRow}>
-                                <View style={[styles.modalPosPill, { backgroundColor: getPosColor(p.position) }]}>
+                        <View style={[styles.modalPosPill, { backgroundColor: getPositionColor(p.position) }]}>
                                   <Text style={styles.modalPosText}>{p.subPosition || p.position}</Text>
                                 </View>
                                 <Text style={[styles.modalPlayerName, { color: '#94a3b8' }]}>{p.name}</Text>

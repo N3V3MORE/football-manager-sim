@@ -1,5 +1,6 @@
 import { Formation, Player, Team } from '../models/types';
 import { getSlotsForFormation } from '../constants/formations';
+import { RandomGenerator, resolveRandom } from './random';
 
 const ADAPTIVE_FORMATIONS: Formation[] = [
   '4-3-3',
@@ -59,8 +60,10 @@ const scoreFormationFit = (players: Player[], formation: Formation) => {
 const pickAdaptiveFormation = (
   team: Team,
   players: Player[],
-  mode: 'attack' | 'defense' | 'stable'
+  mode: 'attack' | 'defense' | 'stable',
+  rng?: RandomGenerator
 ): Formation | null => {
+  const random = resolveRandom(rng);
   const modePool: Formation[] = mode === 'defense'
     ? ['5-2-3', '3-5-2', '4-1-4-1', '4-4-2', '3-4-2-1', '4-5-1']
     : mode === 'attack'
@@ -101,16 +104,18 @@ const pickAdaptiveFormation = (
   const minDelta = mode === 'stable' ? 12 : 6;
   const securitySwing = team.manager ? (50 - team.manager.jobSecurity) / 200 : 0;
   const changeChance = Math.max(0.2, Math.min(0.9, (mode === 'stable' ? 0.35 : 0.7) + securitySwing));
-  if (best.score - currentScore >= minDelta && Math.random() < changeChance) return best.formation;
-  if (mode !== 'stable' && Math.random() < 0.16) return best.formation;
+  if (best.score - currentScore >= minDelta && random() < changeChance) return best.formation;
+  if (mode !== 'stable' && random() < 0.16) return best.formation;
   return null;
 };
 
 export const applyTacticalAdaptation = (
   updatedPlayers: Record<string, Player>,
   updatedTeams: Record<string, Team>,
-  excludedTeamIds = new Set<string>()
+  excludedTeamIds = new Set<string>(),
+  rng?: RandomGenerator
 ) => {
+  const random = resolveRandom(rng);
   Object.values(updatedTeams).forEach(team => {
     if (excludedTeamIds.has(team.id)) return;
     if (team.played < 6 || team.played % 3 !== 0) return;
@@ -137,19 +142,20 @@ export const applyTacticalAdaptation = (
       changed = true;
     };
 
-    if (losses >= 3 && goalsAgainstPerGame > 1.75 && goalsForPerGame < 1.2) {
-      nudgeMentality('Balanced');
-      if (nextTactics.defensiveLine === 'High') { nextTactics.defensiveLine = 'Standard'; changed = true; }
-      if (nextTactics.pressing === 'High') { nextTactics.pressing = 'Medium'; changed = true; }
-      if (nextTactics.tempo === 'Fast') { nextTactics.tempo = 'Normal'; changed = true; }
-      adaptationChance = 0.8;
-      formationMode = 'defense';
-    } else if (losses >= 3 && goalsAgainstPerGame > 1.7) {
-      nudgeMentality('Defensive');
-      if (nextTactics.defensiveLine !== 'Deep') { nextTactics.defensiveLine = 'Deep'; changed = true; }
-      if (nextTactics.pressing === 'High') { nextTactics.pressing = 'Medium'; changed = true; }
-      if (nextTactics.tempo === 'Fast') { nextTactics.tempo = 'Normal'; changed = true; }
-      adaptationChance = 0.72;
+    if (losses >= 3 && goalsAgainstPerGame > 1.75) {
+      if (goalsForPerGame < 1.2) {
+        nudgeMentality('Balanced');
+        if (nextTactics.defensiveLine === 'High') { nextTactics.defensiveLine = 'Standard'; changed = true; }
+        if (nextTactics.pressing === 'High') { nextTactics.pressing = 'Medium'; changed = true; }
+        if (nextTactics.tempo === 'Fast') { nextTactics.tempo = 'Normal'; changed = true; }
+        adaptationChance = 0.8;
+      } else {
+        nudgeMentality('Defensive');
+        if (nextTactics.defensiveLine !== 'Deep') { nextTactics.defensiveLine = 'Deep'; changed = true; }
+        if (nextTactics.pressing === 'High') { nextTactics.pressing = 'Medium'; changed = true; }
+        if (nextTactics.tempo === 'Fast') { nextTactics.tempo = 'Normal'; changed = true; }
+        adaptationChance = 0.72;
+      }
       formationMode = 'defense';
     } else if (losses >= 3 && goalsForPerGame < 1.1) {
       nudgeMentality('Attacking');
@@ -166,7 +172,7 @@ export const applyTacticalAdaptation = (
       formationMode = 'stable';
     }
 
-    const canApplyTactics = changed && Math.random() < adaptationChance;
+    const canApplyTactics = changed && random() < adaptationChance;
     let nextTeam = updatedTeams[team.id];
     let teamChanged = false;
 
@@ -182,7 +188,7 @@ export const applyTacticalAdaptation = (
     if (shouldTryFormationChange) {
       const teamPlayers = Object.values(updatedPlayers)
         .filter(player => player.teamId === team.id && player.matchesSuspended === 0);
-      const candidate = pickAdaptiveFormation(nextTeam, teamPlayers, formationMode!);
+      const candidate = pickAdaptiveFormation(nextTeam, teamPlayers, formationMode!, rng);
       if (candidate && candidate !== nextTeam.activeFormation) {
         nextTeam = { ...nextTeam, activeFormation: candidate };
         teamChanged = true;

@@ -5,6 +5,8 @@ export interface TeamTheme {
     founded: number;
 }
 
+const READABLE_LIGHT_CHIP = '#e2e8f0';
+
 export const TEAM_COLORS: Record<string, TeamTheme> = {
     'Arsenal': { primary: '#EF0107', secondary: '#FFFFFF', stadium: 'Emirates Stadium', founded: 1886 },
     'Aston Villa': { primary: '#6C1D45', secondary: '#95BFE5', stadium: 'Villa Park', founded: 1874 },
@@ -52,4 +54,8 @@ export const getTeamTheme = (teamName: string): TeamTheme => {
 
 export const getTeamColor = (teamName: string) => {
     return getTeamTheme(teamName).primary;
+};
+
+export const getSecondaryKitColor = (secondary: string) => {
+    return secondary === '#FFFFFF' ? READABLE_LIGHT_CHIP : secondary;
 };

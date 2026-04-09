@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '@/src/store/gameStore';
 import { getTransferWindowLabel, isTransferWindowOpen } from '@/src/utils/calendar';
 import { Player } from '@/src/models/types';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
+import { TransferDialog, TransferDialogState } from '@/components/transfers/transfer-dialog';
+import { TransferPlayerCard } from '@/components/transfers/transfer-player-card';
+import { TransferTabs } from '@/components/transfers/transfer-tabs';
 
-type TransferDialog =
-  | { type: 'buy'; player: Player; fee: string; wage: string }
-  | { type: 'sell'; player: Player; price: string }
-  | null;
+type TransferTab = 'market' | 'squad';
 
 export default function TransfersScreen() {
   const currentWeek = useGameStore(s => s.currentWeek);
@@ -23,8 +23,8 @@ export default function TransfersScreen() {
   const windowLabel = getTransferWindowLabel(currentWeek);
   const windowOpen = isTransferWindowOpen(currentWeek);
 
-  const [tab, setTab] = useState<'market' | 'squad'>('market');
-  const [dialog, setDialog] = useState<TransferDialog>(null);
+  const [tab, setTab] = useState<TransferTab>('market');
+  const [dialog, setDialog] = useState<TransferDialogState>(null);
 
   if (!userTeamId) return <View style={styles.container} />;
   const userTeam = teams[userTeamId];
@@ -101,126 +101,43 @@ export default function TransfersScreen() {
         </View>
       </View>
 
-      <View style={styles.tabs}>
-        <TouchableOpacity style={[styles.tab, tab === 'market' && styles.tabActive]} onPress={() => setTab('market')}>
-          <Text style={[styles.tabText, tab === 'market' && styles.tabTextActive]}>Market ({marketPlayers.length})</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, tab === 'squad' && styles.tabActive]} onPress={() => setTab('squad')}>
-          <Text style={[styles.tabText, tab === 'squad' && styles.tabTextActive]}>Sell Players</Text>
-        </TouchableOpacity>
-      </View>
+      <TransferTabs activeTab={tab} marketCount={marketPlayers.length} onChange={setTab} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {tab === 'market' && (
           marketPlayers.length === 0 ? <Text style={styles.empty}>No players listed.</Text> :
           marketPlayers.map(p => (
-            <View key={p.id} style={styles.card}>
-              <View style={styles.cardLeft}>
-                 <Text style={styles.pos}>{p.subPosition || p.position}</Text>
-                 <View style={styles.playerTextBlock}>
-                   <Text style={styles.name} numberOfLines={1}>{p.name}</Text>
-                   <Text style={styles.club} numberOfLines={1}>{teams[p.teamId]?.name}</Text>
-                 </View>
-              </View>
-              <View style={styles.cardRight}>
-                <View style={styles.ratingBox}>
-                   <Text style={styles.rating}>{p.overallRating}</Text>
-                </View>
-                <TouchableOpacity style={styles.buyBtn} onPress={() => handleBuy(p)}>
-                   <Text style={styles.buyText}>GBP {p.askingPrice.toFixed(1)}m</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            <TransferPlayerCard
+              key={p.id}
+              player={p}
+              subLabel={teams[p.teamId]?.name || ''}
+              actionLabel={`GBP ${p.askingPrice.toFixed(1)}m`}
+              onAction={() => handleBuy(p)}
+            />
           ))
         )}
 
         {tab === 'squad' && (
           mySquad.map(p => (
-            <View key={p.id} style={styles.card}>
-              <View style={styles.cardLeft}>
-                 <Text style={styles.pos}>{p.subPosition || p.position}</Text>
-                 <View style={styles.playerTextBlock}>
-                   <Text style={styles.name} numberOfLines={1}>{p.name}</Text>
-                   <Text style={styles.club}>Value: GBP {p.marketValue}m</Text>
-                 </View>
-              </View>
-              <View style={styles.cardRight}>
-                <View style={styles.ratingBox}>
-                   <Text style={styles.rating}>{p.overallRating}</Text>
-                </View>
-                <TouchableOpacity
-                   style={[styles.buyBtn, p.isTransferListed && { backgroundColor: '#ef4444' }]}
-                   onPress={() => handleSellToggle(p)}
-                >
-                   <Text style={[styles.buyText, p.isTransferListed && { color: '#fff' }]}>
-                     {p.isTransferListed ? `Unlist (GBP ${p.askingPrice}m)` : 'List'}
-                   </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            <TransferPlayerCard
+              key={p.id}
+              player={p}
+              subLabel={`Value: GBP ${p.marketValue}m`}
+              actionLabel={p.isTransferListed ? `Unlist (GBP ${p.askingPrice}m)` : 'List'}
+              actionVariant={p.isTransferListed ? 'danger' : 'primary'}
+              onAction={() => handleSellToggle(p)}
+            />
           ))
         )}
       </ScrollView>
 
-      <Modal visible={dialog !== null} transparent animationType="fade" onRequestClose={() => setDialog(null)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            {dialog && (
-              <>
-                <Text style={styles.modalTitle}>{dialog.type === 'buy' ? 'Make Transfer Offer' : 'List Player'}</Text>
-                <Text style={styles.modalSubtitle}>{dialog.player.name}</Text>
-
-                {dialog.type === 'buy' ? (
-                  <>
-                    <Text style={styles.fieldLabel}>Transfer fee (GBP millions)</Text>
-                    <TextInput
-                      value={dialog.fee}
-                      onChangeText={value => updateDialogValue('fee', value)}
-                      keyboardType="decimal-pad"
-                      style={styles.input}
-                      placeholderTextColor="#64748b"
-                    />
-                    <Text style={styles.fieldHint}>
-                      Asking price: GBP {dialog.player.askingPrice.toFixed(1)}m | Budget: GBP {userTeam.budget.toFixed(1)}m
-                    </Text>
-
-                    <Text style={styles.fieldLabel}>Wage (GBP k/week)</Text>
-                    <TextInput
-                      value={dialog.wage}
-                      onChangeText={value => updateDialogValue('wage', value)}
-                      keyboardType="number-pad"
-                      style={styles.input}
-                      placeholderTextColor="#64748b"
-                    />
-                    <Text style={styles.fieldHint}>Current wage: GBP {dialog.player.wage}k/w</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.fieldLabel}>Asking price (GBP millions)</Text>
-                    <TextInput
-                      value={dialog.price}
-                      onChangeText={value => updateDialogValue('price', value)}
-                      keyboardType="decimal-pad"
-                      style={styles.input}
-                      placeholderTextColor="#64748b"
-                    />
-                    <Text style={styles.fieldHint}>Market value: GBP {dialog.player.marketValue}m</Text>
-                  </>
-                )}
-
-                <View style={styles.modalActions}>
-                  <TouchableOpacity style={styles.modalCancel} onPress={() => setDialog(null)}>
-                    <Text style={styles.modalCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.modalSubmit} onPress={handleSubmitDialog}>
-                    <Text style={styles.modalSubmitText}>{dialog.type === 'buy' ? 'Submit Offer' : 'List Player'}</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
+      <TransferDialog
+        dialog={dialog}
+        budget={userTeam.budget}
+        onClose={() => setDialog(null)}
+        onChangeValue={updateDialogValue}
+        onSubmit={handleSubmitDialog}
+      />
     </SafeAreaView>
   );
 }
@@ -234,34 +151,6 @@ const styles = StyleSheet.create({
   bannerOpen: { backgroundColor: '#065f46' },
   bannerClosed: { backgroundColor: '#7f1d1d' },
   bannerText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  tabs: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#334155' },
-  tab: { flex: 1, paddingVertical: 12, alignItems: 'center' },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: '#38bdf8' },
-  tabText: { color: '#64748b', fontWeight: '800' },
-  tabTextActive: { color: '#38bdf8' },
   scroll: { padding: 16, gap: 10 },
   empty: { color: '#64748b', textAlign: 'center', marginTop: 20 },
-  card: { backgroundColor: '#1e293b', padding: 12, borderRadius: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
-  cardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  playerTextBlock: { flex: 1, minWidth: 0 },
-  pos: { width: 34, textAlign: 'center', backgroundColor: '#334155', color: '#fff', paddingVertical: 4, borderRadius: 4, fontSize: 10, fontWeight: '900' },
-  name: { color: '#f8fafc', fontWeight: '700', fontSize: 15 },
-  club: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
-  cardRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  ratingBox: { backgroundColor: '#cbd5e1', width: 28, height: 28, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
-  rating: { color: '#0f172a', fontWeight: '900', fontSize: 12 },
-  buyBtn: { backgroundColor: '#38bdf8', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  buyText: { color: '#0f172a', fontWeight: '900', fontSize: 12 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
-  modalCard: { backgroundColor: '#1e293b', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#334155' },
-  modalTitle: { color: '#f8fafc', fontSize: 18, fontWeight: '900' },
-  modalSubtitle: { color: '#94a3b8', fontSize: 13, marginTop: 4, marginBottom: 16, fontWeight: '700' },
-  fieldLabel: { color: '#cbd5e1', fontSize: 12, fontWeight: '900', marginTop: 10, marginBottom: 6 },
-  fieldHint: { color: '#64748b', fontSize: 11, marginTop: 6, lineHeight: 16 },
-  input: { backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155', borderRadius: 10, color: '#f8fafc', fontSize: 16, fontWeight: '800', paddingHorizontal: 12, paddingVertical: 10 },
-  modalActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  modalCancel: { flex: 1, backgroundColor: '#334155', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  modalCancelText: { color: '#cbd5e1', fontWeight: '900' },
-  modalSubmit: { flex: 1, backgroundColor: '#38bdf8', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  modalSubmitText: { color: '#0f172a', fontWeight: '900' },
 });

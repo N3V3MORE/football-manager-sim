@@ -21,30 +21,32 @@ export default function TacticsScreen() {
     );
   }
 
-  const renderSection = (
-    title: string, 
-    key: keyof TeamTactics, 
-    options: string[], 
-    descriptions: Record<string, string>
+  const renderSection = <K extends keyof TeamTactics>(
+    title: string,
+    key: K,
+    options: TeamTactics[K][],
+    descriptions: Record<TeamTactics[K], string>
   ) => {
+    const selectedOption = tactics[key];
+
     return (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{title}</Text>
         <View style={styles.optionsRow}>
           {options.map(opt => {
-            const isActive = (tactics as any)[key] === opt;
+            const isActive = selectedOption === opt;
             return (
               <TouchableOpacity
                 key={opt}
                 style={[styles.optBtn, isActive && styles.optBtnActive]}
-                onPress={() => setTactics(userTeamId, { [key]: opt } as any)}
+                onPress={() => setTactics(userTeamId, { [key]: opt } as Partial<TeamTactics>)}
               >
                 <Text style={[styles.optText, isActive && styles.optTextActive]}>{opt}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
-        <Text style={styles.hintText}>{descriptions[(tactics as any)[key]]}</Text>
+        <Text style={styles.hintText}>{descriptions[selectedOption]}</Text>
       </View>
     );
   };
