@@ -7,6 +7,8 @@ import { formatShortDate } from '@/src/utils/calendar';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { PageHeader } from '@/components/ui/page-header';
 import { getFixtureCompetitionLabel } from '@/src/core/competitionUtils';
+import { COMPETITION_IDS, getFixtureCompetitionId } from '@/src/core/domainRegistry';
+import { getUserFixtures } from '@/src/features/world/worldSelectors';
 
 export default function CalendarScreen() {
   const currentWeek = useGameStore(s => s.currentWeek);
@@ -17,15 +19,7 @@ export default function CalendarScreen() {
   if (!userTeamId) return <View style={styles.container} />;
 
   // Filter only user's fixtures
-  const myFixtures = Object.values(allFixtures)
-    .filter(f => f.homeTeamId === userTeamId || f.awayTeamId === userTeamId)
-    .sort((a, b) => {
-      if (a.week !== b.week) return a.week - b.week;
-      const aRank = a.competition === 'League' ? 0 : (a.competition === 'Carabao Cup' ? 1 : 2);
-      const bRank = b.competition === 'League' ? 0 : (b.competition === 'Carabao Cup' ? 1 : 2);
-      if (aRank !== bRank) return aRank - bRank;
-      return (a.roundNumber || 0) - (b.roundNumber || 0);
-    });
+  const myFixtures = getUserFixtures(allFixtures, userTeamId);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -73,7 +67,7 @@ export default function CalendarScreen() {
                 <View style={styles.dateCol}>
                   <Text style={styles.weekLabel}>WK {f.week}</Text>
                   <Text style={styles.dateLabel}>{formatShortDate(f.week)}</Text>
-                  {f.competition !== 'League' && (
+                  {getFixtureCompetitionId(f) !== COMPETITION_IDS.LEAGUE && (
                     <Text style={styles.competitionLabel}>{getFixtureCompetitionLabel(f)}</Text>
                   )}
                 </View>

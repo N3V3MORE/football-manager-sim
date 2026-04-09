@@ -5,6 +5,12 @@ import { useGameStore } from '@/src/store/gameStore';
 import { getTransferWindowLabel, isTransferWindowOpen } from '@/src/utils/calendar';
 import { Player } from '@/src/models/types';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
+import { getLeagueDisplayName } from '@/src/core/domainRegistry';
+import {
+  getMarketSections,
+  getTopLeagueForCountry,
+  getTransferLeagueOptionsForCountry,
+} from '@/src/features/world/worldSelectors';
 
 type TransferDialog =
   | { type: 'buy'; player: Player; fee: string; wage: string }
@@ -14,11 +20,10 @@ type TransferDialog =
 type MarketSection = {
   countryId: string;
   countryName: string;
-  league: string;
+  leagueId: string;
+  leagueName: string;
   players: Player[];
 };
-
-const DIVISION_SORT_ORDER = ['Premier League', 'Championship', 'League One', 'League Two'];
 
 const getCountryName = (countryId?: string) => {
   if (!countryId) return 'Unknown Country';
@@ -27,11 +32,6 @@ const getCountryName = (countryId?: string) => {
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
-};
-
-const getDivisionSortKey = (division: string) => {
-  const rank = DIVISION_SORT_ORDER.indexOf(division);
-  return rank === -1 ? Number.MAX_SAFE_INTEGER : rank;
 };
 
 export default function TransfersScreen() {
@@ -54,43 +54,13 @@ export default function TransfersScreen() {
   if (!userTeamId) return <View style={styles.container} />;
   const userTeam = teams[userTeamId];
 
-  const marketPlayers = Object.values(players).filter(player => player.isTransferListed && player.teamId !== userTeamId);
-  const marketPlayersByRating = [...marketPlayers].sort((a, b) => {
-    if (b.overallRating !== a.overallRating) return b.overallRating - a.overallRating;
-    if (b.marketValue !== a.marketValue) return b.marketValue - a.marketValue;
-    return a.name.localeCompare(b.name);
-  });
-  const marketSectionMap = new Map<string, Map<string, Player[]>>();
-  marketPlayersByRating.forEach(player => {
-    const team = teams[player.teamId];
-    const countryId = team?.countryId || 'unknown';
-    const league = team?.division || 'Unknown League';
-    if (!marketSectionMap.has(countryId)) {
-      marketSectionMap.set(countryId, new Map<string, Player[]>());
-    }
-    const leagueMap = marketSectionMap.get(countryId)!;
-    if (!leagueMap.has(league)) {
-      leagueMap.set(league, []);
-    }
-    leagueMap.get(league)!.push(player);
-  });
-  const marketSections: MarketSection[] = Array.from(marketSectionMap.entries())
-    .sort(([countryA], [countryB]) => getCountryName(countryA).localeCompare(getCountryName(countryB)))
-    .flatMap(([countryId, leagues]) => (
-      Array.from(leagues.entries())
-        .sort(([leagueA], [leagueB]) => {
-          const rankA = getDivisionSortKey(leagueA);
-          const rankB = getDivisionSortKey(leagueB);
-          if (rankA !== rankB) return rankA - rankB;
-          return leagueA.localeCompare(leagueB);
-        })
-        .map(([league, leaguePlayers]) => ({
-          countryId,
-          countryName: getCountryName(countryId),
-          league,
-          players: leaguePlayers,
-        }))
-    ));
+  const marketSections = getMarketSections(players, teams).filter(section =>
+    section.players.some(player => player.teamId !== userTeamId)
+  ) as MarketSection[];
+  const marketPlayerCount = marketSections.reduce(
+    (total, section) => total + section.players.filter(player => player.teamId !== userTeamId).length,
+    0
+  );
   const availableCountries = Array.from(new Set(marketSections.map(section => section.countryId)));
   const activeCountryId = selectedCountryId && availableCountries.includes(selectedCountryId)
     ? selectedCountryId
@@ -98,18 +68,13 @@ export default function TransfersScreen() {
   const countrySections = activeCountryId
     ? marketSections.filter(section => section.countryId === activeCountryId)
     : [];
-  const availableLeagues = countrySections.map(section => section.league);
-  const topLeagueForCountry = [...availableLeagues].sort((a, b) => {
-    const rankA = getDivisionSortKey(a);
-    const rankB = getDivisionSortKey(b);
-    if (rankA !== rankB) return rankA - rankB;
-    return a.localeCompare(b);
-  })[0] || null;
+  const availableLeagues = getTransferLeagueOptionsForCountry(marketSections, activeCountryId);
+  const topLeagueForCountry = activeCountryId ? getTopLeagueForCountry(activeCountryId) : null;
   const activeLeague = selectedLeague && availableLeagues.includes(selectedLeague)
     ? selectedLeague
     : topLeagueForCountry;
   const visibleMarketSections = activeLeague
-    ? countrySections.filter(section => section.league === activeLeague)
+    ? countrySections.filter(section => section.leagueId === activeLeague)
     : [];
   const mySquad = sortPlayersByPositionGroup(Object.values(players).filter(p => p.teamId === userTeamId));
 
@@ -184,7 +149,7 @@ export default function TransfersScreen() {
 
       <View style={styles.tabs}>
         <TouchableOpacity style={[styles.tab, tab === 'market' && styles.tabActive]} onPress={() => setTab('market')}>
-          <Text style={[styles.tabText, tab === 'market' && styles.tabTextActive]}>Market ({marketPlayers.length})</Text>
+          <Text style={[styles.tabText, tab === 'market' && styles.tabTextActive]}>Market ({marketPlayerCount})</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, tab === 'squad' && styles.tabActive]} onPress={() => setTab('squad')}>
           <Text style={[styles.tabText, tab === 'squad' && styles.tabTextActive]}>Sell Players</Text>
@@ -221,15 +186,17 @@ export default function TransfersScreen() {
                 <>
                   <Text style={styles.filterLabel}>League</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-                    {availableLeagues.map(league => {
-                      const isActive = league === activeLeague;
+                    {availableLeagues.map(leagueId => {
+                      const isActive = leagueId === activeLeague;
                       return (
                         <TouchableOpacity
-                          key={league}
+                          key={leagueId}
                           style={[styles.filterChip, isActive && styles.filterChipActive]}
-                          onPress={() => setSelectedLeague(league)}
+                          onPress={() => setSelectedLeague(leagueId)}
                         >
-                          <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>{league}</Text>
+                          <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                            {getLeagueDisplayName(leagueId)}
+                          </Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -239,13 +206,13 @@ export default function TransfersScreen() {
             </View>
 
             {visibleMarketSections.map(section => (
-              <View key={`${section.countryId}-${section.league}`} style={styles.marketSection}>
+              <View key={`${section.countryId}-${section.leagueId}`} style={styles.marketSection}>
                 <Text style={styles.countryHeader}>{section.countryName}</Text>
                 <View style={styles.leagueHeaderRow}>
-                  <Text style={styles.leagueHeaderText}>{section.league}</Text>
-                  <Text style={styles.leagueHeaderCount}>{section.players.length}</Text>
+                  <Text style={styles.leagueHeaderText}>{section.leagueName}</Text>
+                  <Text style={styles.leagueHeaderCount}>{section.players.filter(player => player.teamId !== userTeamId).length}</Text>
                 </View>
-                {section.players.map(p => (
+                {section.players.filter(player => player.teamId !== userTeamId).map(p => (
                   <View key={p.id} style={styles.card}>
                     <View style={styles.cardLeft}>
                       <Text style={styles.pos}>{p.subPosition || p.position}</Text>

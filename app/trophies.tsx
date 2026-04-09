@@ -4,18 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { PageHeader } from '@/components/ui/page-header';
 import { useGameStore } from '@/src/store/gameStore';
-import { CupCompetition } from '@/src/models/types';
-import { sortTeamsByTable } from '@/src/core/leagueUtils';
-
-const getOrdinalSuffix = (value: number) => {
-  const mod100 = value % 100;
-  if (mod100 >= 11 && mod100 <= 13) return `${value}th`;
-  const mod10 = value % 10;
-  if (mod10 === 1) return `${value}st`;
-  if (mod10 === 2) return `${value}nd`;
-  if (mod10 === 3) return `${value}rd`;
-  return `${value}th`;
-};
+import { COMPETITION_IDS } from '@/src/core/domainRegistry';
+import {
+  getCurrentCompetitionStatuses,
+  getDisplaySeasonResults,
+  getLeagueResultLabel,
+  getTrophyCabinetEntries,
+} from '@/src/features/world/worldSelectors';
 
 export default function TrophiesScreen() {
   const season = useGameStore(state => state.season);
@@ -29,41 +24,23 @@ export default function TrophiesScreen() {
   if (!userTeamId || !teams[userTeamId]) return <View style={styles.container} />;
 
   const userTeam = teams[userTeamId];
-  const divisionTable = sortTeamsByTable(Object.values(teams).filter(team => team.division === userTeam.division));
-  const position = divisionTable.findIndex(team => team.id === userTeamId) + 1;
-
-  const getCupStatus = (competition: CupCompetition) => {
-    const nextFixture = Object.values(fixtures)
-      .filter(
-        fixture =>
-          !fixture.isPlayed &&
-          fixture.competition === competition &&
-          (fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId)
-      )
-      .sort((a, b) => {
-        if (a.week !== b.week) return a.week - b.week;
-        return (a.roundNumber || 0) - (b.roundNumber || 0);
-      })[0];
-    if (nextFixture) return `In ${nextFixture.roundName || `Round ${nextFixture.roundNumber || 1}`}`;
-
-    const cupState = cups[competition];
-    if (!cupState) return 'Not active';
-    if (cupState.completed) {
-      return cupState.entrants[0] === userTeamId ? 'Winners' : 'Eliminated';
-    }
-    const stillInCup = cupState.entrants.includes(userTeamId) || cupState.currentRoundByeTeamId === userTeamId;
-    return stillInCup ? `In ${cupState.roundName}` : 'Eliminated';
-  };
-
+  const trackedCompetitions = [COMPETITION_IDS.CARABAO_CUP, COMPETITION_IDS.FA_CUP, COMPETITION_IDS.UEFA_CHAMPIONS_LEAGUE];
+  const currentSeasonCompetitionStatuses = getCurrentCompetitionStatuses({
+    competitions: trackedCompetitions,
+    fixtures,
+    cups,
+    userTeamId,
+  });
   const currentSeason = {
     season,
-    competitions: {
-      league: position > 0 ? `${getOrdinalSuffix(position)} (${userTeam.division})` : `- (${userTeam.division})`,
-      carabaoCup: getCupStatus('Carabao Cup'),
-      faCup: getCupStatus('FA Cup'),
-      ucl: 'Not active yet',
-    },
+    leagueResult: getLeagueResultLabel(teams, userTeamId, userTeam.leagueId),
+    competitionEntries: trackedCompetitions.map(competitionId => ({
+      competitionId,
+      result: currentSeasonCompetitionStatuses[competitionId] || 'Did not participate',
+    })),
   };
+  const cabinetEntries = getTrophyCabinetEntries(trophyCabinet);
+  const displaySeasonResults = getDisplaySeasonResults(seasonResults);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -71,27 +48,33 @@ export default function TrophiesScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.cabinetCard}>
           <Text style={styles.sectionTitle}>Trophy Cabinet</Text>
-          <Text style={styles.cabinetLine}>Carabao Cup: {trophyCabinet['Carabao Cup'] || 0}</Text>
-          <Text style={styles.cabinetLine}>FA Cup: {trophyCabinet['FA Cup'] || 0}</Text>
-          <Text style={styles.cabinetLine}>UEFA Champions League: {trophyCabinet['UEFA Champions League'] || 0}</Text>
+          {cabinetEntries.map(entry => (
+            <Text key={entry.competitionId} style={styles.cabinetLine}>
+              {entry.label}: {entry.count}
+            </Text>
+          ))}
         </View>
 
         <View style={styles.resultsCard}>
           <Text style={styles.sectionTitle}>Season {currentSeason.season} (Current)</Text>
-          <Text style={styles.resultRow}>League: {currentSeason.competitions.league}</Text>
-          <Text style={styles.resultRow}>Carabao Cup: {currentSeason.competitions.carabaoCup}</Text>
-          <Text style={styles.resultRow}>FA Cup: {currentSeason.competitions.faCup}</Text>
-          <Text style={styles.resultRow}>UCL: {currentSeason.competitions.ucl}</Text>
+          <Text style={styles.resultRow}>League: {currentSeason.leagueResult}</Text>
+          {cabinetEntries.map(entry => (
+            <Text key={`current-${entry.competitionId}`} style={styles.resultRow}>
+              {entry.label}: {currentSeason.competitionEntries.find(item => item.competitionId === entry.competitionId)?.result || 'Did not participate'}
+            </Text>
+          ))}
         </View>
 
-        {seasonResults.map(result => (
+        {displaySeasonResults.map(result => (
           <View key={`${result.season}-${result.teamId}`} style={styles.resultsCard}>
             <Text style={styles.sectionTitle}>Season {result.season}</Text>
             <Text style={styles.teamName}>{result.teamName}</Text>
-            <Text style={styles.resultRow}>League: {result.competitions.league}</Text>
-            <Text style={styles.resultRow}>Carabao Cup: {result.competitions.carabaoCup}</Text>
-            <Text style={styles.resultRow}>FA Cup: {result.competitions.faCup}</Text>
-            <Text style={styles.resultRow}>UCL: {result.competitions.ucl}</Text>
+            <Text style={styles.resultRow}>League: {result.leagueResult}</Text>
+            {result.competitionEntries.map(entry => (
+              <Text key={`${result.season}-${entry.competitionId}`} style={styles.resultRow}>
+                {entry.label}: {entry.result}
+              </Text>
+            ))}
           </View>
         ))}
       </ScrollView>

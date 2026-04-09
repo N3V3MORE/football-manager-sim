@@ -1,5 +1,5 @@
 import { Formation, LeagueId, Manager, ManagerStatus } from '../models/types';
-import { DEFAULT_LEAGUE_ID, getLeagueDefinition } from './domainRegistry';
+import { DEFAULT_LEAGUE_ID, getLeagueDefinition, LEAGUE_IDS } from './domainRegistry';
 import { PremierLeagueManagerSource } from '../data/premier_league_managers';
 
 export const ratingToPercent = (value: number) => Math.max(0, Math.min(100, Math.round((value / 5) * 100)));
@@ -62,7 +62,7 @@ export const buildManager = (source: PremierLeagueManagerSource, teamId: string)
 });
 
 const getGenericManagerIdentity = (leagueId: LeagueId, clubFit: number) => {
-  if (leagueId === 'Premier League') {
+  if (leagueId === LEAGUE_IDS.PREMIER_LEAGUE) {
     return {
       tacticalIdentity: clubFit >= 70 ? 'Balanced possession with a high defensive line' : 'Disciplined and direct',
       transferIdentity: 'Structured recruitment with selective upgrades',
@@ -70,7 +70,7 @@ const getGenericManagerIdentity = (leagueId: LeagueId, clubFit: number) => {
       preferredFormations: clubFit >= 70 ? ['4-3-3', '4-2-3-1'] : ['4-2-3-1', '4-4-2'],
     };
   }
-  if (leagueId === 'Championship') {
+  if (leagueId === LEAGUE_IDS.CHAMPIONSHIP) {
     return {
       tacticalIdentity: clubFit >= 68 ? 'Aggressive pressing and quick transitions' : 'Compact shape and counter attack',
       transferIdentity: 'Promotion-focused recruitment with loan market use',
@@ -78,7 +78,7 @@ const getGenericManagerIdentity = (leagueId: LeagueId, clubFit: number) => {
       preferredFormations: clubFit >= 68 ? ['4-2-3-1', '3-5-2'] : ['4-4-2', '4-2-3-1'],
     };
   }
-  if (leagueId === 'League One') {
+  if (leagueId === LEAGUE_IDS.LEAGUE_ONE) {
     return {
       tacticalIdentity: clubFit >= 64 ? 'Direct football with strong set-piece focus' : 'Compact shape and transition play',
       transferIdentity: 'Loans, free transfers and value signings',

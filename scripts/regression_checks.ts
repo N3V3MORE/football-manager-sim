@@ -7,6 +7,9 @@ import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 import { getSlotsForFormation } from '../src/constants/formations';
 import { rebuildFormationMap, rebuildFormationSlotPlayers } from '../src/core/formationMapUtils';
 import {
+  COMPETITION_IDS,
+  DEFAULT_COUNTRY_ID,
+  LEAGUE_IDS,
   getFixtureCompetitionId,
   getTeamLeagueId,
   registerCompetitionDefinition,
@@ -27,6 +30,7 @@ import {
 } from '../src/core/tacticalEffects';
 import { Player } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
+import { normalizeHydratedState } from '../src/store/setup';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) {
@@ -45,6 +49,16 @@ const createSeededRandom = (seed: number) => {
 };
 
 const readSource = (filePath: string) => fs.readFileSync(path.join(process.cwd(), filePath), 'utf8');
+
+const collectSourceFiles = (rootPath: string): string[] => {
+  const absoluteRoot = path.join(process.cwd(), rootPath);
+  return fs.readdirSync(absoluteRoot, { withFileTypes: true }).flatMap(entry => {
+    const resolvedPath = path.join(absoluteRoot, entry.name);
+    const relativePath = path.relative(process.cwd(), resolvedPath).replace(/\\/g, '/');
+    if (entry.isDirectory()) return collectSourceFiles(relativePath);
+    return /\.(ts|tsx)$/.test(entry.name) ? [relativePath] : [];
+  });
+};
 
 const checkCleanSheetWindows = () => {
   assert(!didConcedeInWindow([], 0, 90, 0), 'Empty conceded-minute list with 0 conceded should be clean');
@@ -133,7 +147,7 @@ const checkLiveSentOffMinutes = () => {
 
 const checkCupCompetitionIntegration = () => {
   const data = initGameData();
-  const cupFixture = Object.values(data.fixtures).find(fixture => getFixtureCompetitionId(fixture) !== 'League');
+  const cupFixture = Object.values(data.fixtures).find(fixture => getFixtureCompetitionId(fixture) !== COMPETITION_IDS.LEAGUE);
   assert(cupFixture, 'Regression setup needs at least one cup fixture');
 
   const homeBefore = data.teams[cupFixture!.homeTeamId];
@@ -141,7 +155,7 @@ const checkCupCompetitionIntegration = () => {
   const result = quickSimMatch(cupFixture!.id, data.players, data.teams, data.fixtures, null);
   const playedFixture = result.fixture;
 
-  assert(getFixtureCompetitionId(playedFixture) !== 'League', 'Cup fixture should stay marked as a cup');
+  assert(getFixtureCompetitionId(playedFixture) !== COMPETITION_IDS.LEAGUE, 'Cup fixture should stay marked as a cup');
   assert(playedFixture.winnerTeamId, 'Cup fixture should resolve a winner');
   assert(
     result.teams[homeBefore.id].points === homeBefore.points &&
@@ -223,17 +237,17 @@ const checkDivisionBootstrap = () => {
     return acc;
   }, {});
 
-  assert(counts['Premier League'] === 20, `Expected 20 Premier League teams, got ${counts['Premier League'] || 0}`);
-  assert(counts['Championship'] === 24, `Expected 24 Championship teams, got ${counts['Championship'] || 0}`);
-  assert(counts['League One'] === 24, `Expected 24 League One teams, got ${counts['League One'] || 0}`);
-  assert(counts['League Two'] === 24, `Expected 24 League Two teams, got ${counts['League Two'] || 0}`);
+  assert(counts[LEAGUE_IDS.PREMIER_LEAGUE] === 20, `Expected 20 Premier League teams, got ${counts[LEAGUE_IDS.PREMIER_LEAGUE] || 0}`);
+  assert(counts[LEAGUE_IDS.CHAMPIONSHIP] === 24, `Expected 24 Championship teams, got ${counts[LEAGUE_IDS.CHAMPIONSHIP] || 0}`);
+  assert(counts[LEAGUE_IDS.LEAGUE_ONE] === 24, `Expected 24 League One teams, got ${counts[LEAGUE_IDS.LEAGUE_ONE] || 0}`);
+  assert(counts[LEAGUE_IDS.LEAGUE_TWO] === 24, `Expected 24 League Two teams, got ${counts[LEAGUE_IDS.LEAGUE_TWO] || 0}`);
 };
 
 const checkPromotionRelegation = () => {
   const data = initGameData();
   const teams = { ...data.teams };
 
-  (['Premier League', 'Championship', 'League One', 'League Two'] as const).forEach(division => {
+  ([LEAGUE_IDS.PREMIER_LEAGUE, LEAGUE_IDS.CHAMPIONSHIP, LEAGUE_IDS.LEAGUE_ONE, LEAGUE_IDS.LEAGUE_TWO] as const).forEach(division => {
     const ordered = Object.values(teams)
       .filter(team => getTeamLeagueId(team) === division)
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -271,28 +285,28 @@ const checkPromotionRelegation = () => {
   }, {});
 
   assert(nextSeason.currentWeek === 1, 'Season rollover should reset the week to 1');
-  assert(nextCounts['Premier League'] === 20, 'Premier League should keep 20 teams after promotion/relegation');
-  assert(nextCounts['Championship'] === 24, 'Championship should keep 24 teams after promotion/relegation');
-  assert(nextCounts['League One'] === 24, 'League One should keep 24 teams after promotion/relegation');
-  assert(nextCounts['League Two'] === 24, 'League Two should keep 24 teams after promotion/relegation');
+  assert(nextCounts[LEAGUE_IDS.PREMIER_LEAGUE] === 20, 'Premier League should keep 20 teams after promotion/relegation');
+  assert(nextCounts[LEAGUE_IDS.CHAMPIONSHIP] === 24, 'Championship should keep 24 teams after promotion/relegation');
+  assert(nextCounts[LEAGUE_IDS.LEAGUE_ONE] === 24, 'League One should keep 24 teams after promotion/relegation');
+  assert(nextCounts[LEAGUE_IDS.LEAGUE_TWO] === 24, 'League Two should keep 24 teams after promotion/relegation');
 
   const championshipTop = Object.values(teams)
-    .filter(team => getTeamLeagueId(team) === 'Championship')
+    .filter(team => getTeamLeagueId(team) === LEAGUE_IDS.CHAMPIONSHIP)
     .sort((a, b) => b.points - a.points || b.goalsFor - a.goalsFor || a.name.localeCompare(b.name))
     .slice(0, 3);
   const premierBottom = Object.values(teams)
-    .filter(team => getTeamLeagueId(team) === 'Premier League')
+    .filter(team => getTeamLeagueId(team) === LEAGUE_IDS.PREMIER_LEAGUE)
     .sort((a, b) => a.points - b.points || a.goalsFor - b.goalsFor || a.name.localeCompare(b.name))
     .slice(0, 3);
 
-  assert(championshipTop.every(team => getTeamLeagueId(nextSeason.teams[team.id]) === 'Premier League'), 'Top Championship teams should be promoted');
-  assert(premierBottom.every(team => getTeamLeagueId(nextSeason.teams[team.id]) === 'Championship'), 'Bottom Premier League teams should be relegated');
+  assert(championshipTop.every(team => getTeamLeagueId(nextSeason.teams[team.id]) === LEAGUE_IDS.PREMIER_LEAGUE), 'Top Championship teams should be promoted');
+  assert(premierBottom.every(team => getTeamLeagueId(nextSeason.teams[team.id]) === LEAGUE_IDS.CHAMPIONSHIP), 'Bottom Premier League teams should be relegated');
 };
 
 const checkRegistryBackedDefinitions = () => {
   registerLeagueDefinition({
     id: 'Test League',
-    countryId: 'england',
+    countryId: DEFAULT_COUNTRY_ID,
     displayName: 'Test League',
     tier: 99,
     teamCount: 10,
@@ -305,12 +319,13 @@ const checkRegistryBackedDefinitions = () => {
     id: 'Test Shield',
     type: 'domestic-cup',
     displayName: 'Test Shield',
-    countryScope: 'england',
+    countryScope: DEFAULT_COUNTRY_ID,
     trackedForTrophies: false,
     fixtureStrategy: 'inactive',
     roundNames: ['Final'],
     startWeek: 1,
     spacingWeeks: 1,
+    sortPriority: 999,
   });
 
   const data = initGameData();
@@ -324,8 +339,8 @@ const checkRegistryBackedDefinitions = () => {
   });
   assert(runtime.leagueDefinitionsById['Test League'], 'Registered leagues should be visible in runtime definitions');
   assert(runtime.competitionDefinitionsById['Test Shield'], 'Registered competitions should be visible in runtime definitions');
-  assert((runtime.teamsByLeague['Premier League'] || []).length === 20, 'Runtime should index Premier League teams');
-  assert((runtime.fixturesByCompetition['League'] || []).length > 0, 'Runtime should index league fixtures');
+  assert((runtime.teamsByLeague[LEAGUE_IDS.PREMIER_LEAGUE] || []).length === 20, 'Runtime should index Premier League teams');
+  assert((runtime.fixturesByCompetition[COMPETITION_IDS.LEAGUE] || []).length > 0, 'Runtime should index league fixtures');
 };
 
 const checkTacticAndTraitModuleRegistration = () => {
@@ -370,6 +385,100 @@ const checkTacticAndTraitModuleRegistration = () => {
     extendedEffects.energyDrain.multiplier < baseEffects.energyDrain.multiplier,
     'Registered player trait modules should change compiled match effects'
   );
+};
+
+const checkLegacyHydrationMapping = () => {
+  const data = initGameData();
+  const firstTeam = Object.values(data.teams)[0];
+  const firstFixture = Object.values(data.fixtures)[0];
+  assert(firstTeam && firstFixture, 'Hydration regression setup requires initial team and fixture data');
+
+  const repaired = normalizeHydratedState(
+    {
+      teams: {
+        [firstTeam.id]: {
+          ...firstTeam,
+          leagueId: undefined,
+          division: 'Premier League',
+        },
+      },
+      players: {},
+      fixtures: {
+        [firstFixture.id]: {
+          ...firstFixture,
+          competitionId: undefined,
+          competition: 'League',
+          leagueId: undefined,
+          division: 'Premier League',
+        },
+      },
+      cups: {
+        'FA Cup': {
+          competitionId: undefined as never,
+          competition: 'FA Cup',
+          roundNumber: 1,
+          roundName: 'Round 1',
+          entrants: [firstTeam.id],
+          scheduledWeek: 2,
+          completed: false,
+        },
+      } as never,
+      trophyCabinet: { 'FA Cup': 2 } as never,
+      trophyHistory: [
+        {
+          competitionId: undefined as never,
+          competition: 'FA Cup',
+          season: 1,
+          teamId: firstTeam.id,
+          teamName: firstTeam.name,
+        },
+      ],
+      seasonResults: [
+        {
+          season: 1,
+          teamId: firstTeam.id,
+          teamName: firstTeam.name,
+          competitions: {
+            league: '1st (Premier League)',
+            carabaoCup: 'Winners',
+            faCup: 'Eliminated',
+            ucl: 'Not active yet',
+          },
+        } as never,
+      ],
+    },
+    useGameStore.getState()
+  );
+
+  assert(repaired.teams?.[firstTeam.id]?.leagueId === LEAGUE_IDS.PREMIER_LEAGUE, 'Legacy division names should map to canonical league ids');
+  assert(repaired.fixtures?.[firstFixture.id]?.competitionId === COMPETITION_IDS.LEAGUE, 'Legacy competition names should map to canonical competition ids');
+  assert(repaired.cups?.[COMPETITION_IDS.FA_CUP]?.competitionId === COMPETITION_IDS.FA_CUP, 'Legacy cup keys should map to canonical competition ids');
+  assert(repaired.trophyCabinet?.[COMPETITION_IDS.FA_CUP] === 2, 'Legacy trophy cabinet keys should map to canonical ids');
+  assert(repaired.trophyHistory?.[0]?.competitionId === COMPETITION_IDS.FA_CUP, 'Legacy trophy history should map to canonical ids');
+  assert(repaired.seasonResults?.[0]?.leagueId === LEAGUE_IDS.PREMIER_LEAGUE, 'Legacy season results should map league labels to canonical ids');
+};
+
+const checkCanonicalWorldGuards = () => {
+  const approvedLegacyReadFiles = new Set([
+    'src/core/domainRegistry.ts',
+    'src/store/setup/hydrationRepair.ts',
+  ]);
+  const approvedLiteralFiles = new Set([
+    'src/core/domainRegistry.ts',
+  ]);
+  const legacyReadPattern = /\.(division|competition)\b/;
+  const literalPattern = /['"](Premier League|Championship|League One|League Two|League|FA Cup|Carabao Cup|UEFA Champions League)['"]/;
+  const sourceFiles = [...collectSourceFiles('src'), ...collectSourceFiles('app')];
+
+  sourceFiles.forEach(filePath => {
+    const source = readSource(filePath);
+    if (!approvedLegacyReadFiles.has(filePath) && legacyReadPattern.test(source)) {
+      throw new Error(`Legacy field read found outside compatibility boundary: ${filePath}`);
+    }
+    if (!approvedLiteralFiles.has(filePath) && literalPattern.test(source)) {
+      throw new Error(`Hardcoded competition or league label found outside registry config: ${filePath}`);
+    }
+  });
 };
 
 const checkStaleFormationMapRecoveryModel = () => {
@@ -512,6 +621,10 @@ const runRegressionChecks = () => {
   console.log('[OK] Registry-backed league and competition definitions passed');
   checkTacticAndTraitModuleRegistration();
   console.log('[OK] Tactical and trait effect registration passed');
+  checkLegacyHydrationMapping();
+  console.log('[OK] Legacy hydration mapping passed');
+  checkCanonicalWorldGuards();
+  console.log('[OK] Canonical world guardrails passed');
   checkStaleFormationMapRecoveryModel();
   console.log('[OK] Stale formation-map recovery model passed');
   checkFormationMapRejectsWrongPositions();

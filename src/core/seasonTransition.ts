@@ -1,5 +1,6 @@
 import {
   BoardObjective,
+  CompetitionId,
   CupState,
   Fixture,
   LeagueId,
@@ -10,6 +11,7 @@ import {
   SeasonResult,
 } from '../models/types';
 import {
+  COMPETITION_IDS,
   DEFAULT_LEAGUE_ID,
   getCompetitionDisplayName,
   getFixtureCompetitionId,
@@ -95,7 +97,7 @@ export const advanceSeason = (
     const userLeagueId = getTeamLeagueId(userTeam);
     const divisionTable = getLeagueTeams(teams, userLeagueId);
     const leaguePosition = divisionTable.findIndex(team => team.id === userTeamId) + 1;
-    const formatCupResult = (competitionId: string) => {
+    const formatCupResult = (competitionId: CompetitionId) => {
       const winnerTeamId = getCupWinnerTeamId(cups, competitionId);
       if (winnerTeamId === userTeamId) return 'Winners';
       const userCupFixtures = Object.values(fixtures)
@@ -112,18 +114,21 @@ export const advanceSeason = (
       season,
       teamId: userTeamId,
       teamName: userTeam.name,
+      leagueId: userLeagueId,
+      leagueResult: leaguePosition > 0
+        ? `${getOrdinalSuffix(leaguePosition)} (${getLeagueDisplayName(userLeagueId)})`
+        : `- (${getLeagueDisplayName(userLeagueId)})`,
       competitions: {
-        league: leaguePosition > 0
-          ? `${getOrdinalSuffix(leaguePosition)} (${getLeagueDisplayName(userLeagueId)})`
-          : `- (${getLeagueDisplayName(userLeagueId)})`,
-        carabaoCup: formatCupResult('Carabao Cup'),
-        faCup: formatCupResult('FA Cup'),
-        ucl: 'Not active yet',
+        [COMPETITION_IDS.CARABAO_CUP]: formatCupResult(COMPETITION_IDS.CARABAO_CUP),
+        [COMPETITION_IDS.FA_CUP]: formatCupResult(COMPETITION_IDS.FA_CUP),
+        [COMPETITION_IDS.UEFA_CHAMPIONS_LEAGUE]: 'Not active yet',
       },
     };
     nextSeasonResults = [seasonResult, ...nextSeasonResults].slice(0, 25);
 
-    TRACKED_TROPHY_COMPETITION_IDS.filter(competitionId => competitionId !== 'UEFA Champions League').forEach(competitionId => {
+    TRACKED_TROPHY_COMPETITION_IDS
+      .filter(competitionId => competitionId !== COMPETITION_IDS.UEFA_CHAMPIONS_LEAGUE)
+      .forEach(competitionId => {
       const winnerTeamId = getCupWinnerTeamId(cups, competitionId);
       if (winnerTeamId !== userTeamId) return;
       const recorded = recordTrophyWin(
@@ -137,7 +142,7 @@ export const advanceSeason = (
       nextTrophyCabinet = recorded.trophyCabinet;
       nextTrophyHistory = recorded.trophyHistory;
       seasonNews.push(`${userTeam.name} lift the ${getCompetitionDisplayName(competitionId)}.`);
-    });
+      });
   }
   const divisionTables = Object.fromEntries(
     DIVISION_ORDER.map(leagueId => [leagueId, getLeagueTeams(teams, leagueId)])
@@ -173,7 +178,7 @@ export const advanceSeason = (
       const nextDivision = nextDivisionByTeamId[teamId] || getTeamLeagueId(team) || DEFAULT_LEAGUE_ID;
       return [
         teamId,
-        resetTeamStats({ ...team, leagueId: nextDivision, division: nextDivision }),
+        resetTeamStats({ ...team, leagueId: nextDivision }),
       ];
     })
   );

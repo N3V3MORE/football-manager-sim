@@ -43,7 +43,6 @@ const buildCupRoundFixtures = (
       id: fixtureId,
       week: scheduledWeek,
       competitionId,
-      competition: competitionId,
       roundNumber,
       roundName: getCompetitionRoundName(competitionId, roundNumber),
       homeTeamId,
@@ -67,7 +66,6 @@ export const buildInitialCupStates = (teams: Record<string, Team>) => (
     const definition = getCompetitionDefinition(competitionId);
     acc[competitionId] = {
       competitionId,
-      competition: competitionId,
       roundNumber: 1,
       roundName: getCompetitionRoundName(competitionId, 1),
       entrants: getCompetitionEntrants(teams, competitionId),
@@ -176,7 +174,6 @@ export const advanceCupCompetitions = (
 
     nextCupStates[competitionId] = {
       competitionId,
-      competition: competitionId,
       roundNumber: nextRoundNumber,
       roundName: built.roundName,
       entrants: nextEntrants,

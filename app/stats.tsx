@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { Player } from '@/src/models/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PageHeader } from '@/components/ui/page-header';
+import { getLeagueDisplayName } from '@/src/core/domainRegistry';
+import { getLeaguePlayers, getUserLeagueId } from '@/src/features/world/worldSelectors';
 
 type PlayerStatKey = 'goals' | 'assists' | 'cleanSheets' | 'yellowCards' | 'redCards';
 
@@ -14,13 +16,8 @@ export default function StatsScreen() {
   const userTeamId = useGameStore(state => state.userTeamId);
   const [expandedPane, setExpandedPane] = useState<string | null>(null);
 
-  const userDivision = userTeamId ? teams[userTeamId]?.division : undefined;
-  const divisionTeamIds = new Set(
-    Object.values(teams)
-      .filter(team => !userDivision || team.division === userDivision)
-      .map(team => team.id)
-  );
-  const allPlayers = Object.values(players).filter(player => divisionTeamIds.has(player.teamId));
+  const userLeagueId = getUserLeagueId(teams, userTeamId);
+  const allPlayers = getLeaguePlayers(players, teams, userLeagueId);
 
   const topScorers = [...allPlayers]
     .filter(p => p.goals > 0)
@@ -97,7 +94,7 @@ export default function StatsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <PageHeader title={userDivision ? `${userDivision} Stats` : 'League Stats'} backLabel="< Hub" onBack={() => router.replace('/')} />
+      <PageHeader title={userLeagueId ? `${getLeagueDisplayName(userLeagueId)} Stats` : 'League Stats'} backLabel="< Hub" onBack={() => router.replace('/')} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {renderPane('Golden Boot', 'goals', topScorers, 'goals')}

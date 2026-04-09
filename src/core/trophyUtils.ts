@@ -44,7 +44,7 @@ export const recordTrophyWin = (
     [competitionId]: (trophyCabinet[competitionId] || 0) + 1,
   },
   trophyHistory: [
-    { competitionId, competition: competitionId, season, teamId, teamName },
+    { competitionId, season, teamId, teamName },
     ...trophyHistory,
   ].slice(0, 50),
 });

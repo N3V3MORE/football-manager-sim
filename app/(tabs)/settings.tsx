@@ -3,7 +3,8 @@ import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getDisplayKitColor, getDisplaySecondaryColor, getTeamTheme } from '@/src/constants/teamColors';
 import { useGameStore } from '@/src/store/gameStore';
-import { sortTeamsByDivisionAndName } from '@/src/core/leagueUtils';
+import { getLeagueDisplayName } from '@/src/core/domainRegistry';
+import { sortTeamsForSettings } from '@/src/features/world/worldSelectors';
 
 export default function SettingsScreen() {
   const userTeamId = useGameStore(state => state.userTeamId);
@@ -35,7 +36,7 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Current Team</Text>
           <Text style={styles.teamName}>{userTeam?.name || 'No team selected'}</Text>
-          {userTeam && <Text style={styles.teamDivision}>{userTeam.division}</Text>}
+          {userTeam && <Text style={styles.teamDivision}>{getLeagueDisplayName(userTeam.leagueId)}</Text>}
           {manager && (
             <View style={styles.managerBlock}>
               <Text style={styles.managerLabel}>Manager</Text>
@@ -84,7 +85,7 @@ export default function SettingsScreen() {
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>Change Team</Text>
             <ScrollView>
-              {sortTeamsByDivisionAndName(Object.values(teams)).map(team => {
+              {sortTeamsForSettings(teams).map(team => {
                 const theme = getTeamTheme(team.name);
                 const isCurrent = team.id === userTeamId;
                 return (
@@ -99,7 +100,7 @@ export default function SettingsScreen() {
                       <View style={[styles.kitChip, { backgroundColor: getDisplayKitColor(theme.primary) }]} />
                       <View style={[styles.kitChip, { backgroundColor: getDisplaySecondaryColor(theme.secondary) }]} />
                       <Text style={[styles.teamRowName, isCurrent && styles.currentText]}>{team.name}</Text>
-                      <Text style={styles.teamRowDivision}>{team.division}</Text>
+                      <Text style={styles.teamRowDivision}>{getLeagueDisplayName(team.leagueId)}</Text>
                       {isCurrent && <Text style={styles.currentBadge}>CURRENT</Text>}
                     </TouchableOpacity>
                 );

@@ -1,5 +1,13 @@
 import { Fixture, LeagueId, Team } from '../models/types';
-import { getFixtureCompetitionId, getLeagueDefinition, getLeagueSortIndex, getTeamLeagueId, isLeagueCompetitionId, LEAGUE_ORDER } from './domainRegistry';
+import {
+  COMPETITION_IDS,
+  getFixtureCompetitionId,
+  getLeagueDefinition,
+  getLeagueSortIndex,
+  getTeamLeagueId,
+  isLeagueCompetitionId,
+  LEAGUE_ORDER,
+} from './domainRegistry';
 
 export const DIVISION_ORDER: LeagueId[] = [...LEAGUE_ORDER];
 
@@ -73,12 +81,10 @@ export const buildRoundRobinFixtures = (
     fixtures[homeId] = {
       id: homeId,
       week: fixture.week,
-      competitionId: 'League',
-      competition: 'League',
+      competitionId: COMPETITION_IDS.LEAGUE,
       roundNumber: 1,
       roundName: definition.displayName,
       leagueId,
-      division: definition.displayName,
       homeTeamId: fixture.home,
       awayTeamId: fixture.away,
       homeScore: null,
@@ -92,12 +98,10 @@ export const buildRoundRobinFixtures = (
     fixtures[awayId] = {
       id: awayId,
       week: fixture.week + rounds,
-      competitionId: 'League',
-      competition: 'League',
+      competitionId: COMPETITION_IDS.LEAGUE,
       roundNumber: 1,
       roundName: definition.displayName,
       leagueId,
-      division: definition.displayName,
       homeTeamId: fixture.away,
       awayTeamId: fixture.home,
       homeScore: null,

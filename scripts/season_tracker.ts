@@ -4,6 +4,7 @@ import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/pr
 import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 import { ENGINE_CONFIG } from '../src/config/engineConfig';
 import { Fixture, Player, Team } from '../src/models/types';
+import { COMPETITION_IDS, getFixtureCompetitionId } from '../src/core/domainRegistry';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -36,7 +37,7 @@ type PlayerMatchDelta = {
 type MatchReport = {
   fixtureId: string;
   week: number;
-  competition: Fixture['competition'];
+  competitionId: Fixture['competitionId'];
   roundName?: string;
   homeTeamId: string;
   awayTeamId: string;
@@ -384,7 +385,7 @@ const createMatchReport = (
   if (redCardCount > 0 && redCardEventCount === 0) auditFlags.push('red_card_log_mismatch');
 
   return {
-    competition: fixture.competition,
+    competitionId: getFixtureCompetitionId(fixture),
     roundName: fixture.roundName,
     fixtureId,
     week,
@@ -500,7 +501,7 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
   }
 
   const finalTable = buildTable(state.teams);
-  const leagueMatches = allMatches.filter(match => match.competition === 'League');
+  const leagueMatches = allMatches.filter(match => match.competitionId === COMPETITION_IDS.LEAGUE);
   const totalGoals = leagueMatches.reduce((sum, match) => sum + match.totalGoals, 0);
   const yellowCards = leagueMatches.reduce((sum, match) => (
     sum + match.cards.reduce((cardSum, card) => cardSum + card.yellowCards, 0)

@@ -10,16 +10,17 @@ import {
   getTeamTheme,
 } from '@/src/constants/teamColors';
 import { getFixtureCompetitionLabel } from '@/src/core/competitionUtils';
+import { COMPETITION_IDS, getCompetitionDisplayName, getFixtureCompetitionId, getLeagueDisplayName } from '@/src/core/domainRegistry';
 import { TeamColorBadge } from '@/src/features/hub/components/TeamColorBadge';
 import {
   getCupPaneStatus,
   getDivisionSeasonLeaders,
-  getLatestNewsForDivision,
   getMiniTableWindow,
   getTeamPosition,
   getUpcomingFixtures,
   weekToDate,
 } from '@/src/features/hub/hubSelectors';
+import { getExtraordinaryNewsItems, getLeaguePlayers, getLeagueTeams } from '@/src/features/world/worldSelectors';
 
 export default function HubScreen() {
   const router = useRouter();
@@ -33,7 +34,8 @@ export default function HubScreen() {
   const players = useGameStore(state => state.players);
 
   const myTeam = userTeamId ? teams[userTeamId] : null;
-  const myDivision = myTeam?.division ?? 'Premier League';
+  const myLeagueId = myTeam?.leagueId;
+  const myLeagueName = getLeagueDisplayName(myLeagueId);
 
   // Find next match
   const weekFixtures = Object.values(fixtures).filter(f => f.week === currentWeek);
@@ -57,35 +59,34 @@ export default function HubScreen() {
 
   const myTheme = getTeamTheme(myTeam.name);
   const activeUserTeamId = userTeamId || '';
-  const myDivisionTeams = Object.values(teams).filter(team => team.division === myDivision);
-  const myDivisionTeamIds = new Set(myDivisionTeams.map(team => team.id));
-  const myDivisionPlayers = Object.values(players).filter(player => myDivisionTeamIds.has(player.teamId));
+  const myLeagueTeams = getLeagueTeams(teams, myLeagueId);
+  const myLeaguePlayers = getLeaguePlayers(players, teams, myLeagueId);
 
   const carabaoPane = getCupPaneStatus({
-    competition: 'Carabao Cup',
+    competition: COMPETITION_IDS.CARABAO_CUP,
     fixtures,
     cups,
     activeUserTeamId,
     teams,
   });
   const faPane = getCupPaneStatus({
-    competition: 'FA Cup',
+    competition: COMPETITION_IDS.FA_CUP,
     fixtures,
     cups,
     activeUserTeamId,
     teams,
   });
   const newsItems = (news || []);
-  const latestNews = getLatestNewsForDivision(newsItems, myDivisionTeams);
-  const miniTable = getMiniTableWindow(myDivisionTeams, userTeamId);
+  const latestNews = getExtraordinaryNewsItems(newsItems, teams, myLeagueId).slice(0, 3);
+  const miniTable = getMiniTableWindow(myLeagueTeams, userTeamId);
   const upcomingFixtures = getUpcomingFixtures(fixtures, currentWeek, userTeamId);
   const {
     topScorer,
     topAssister,
     topCleanSheetGKs,
-  } = getDivisionSeasonLeaders(myDivisionPlayers);
+  } = getDivisionSeasonLeaders(myLeaguePlayers);
 
-  const myPosition = getTeamPosition(myDivisionTeams, userTeamId);
+  const myPosition = getTeamPosition(myLeagueTeams, userTeamId);
   const myRecord = `${myTeam.wins}W ${myTeam.draws}D ${myTeam.losses}L`;
 
   return (
@@ -191,12 +192,12 @@ export default function HubScreen() {
 
         <View style={styles.cupPaneRow}>
           <View style={styles.cupPane}>
-            <Text style={styles.cupPaneTitle}>Carabao Cup</Text>
+            <Text style={styles.cupPaneTitle}>{getCompetitionDisplayName(COMPETITION_IDS.CARABAO_CUP)}</Text>
             <Text style={styles.cupPaneRound} numberOfLines={1}>{carabaoPane.round}</Text>
             <Text style={styles.cupPaneOpp} numberOfLines={1}>Next: {carabaoPane.opponent}</Text>
           </View>
           <View style={styles.cupPane}>
-            <Text style={styles.cupPaneTitle}>FA Cup</Text>
+            <Text style={styles.cupPaneTitle}>{getCompetitionDisplayName(COMPETITION_IDS.FA_CUP)}</Text>
             <Text style={styles.cupPaneRound} numberOfLines={1}>{faPane.round}</Text>
             <Text style={styles.cupPaneOpp} numberOfLines={1}>Next: {faPane.opponent}</Text>
           </View>
@@ -234,7 +235,9 @@ export default function HubScreen() {
                           <View style={[styles.calKitChip, { backgroundColor: getDisplaySecondaryColor(oppTheme.secondary) }]} />
                           <Text style={styles.calOpp} numberOfLines={1}>
                             {opp.name}
-                            {match.competition !== 'League' ? ` - ${match.competition} ${match.roundName || `R${match.roundNumber || 1}`}` : ''}
+                            {getFixtureCompetitionId(match) !== COMPETITION_IDS.LEAGUE
+                              ? ` - ${getFixtureCompetitionLabel(match)}`
+                              : ''}
                           </Text>
                           {match.isPlayed && (
                             <Text style={styles.calScore}>
@@ -275,7 +278,7 @@ export default function HubScreen() {
 
         {/* Mini table */}
         <TouchableOpacity style={styles.card} onPress={() => router.push('/league')}>
-          <Text style={styles.cardTitle}>{myDivision}</Text>
+          <Text style={styles.cardTitle}>{myLeagueName}</Text>
           {miniTable.map((team) => {
             const t = getTeamTheme(team.name);
             const isMe = team.id === userTeamId;

@@ -7,7 +7,7 @@ import {
   createSquadActions,
   createTransferActions,
 } from './actions';
-import { createStoreDefaults, gamePersistStorage } from './setup';
+import { createStoreDefaults, gamePersistStorage, normalizeHydratedState, sanitizeStateForPersistence } from './setup';
 import { GameStore } from './types';
 
 export const useGameStore = create<GameStore>()(
@@ -24,6 +24,11 @@ export const useGameStore = create<GameStore>()(
     {
       name: 'football-manager-storage',
       storage: gamePersistStorage,
+      partialize: state => sanitizeStateForPersistence(state),
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...normalizeHydratedState(persistedState, currentState as GameStore),
+      }),
     }
   )
 );

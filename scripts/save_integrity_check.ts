@@ -2,6 +2,7 @@ import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../src/constants/for
 import { isPlayerSlotFit, rebuildFormationMap } from '../src/core/formationMapUtils';
 import { Formation, Team } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
+import { normalizeHydratedState, sanitizeStateForPersistence } from '../src/store/setup';
 
 const FORMATIONS: Formation[] = [
   '4-3-3',
@@ -206,6 +207,34 @@ const checkManagerProfilesLoaded = () => {
   });
 };
 
+const checkCanonicalPersistenceShape = () => {
+  const persistedState = sanitizeStateForPersistence(useGameStore.getState());
+
+  Object.values(persistedState.teams).forEach(team => {
+    assert(!('division' in team), `Persisted team ${team.name} should not include legacy division field`);
+    assert(Boolean(team.leagueId), `Persisted team ${team.name} should include canonical leagueId`);
+  });
+
+  Object.values(persistedState.fixtures).forEach(fixture => {
+    assert(!('competition' in fixture), `Persisted fixture ${fixture.id} should not include legacy competition field`);
+    assert(!('division' in fixture), `Persisted fixture ${fixture.id} should not include legacy division field`);
+    assert(Boolean(fixture.competitionId), `Persisted fixture ${fixture.id} should include canonical competitionId`);
+  });
+
+  Object.values(persistedState.cups).forEach(cup => {
+    assert(!('competition' in cup), `Persisted cup ${cup.competitionId} should not include legacy competition field`);
+  });
+
+  persistedState.trophyHistory.forEach(entry => {
+    assert(!('competition' in entry), `Persisted trophy history entry for ${entry.teamName} should not include legacy competition field`);
+  });
+
+  const rehydrated = normalizeHydratedState(persistedState, useGameStore.getState());
+  Object.values(rehydrated.teams || {}).forEach(team => {
+    assert(Boolean(team.leagueId), `Rehydrated team ${team.name} should keep canonical leagueId`);
+  });
+};
+
 const runSaveIntegrityCheck = () => withSeededRandom(20260407, async () => {
   console.log('--- SAVE INTEGRITY CHECK ---');
   validateFormationDefinitions();
@@ -218,6 +247,8 @@ const runSaveIntegrityCheck = () => withSeededRandom(20260407, async () => {
   console.log('[OK] Bench bounds and 3-4-3 lineup validation passed');
   checkManagerProfilesLoaded();
   console.log('[OK] Manager profiles are loaded for every club');
+  checkCanonicalPersistenceShape();
+  console.log('[OK] Persisted saves keep canonical world identifiers only');
   console.log('--- SAVE INTEGRITY CHECK COMPLETE ---');
 });
 

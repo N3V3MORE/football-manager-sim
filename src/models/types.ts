@@ -1,4 +1,5 @@
 export type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
+export type CountryId = string;
 export type LeagueId = string;
 export type CompetitionId = string;
 export type CupCompetitionId = string;
@@ -11,9 +12,16 @@ export type CompetitionType = 'league' | 'domestic-cup' | 'continental-cup';
 export type CompetitionFixtureStrategy = 'round-robin' | 'knockout' | 'inactive';
 export type TrophyCabinet = Record<TrophyCompetitionId, number>;
 
+export interface CountryDefinition {
+  id: CountryId;
+  displayName: string;
+  reelHint: string;
+  sortOrder: number;
+}
+
 export interface LeagueDefinition {
   id: LeagueId;
-  countryId: string;
+  countryId: CountryId;
   displayName: string;
   tier: number;
   teamCount: number;
@@ -27,12 +35,19 @@ export interface CompetitionDefinition {
   id: CompetitionId;
   type: CompetitionType;
   displayName: string;
-  countryScope: string;
+  countryScope: CountryId | 'europe';
   trackedForTrophies: boolean;
   fixtureStrategy: CompetitionFixtureStrategy;
   roundNames: string[];
   startWeek: number;
   spacingWeeks: number;
+  sortPriority: number;
+}
+
+export interface WorldConfig {
+  countries: Record<CountryId, CountryDefinition>;
+  leagues: Record<LeagueId, LeagueDefinition>;
+  competitions: Record<CompetitionId, CompetitionDefinition>;
 }
 export type Formation = 
   | '4-3-3' 
@@ -145,7 +160,7 @@ export interface Player {
 export interface Team {
   id: string;
   name: string;
-  countryId?: string;
+  countryId?: CountryId;
   leagueId: LeagueId;
   division?: Division;
   clubClass?: string;
@@ -211,18 +226,13 @@ export interface TrophyHistoryEntry {
   teamName: string;
 }
 
-export interface SeasonCompetitionResult {
-  league: string;
-  carabaoCup: string;
-  faCup: string;
-  ucl: string;
-}
-
 export interface SeasonResult {
   season: number;
   teamId: string;
   teamName: string;
-  competitions: SeasonCompetitionResult;
+  leagueId: LeagueId;
+  leagueResult: string;
+  competitions: Record<CompetitionId, string>;
 }
 
 export interface GameState {

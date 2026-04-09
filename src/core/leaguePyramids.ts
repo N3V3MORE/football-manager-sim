@@ -1,5 +1,5 @@
 import { LeagueId } from '../models/types';
-import { DEFAULT_COUNTRY_ID, LEAGUE_ORDER, LEAGUE_DEFINITIONS } from './domainRegistry';
+import { COUNTRY_DEFINITIONS, DEFAULT_COUNTRY_ID, getCountryLeagues } from './domainRegistry';
 
 export interface LeagueCountryPyramid {
   id: string;
@@ -9,12 +9,14 @@ export interface LeagueCountryPyramid {
 }
 
 export const LEAGUE_COUNTRIES: LeagueCountryPyramid[] = [
-  {
-    id: DEFAULT_COUNTRY_ID,
-    label: 'England',
-    reelHint: 'Swipe left for countries, then scroll down through the pyramid',
-    divisions: LEAGUE_ORDER.filter(leagueId => LEAGUE_DEFINITIONS[leagueId]?.countryId === DEFAULT_COUNTRY_ID),
-  },
+  ...Object.values(COUNTRY_DEFINITIONS)
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.displayName.localeCompare(right.displayName))
+    .map(country => ({
+      id: country.id,
+      label: country.displayName,
+      reelHint: country.reelHint,
+      divisions: getCountryLeagues(country.id),
+    })),
 ];
 
 export { DEFAULT_COUNTRY_ID };

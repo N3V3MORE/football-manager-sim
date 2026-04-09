@@ -1,5 +1,6 @@
 import { getSeasonWeekLimit, sortTeamsByTable } from '@/src/core/leagueUtils';
 import { CupCompetition, CupState, Fixture, Player, Team } from '@/src/models/types';
+import { getCompetitionSortRank, getFixtureCompetitionId } from '@/src/core/domainRegistry';
 
 const SEASON_START = new Date(2024, 7, 10);
 
@@ -46,7 +47,7 @@ export const getCupPaneStatus = ({
     .filter(
       fixture =>
         !fixture.isPlayed &&
-        fixture.competition === competition &&
+        getFixtureCompetitionId(fixture) === competition &&
         (fixture.homeTeamId === activeUserTeamId || fixture.awayTeamId === activeUserTeamId)
     )
     .sort((a, b) => {
@@ -85,14 +86,14 @@ export const getCupPaneStatus = ({
   };
 };
 
-export const getLatestNewsForDivision = (
+export const getLatestNewsForLeague = (
   newsItems: string[],
-  myDivisionTeams: Team[],
+  leagueTeams: Team[],
   maxItems = 3
 ) => {
   const filteredNews = newsItems.filter(item => {
     const text = item.toLowerCase();
-    return myDivisionTeams.some(team => text.includes(team.name.toLowerCase()));
+    return leagueTeams.some(team => text.includes(team.name.toLowerCase()));
   });
 
   return filteredNews.slice(0, maxItems);
@@ -136,8 +137,8 @@ export const getUpcomingFixtures = (
     const matches = Object.values(fixtures)
       .filter(fixture => fixture.week === week && (fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId))
       .sort((a, b) => {
-        const aRank = a.competition === 'League' ? 0 : (a.competition === 'Carabao Cup' ? 1 : 2);
-        const bRank = b.competition === 'League' ? 0 : (b.competition === 'Carabao Cup' ? 1 : 2);
+        const aRank = getCompetitionSortRank(getFixtureCompetitionId(a));
+        const bRank = getCompetitionSortRank(getFixtureCompetitionId(b));
         if (aRank !== bRank) return aRank - bRank;
         return (a.roundNumber || 0) - (b.roundNumber || 0);
       });

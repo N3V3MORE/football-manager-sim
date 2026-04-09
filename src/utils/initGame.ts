@@ -4,7 +4,7 @@ import { Player, Team, Position, BoardObjective, TeamTactics, LeagueId } from '.
 import { computeMarketValue, getBudgetForClass } from './calendar';
 import englishLeaguePlayers from '../data/english_league_players.json';
 import { PREMIER_LEAGUE_MANAGERS } from '../data/premier_league_managers';
-import { DEFAULT_LEAGUE_ID, getLeagueDefinition } from '../core/domainRegistry';
+import { DEFAULT_LEAGUE_ID, getLeagueDefinition, LEAGUE_IDS, mapLegacyLeagueId } from '../core/domainRegistry';
 import { buildManager, buildGenericManager, deriveInitialBoardApproval } from '../core/managerUtils';
 import { getDivisionTeamCount } from '../core/leagueUtils';
 import { buildSeasonFixtures } from '../core/seasonFixtureBuilder';
@@ -126,9 +126,9 @@ const toLowerLeagueSourcePlayers = (rows: LowerLeaguePlayerRow[]) => rows.map(ro
 }));
 
 const deriveTeamClass = (leagueId: LeagueId, avgOverall: number) => {
-  if (leagueId === 'Premier League') return avgOverall >= 84 ? 'A' : avgOverall >= 79 ? 'B' : avgOverall >= 75 ? 'C' : 'D';
-  if (leagueId === 'Championship') return avgOverall >= 74 ? 'B' : avgOverall >= 70 ? 'C' : avgOverall >= 66 ? 'D' : 'E';
-  if (leagueId === 'League One') return avgOverall >= 72 ? 'C' : avgOverall >= 68 ? 'D' : avgOverall >= 64 ? 'E' : 'F';
+  if (leagueId === LEAGUE_IDS.PREMIER_LEAGUE) return avgOverall >= 84 ? 'A' : avgOverall >= 79 ? 'B' : avgOverall >= 75 ? 'C' : 'D';
+  if (leagueId === LEAGUE_IDS.CHAMPIONSHIP) return avgOverall >= 74 ? 'B' : avgOverall >= 70 ? 'C' : avgOverall >= 66 ? 'D' : 'E';
+  if (leagueId === LEAGUE_IDS.LEAGUE_ONE) return avgOverall >= 72 ? 'C' : avgOverall >= 68 ? 'D' : avgOverall >= 64 ? 'E' : 'F';
   return avgOverall >= 68 ? 'D' : avgOverall >= 64 ? 'E' : 'F';
 };
 
@@ -305,8 +305,7 @@ export const initGameData = (userTeamName?: string) => {
       id: teamId,
       name: teamData.name,
       countryId: 'england',
-      leagueId: 'Premier League',
-      division: 'Premier League',
+      leagueId: LEAGUE_IDS.PREMIER_LEAGUE,
       clubClass: teamData.class,
       manager,
       points: 0,
@@ -373,14 +372,16 @@ export const initGameData = (userTeamName?: string) => {
   });
 
   const lowerRows = lowerLeaguePlayers as LowerLeaguePlayerRow[];
+  const lowerLeagueIds = [LEAGUE_IDS.CHAMPIONSHIP, LEAGUE_IDS.LEAGUE_ONE, LEAGUE_IDS.LEAGUE_TWO] as LeagueId[];
   const lowerGroups = lowerRows.reduce<Record<LeagueId, Record<string, LowerLeaguePlayerRow[]>>>((acc, row) => {
-    if (!acc[row.leagueName]) acc[row.leagueName] = {};
-    if (!acc[row.leagueName][row.clubName]) acc[row.leagueName][row.clubName] = [];
-    acc[row.leagueName][row.clubName].push(row);
+    const canonicalLeagueId = mapLegacyLeagueId(row.leagueName) || DEFAULT_LEAGUE_ID;
+    if (!acc[canonicalLeagueId]) acc[canonicalLeagueId] = {};
+    if (!acc[canonicalLeagueId][row.clubName]) acc[canonicalLeagueId][row.clubName] = [];
+    acc[canonicalLeagueId][row.clubName].push(row);
     return acc;
-  }, { Championship: {}, 'League One': {}, 'League Two': {} } as Record<LeagueId, Record<string, LowerLeaguePlayerRow[]>>);
+  }, Object.fromEntries(lowerLeagueIds.map(leagueId => [leagueId, {}])) as Record<LeagueId, Record<string, LowerLeaguePlayerRow[]>>);
 
-  (['Championship', 'League One', 'League Two'] as LeagueId[]).forEach((leagueId) => {
+  lowerLeagueIds.forEach((leagueId) => {
     const clubs = Object.entries(lowerGroups[leagueId] || {})
       .map(([clubName, rows]) => {
         const avgOverall = rows.reduce((sum, row) => sum + row.overallRating, 0) / Math.max(1, rows.length);
@@ -403,7 +404,6 @@ export const initGameData = (userTeamName?: string) => {
       name: club.clubName,
       countryId: 'england',
       leagueId,
-      division: leagueId,
       clubClass: club.teamClass,
       manager,
         points: 0,

@@ -1,12 +1,21 @@
 # Changelog
 
-## v3.2.3 - Add cup competitions and fix week flow
+## v3.2.3 - Cups, engine foundations, and canonical world config
 
 What changed:
 - Added FA Cup and Carabao Cup fixtures from the English league pyramid.
 - Showed cup competition and round labels in the calendar and match screens.
+- Added a trophies page so season results and trophy wins are tracked in-game.
 - Added a quick-sim week action and fixed live-match exit so the week advances cleanly after playing a fixture.
 - Kept cup fixtures out of league table updates and separated league-only tracker reporting from cup matches.
+- Split the store into action/setup modules and moved more season logic into pure runtime paths.
+- Added registry-backed league and competition definitions, simulation runtime caches, and a modular tactical-effect pipeline.
+- Added deterministic engine benchmarking plus stronger regression and save-integrity checks.
+- Reworked season skip so it simulates in memory, reduces persistence pressure, and keeps the app stable under long skips.
+- Migrated app-facing league and competition identity to canonical ids instead of display-string branching.
+- Added explicit legacy save mapping and canonical persistence so new saves write ids while old saves still hydrate cleanly.
+- Moved hub, calendar, stats, transfers, settings, league, and trophies screens onto registry-backed selectors.
+- Added static guardrails to block direct legacy field reads and hardcoded English competition labels outside approved config paths.
 
 ## v3.2.2 - Polish the league navigation
 
