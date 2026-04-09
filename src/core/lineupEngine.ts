@@ -52,13 +52,19 @@ const getLineupScore = (
   return score;
 };
 
+type ScoredChoice = {
+  player: Player;
+  score: number;
+};
+
 export const buildQuickSimLineup = (
   teamId: string,
   players: Record<string, Player>,
-  formation: string
+  formation: string,
+  eligiblePlayers?: Player[]
 ) => {
-  const teamPlayers = Object.values(players)
-    .filter(p => p.teamId === teamId && p.matchesSuspended === 0)
+  const teamPlayers = (eligiblePlayers || Object.values(players)
+    .filter(p => p.teamId === teamId && p.matchesSuspended === 0))
     .sort((a, b) => b.overallRating - a.overallRating);
 
   const updates: Record<string, Partial<Player>> = {};
@@ -70,24 +76,43 @@ export const buildQuickSimLineup = (
   const flatSlots = slots.flat();
   const assigned = new Set<string>();
   const teamMaxMinutes = teamPlayers.reduce((max, player) => Math.max(max, player.minutesPlayed || 0), 0);
+  const isBetterChoice = (current: ScoredChoice | null, candidate: ScoredChoice) => {
+    if (!current) return true;
+    if (candidate.score !== current.score) return candidate.score > current.score;
+    return candidate.player.overallRating > current.player.overallRating;
+  };
 
   flatSlots.forEach(slot => {
-    const candidates = teamPlayers.filter(player => !assigned.has(player.id));
-    if (candidates.length === 0) return;
-    const exact = candidates.filter(player => player.subPosition === slot.label || player.altPositions?.includes(slot.label));
-    const positional = candidates.filter(player => player.position === slot.pos);
-    const pool = exact.length > 0 ? exact : (positional.length > 0 ? positional : candidates);
-    const chosen = pool
-      .map(player => ({
+    let bestExact: ScoredChoice | null = null;
+    let bestPositional: ScoredChoice | null = null;
+    let bestAny: ScoredChoice | null = null;
+
+    teamPlayers.forEach(player => {
+      if (assigned.has(player.id)) return;
+
+      const scoredCandidate = {
         player,
         score: getLineupScore(player, slot.pos as Player['position'], slot.label, teamMaxMinutes, true),
-      }))
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return b.player.overallRating - a.player.overallRating;
-      })[0].player;
-    updates[chosen.id] = { isStarting: true, isSub: false };
-    assigned.add(chosen.id);
+      };
+
+      if (isBetterChoice(bestAny, scoredCandidate)) {
+        bestAny = scoredCandidate;
+      }
+
+      if (player.position === slot.pos && isBetterChoice(bestPositional, scoredCandidate)) {
+        bestPositional = scoredCandidate;
+      }
+
+      if ((player.subPosition === slot.label || player.altPositions?.includes(slot.label)) && isBetterChoice(bestExact, scoredCandidate)) {
+        bestExact = scoredCandidate;
+      }
+    });
+
+    const selectedChoice: ScoredChoice | null = bestExact || bestPositional || bestAny;
+    if (!selectedChoice) return;
+    const selectedPlayer = (selectedChoice as ScoredChoice).player;
+    updates[selectedPlayer.id] = { isStarting: true, isSub: false };
+    assigned.add(selectedPlayer.id);
   });
 
   if (assigned.size < 11) {

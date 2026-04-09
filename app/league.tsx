@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Modal,
   ScrollView,
@@ -12,14 +12,15 @@ import {
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '@/src/store/gameStore';
-import { getTeamTheme } from '@/src/constants/teamColors';
+import { getDisplayKitColor, getDisplaySecondaryColor, getTeamTheme } from '@/src/constants/teamColors';
 import { Player, Team } from '@/src/models/types';
 import { getSlotsForFormation } from '@/src/constants/formations';
 import { rebuildFormationSlotPlayers } from '@/src/core/formationMapUtils';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
 import { DEFAULT_COUNTRY_ID, LEAGUE_COUNTRIES, getLeagueCountry } from '@/src/core/leaguePyramids';
-import { sortTeamsByTable } from '@/src/core/leagueUtils';
+import { getLeagueDisplayName } from '@/src/core/domainRegistry';
 import { PageHeader } from '@/components/ui/page-header';
+import { getCountryLeagueTableSections, getUserTeam } from '@/src/features/world/worldSelectors';
 
 const MINI_SLOT_WIDTH = 56;
 const MINI_DOT_SIZE = 32;
@@ -55,18 +56,9 @@ export default function LeagueTableScreen() {
   const divisionScrollRefs = useRef<Record<string, ScrollView | null>>({});
   const divisionOffsets = useRef<Record<string, Record<string, number>>>({});
 
-  const userTeam = userTeamId ? teams[userTeamId] : null;
+  const userTeam = getUserTeam(teams, userTeamId);
   const activeCountryId = userTeam?.countryId || selectedCountryId || DEFAULT_COUNTRY_ID;
   const activeCountry = getLeagueCountry(activeCountryId);
-
-  const teamsByCountry = useMemo(() => Object.fromEntries(
-    LEAGUE_COUNTRIES.map(country => [
-      country.id,
-      sortTeamsByTable(
-        Object.values(teams).filter(team => (team.countryId || DEFAULT_COUNTRY_ID) === country.id)
-      ),
-    ])
-  ) as Record<string, Team[]>, [teams]);
 
   useEffect(() => {
     const targetIndex = Math.max(0, LEAGUE_COUNTRIES.findIndex(country => country.id === activeCountryId));
@@ -87,8 +79,8 @@ export default function LeagueTableScreen() {
     countryScrollRef.current?.scrollTo({ x: index * width, animated: true });
   };
 
-  const scrollToDivision = (countryId: string, division: string) => {
-    const offset = divisionOffsets.current[countryId]?.[division];
+  const scrollToDivision = (countryId: string, leagueId: string) => {
+    const offset = divisionOffsets.current[countryId]?.[leagueId];
     if (offset !== undefined) {
       divisionScrollRefs.current[countryId]?.scrollTo({ y: offset, animated: true });
     }
@@ -132,28 +124,29 @@ export default function LeagueTableScreen() {
     );
   };
 
-  const renderDivisionSection = (countryId: string, division: string, isActiveCountry: boolean) => {
-    const divisionTeams = teamsByCountry[countryId] || [];
-    const divisionTeamsOnly = divisionTeams.filter(team => team.division === division);
-    const isActiveDivision = isActiveCountry && division === userTeam?.division;
+  const renderDivisionSection = (countryId: string, leagueId: string, isActiveCountry: boolean) => {
+    const countrySections = getCountryLeagueTableSections(teams, countryId);
+    const divisionSection = countrySections.find(section => section.leagueId === leagueId);
+    const divisionTeamsOnly = divisionSection?.teams || [];
+    const isActiveDivision = isActiveCountry && leagueId === userTeam?.leagueId;
 
     return (
       <View
-        key={division}
+        key={leagueId}
         onLayout={(event) => {
           if (!divisionOffsets.current[countryId]) divisionOffsets.current[countryId] = {};
-          divisionOffsets.current[countryId][division] = event.nativeEvent.layout.y;
+          divisionOffsets.current[countryId][leagueId] = event.nativeEvent.layout.y;
         }}
         style={[styles.divisionSection, isActiveDivision && styles.divisionSectionActive]}
       >
         <View style={styles.divisionHeaderRow}>
           <View>
-            <Text style={styles.divisionTitle}>{division}</Text>
+            <Text style={styles.divisionTitle}>{getLeagueDisplayName(leagueId)}</Text>
             <Text style={styles.divisionSubtitle}>
               {isActiveDivision ? 'Your current division' : 'Scroll down through this country'}
             </Text>
           </View>
-          <TouchableOpacity style={styles.divisionJumpBtn} onPress={() => scrollToDivision(countryId, division)}>
+          <TouchableOpacity style={styles.divisionJumpBtn} onPress={() => scrollToDivision(countryId, leagueId)}>
             <Text style={styles.divisionJumpText}>Go</Text>
           </TouchableOpacity>
         </View>
@@ -182,8 +175,8 @@ export default function LeagueTableScreen() {
                 <Text style={[styles.cell, styles.pos, isUser && styles.userText]}>{index + 1}</Text>
                 <View style={styles.nameCell}>
                   <View style={styles.kitStrip}>
-                    <View style={[styles.kitBlock, { backgroundColor: theme.primary }]} />
-                    <View style={[styles.kitBlock, { backgroundColor: theme.secondary === '#FFFFFF' ? '#e2e8f0' : theme.secondary }]} />
+                    <View style={[styles.kitBlock, { backgroundColor: getDisplayKitColor(theme.primary) }]} />
+                    <View style={[styles.kitBlock, { backgroundColor: getDisplaySecondaryColor(theme.secondary) }]} />
                   </View>
                   <Text style={[styles.cell, styles.name, isUser && styles.userText]} numberOfLines={1}>{team.name}</Text>
                 </View>
@@ -288,8 +281,8 @@ export default function LeagueTableScreen() {
                 <>
                   <View style={styles.modalHeader}>
                     <View style={styles.modalKitStrip}>
-                      <View style={[styles.modalKitBlock, { backgroundColor: theme.primary }]} />
-                      <View style={[styles.modalKitBlock, { backgroundColor: theme.secondary === '#FFFFFF' ? '#e2e8f0' : theme.secondary }]} />
+                      <View style={[styles.modalKitBlock, { backgroundColor: getDisplayKitColor(theme.primary) }]} />
+                      <View style={[styles.modalKitBlock, { backgroundColor: getDisplaySecondaryColor(theme.secondary) }]} />
                     </View>
                     <Text style={styles.modalTitle}>{selectedTeam.name}</Text>
                     <Text style={styles.modalSubtitle}>{theme.stadium}</Text>

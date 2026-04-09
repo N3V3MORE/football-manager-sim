@@ -7,13 +7,30 @@ import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 import { getSlotsForFormation } from '../src/constants/formations';
 import { rebuildFormationMap, rebuildFormationSlotPlayers } from '../src/core/formationMapUtils';
 import {
+  COMPETITION_IDS,
+  DEFAULT_COUNTRY_ID,
+  LEAGUE_IDS,
+  getFixtureCompetitionId,
+  getTeamLeagueId,
+  registerCompetitionDefinition,
+  registerLeagueDefinition,
+} from '../src/core/domainRegistry';
+import {
   didConcedeInWindow,
   applyWindowedCleanSheets,
   qualifiesForWindowedCleanSheet,
 } from '../src/core/postMatchAccounting';
 import { advanceSeason } from '../src/core/seasonTransition';
+import { createEmptyTrophyCabinet } from '../src/core/trophyUtils';
+import { buildSimulationRuntime } from '../src/core/simulationRuntime';
+import {
+  compileMatchEffects,
+  registerPlayerTraitEffectModule,
+  registerTeamTacticEffectModule,
+} from '../src/core/tacticalEffects';
 import { Player } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
+import { normalizeHydratedState } from '../src/store/setup';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) {
@@ -32,6 +49,16 @@ const createSeededRandom = (seed: number) => {
 };
 
 const readSource = (filePath: string) => fs.readFileSync(path.join(process.cwd(), filePath), 'utf8');
+
+const collectSourceFiles = (rootPath: string): string[] => {
+  const absoluteRoot = path.join(process.cwd(), rootPath);
+  return fs.readdirSync(absoluteRoot, { withFileTypes: true }).flatMap(entry => {
+    const resolvedPath = path.join(absoluteRoot, entry.name);
+    const relativePath = path.relative(process.cwd(), resolvedPath).replace(/\\/g, '/');
+    if (entry.isDirectory()) return collectSourceFiles(relativePath);
+    return /\.(ts|tsx)$/.test(entry.name) ? [relativePath] : [];
+  });
+};
 
 const checkCleanSheetWindows = () => {
   assert(!didConcedeInWindow([], 0, 90, 0), 'Empty conceded-minute list with 0 conceded should be clean');
@@ -64,7 +91,8 @@ const checkCleanSheetWindows = () => {
     { [shortSubbedBeforeGoal.id]: 29, [qualifiedBeforeGoal.id]: 60, [playedThroughGoal.id]: 90 },
     [61],
     1,
-    updatedPlayers
+    updatedPlayers,
+    LEAGUE_IDS.PREMIER_LEAGUE
   );
 
   assert(updatedPlayers[shortSubbedBeforeGoal.id].cleanSheets === 0, 'Short subbed-off player should not get clean sheet');
@@ -118,16 +146,37 @@ const checkLiveSentOffMinutes = () => {
   );
 };
 
+const checkCupCompetitionIntegration = () => {
+  const data = initGameData();
+  const cupFixture = Object.values(data.fixtures).find(fixture => getFixtureCompetitionId(fixture) !== COMPETITION_IDS.LEAGUE);
+  assert(cupFixture, 'Regression setup needs at least one cup fixture');
+
+  const homeBefore = data.teams[cupFixture!.homeTeamId];
+  const awayBefore = data.teams[cupFixture!.awayTeamId];
+  const result = quickSimMatch(cupFixture!.id, data.players, data.teams, data.fixtures, null);
+  const playedFixture = result.fixture;
+
+  assert(getFixtureCompetitionId(playedFixture) !== COMPETITION_IDS.LEAGUE, 'Cup fixture should stay marked as a cup');
+  assert(playedFixture.winnerTeamId, 'Cup fixture should resolve a winner');
+  assert(
+    result.teams[homeBefore.id].points === homeBefore.points &&
+      result.teams[awayBefore.id].points === awayBefore.points,
+    'Cup fixtures should not change league points'
+  );
+};
+
 const checkBranchGuards = () => {
   const matchEngine = readSource('src/core/matchEngine.ts');
   const gameStore = readSource('src/store/gameStore.ts');
+  const matchActions = readSource('src/store/actions/match.ts');
+  const liveMatchSource = `${gameStore}\n${matchActions}`;
 
   assert(
-    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\);[\s\S]*sendOffPlayer/.test(matchEngine),
+    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*(addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\)|incrementPlayerStatLocal\(playerId, 'yellowCards'\));[\s\S]*sendOffPlayer/.test(matchEngine),
     'Quick sim second-yellow branch must add yellow-card stat before red'
   );
   assert(
-    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\);[\s\S]*sendOffPlayer/.test(gameStore),
+    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*(addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\)|recordPlayerScopedStat\(updatedPlayers, playerId, statScopeId, 'yellowCards'\));[\s\S]*sendOffPlayer/.test(liveMatchSource),
     'Live sim second-yellow branch must add yellow-card stat before red'
   );
   assert(
@@ -135,7 +184,7 @@ const checkBranchGuards = () => {
     'Quick sim must pass formation shape into simulatePossession'
   );
   assert(
-    /buildTeamShapeProfile\(homeTeam, homeStarters\)[\s\S]*simulatePossession\([\s\S]*attShape,[\s\S]*defShape[\s\S]*\)/.test(gameStore),
+    /buildTeamShapeProfile\(homeTeam, homeStarters\)[\s\S]*simulatePossession\([\s\S]*attShape,[\s\S]*defShape[\s\S]*\)/.test(liveMatchSource),
     'Live sim must pass formation shape into simulatePossession'
   );
 };
@@ -184,23 +233,24 @@ const checkManagerProfilesLoaded = () => {
 const checkDivisionBootstrap = () => {
   const data = initGameData();
   const counts = Object.values(data.teams).reduce<Record<string, number>>((acc, team) => {
-    acc[team.division] = (acc[team.division] || 0) + 1;
+    const leagueId = getTeamLeagueId(team);
+    acc[leagueId] = (acc[leagueId] || 0) + 1;
     return acc;
   }, {});
 
-  assert(counts['Premier League'] === 20, `Expected 20 Premier League teams, got ${counts['Premier League'] || 0}`);
-  assert(counts['Championship'] === 24, `Expected 24 Championship teams, got ${counts['Championship'] || 0}`);
-  assert(counts['League One'] === 24, `Expected 24 League One teams, got ${counts['League One'] || 0}`);
-  assert(counts['League Two'] === 24, `Expected 24 League Two teams, got ${counts['League Two'] || 0}`);
+  assert(counts[LEAGUE_IDS.PREMIER_LEAGUE] === 20, `Expected 20 Premier League teams, got ${counts[LEAGUE_IDS.PREMIER_LEAGUE] || 0}`);
+  assert(counts[LEAGUE_IDS.CHAMPIONSHIP] === 24, `Expected 24 Championship teams, got ${counts[LEAGUE_IDS.CHAMPIONSHIP] || 0}`);
+  assert(counts[LEAGUE_IDS.LEAGUE_ONE] === 24, `Expected 24 League One teams, got ${counts[LEAGUE_IDS.LEAGUE_ONE] || 0}`);
+  assert(counts[LEAGUE_IDS.LEAGUE_TWO] === 24, `Expected 24 League Two teams, got ${counts[LEAGUE_IDS.LEAGUE_TWO] || 0}`);
 };
 
 const checkPromotionRelegation = () => {
   const data = initGameData();
   const teams = { ...data.teams };
 
-  (['Premier League', 'Championship', 'League One', 'League Two'] as const).forEach(division => {
+  ([LEAGUE_IDS.PREMIER_LEAGUE, LEAGUE_IDS.CHAMPIONSHIP, LEAGUE_IDS.LEAGUE_ONE, LEAGUE_IDS.LEAGUE_TWO] as const).forEach(division => {
     const ordered = Object.values(teams)
-      .filter(team => team.division === division)
+      .filter(team => getTeamLeagueId(team) === division)
       .sort((a, b) => a.name.localeCompare(b.name));
 
     ordered.forEach((team, index) => {
@@ -217,29 +267,219 @@ const checkPromotionRelegation = () => {
     });
   });
 
-  const nextSeason = advanceSeason(data.players, teams, null, []);
+  const nextSeason = advanceSeason(
+    data.players,
+    teams,
+    data.fixtures,
+    data.cups,
+    null,
+    [],
+    1,
+    createEmptyTrophyCabinet(),
+    [],
+    []
+  );
   const nextCounts = Object.values(nextSeason.teams).reduce<Record<string, number>>((acc, team) => {
-    acc[team.division] = (acc[team.division] || 0) + 1;
+    const leagueId = getTeamLeagueId(team);
+    acc[leagueId] = (acc[leagueId] || 0) + 1;
     return acc;
   }, {});
 
   assert(nextSeason.currentWeek === 1, 'Season rollover should reset the week to 1');
-  assert(nextCounts['Premier League'] === 20, 'Premier League should keep 20 teams after promotion/relegation');
-  assert(nextCounts['Championship'] === 24, 'Championship should keep 24 teams after promotion/relegation');
-  assert(nextCounts['League One'] === 24, 'League One should keep 24 teams after promotion/relegation');
-  assert(nextCounts['League Two'] === 24, 'League Two should keep 24 teams after promotion/relegation');
+  assert(nextCounts[LEAGUE_IDS.PREMIER_LEAGUE] === 20, 'Premier League should keep 20 teams after promotion/relegation');
+  assert(nextCounts[LEAGUE_IDS.CHAMPIONSHIP] === 24, 'Championship should keep 24 teams after promotion/relegation');
+  assert(nextCounts[LEAGUE_IDS.LEAGUE_ONE] === 24, 'League One should keep 24 teams after promotion/relegation');
+  assert(nextCounts[LEAGUE_IDS.LEAGUE_TWO] === 24, 'League Two should keep 24 teams after promotion/relegation');
 
   const championshipTop = Object.values(teams)
-    .filter(team => team.division === 'Championship')
+    .filter(team => getTeamLeagueId(team) === LEAGUE_IDS.CHAMPIONSHIP)
     .sort((a, b) => b.points - a.points || b.goalsFor - a.goalsFor || a.name.localeCompare(b.name))
     .slice(0, 3);
   const premierBottom = Object.values(teams)
-    .filter(team => team.division === 'Premier League')
+    .filter(team => getTeamLeagueId(team) === LEAGUE_IDS.PREMIER_LEAGUE)
     .sort((a, b) => a.points - b.points || a.goalsFor - b.goalsFor || a.name.localeCompare(b.name))
     .slice(0, 3);
 
-  assert(championshipTop.every(team => nextSeason.teams[team.id].division === 'Premier League'), 'Top Championship teams should be promoted');
-  assert(premierBottom.every(team => nextSeason.teams[team.id].division === 'Championship'), 'Bottom Premier League teams should be relegated');
+  assert(championshipTop.every(team => getTeamLeagueId(nextSeason.teams[team.id]) === LEAGUE_IDS.PREMIER_LEAGUE), 'Top Championship teams should be promoted');
+  assert(premierBottom.every(team => getTeamLeagueId(nextSeason.teams[team.id]) === LEAGUE_IDS.CHAMPIONSHIP), 'Bottom Premier League teams should be relegated');
+};
+
+const checkRegistryBackedDefinitions = () => {
+  registerLeagueDefinition({
+    id: 'Test League',
+    countryId: DEFAULT_COUNTRY_ID,
+    displayName: 'Test League',
+    tier: 99,
+    teamCount: 10,
+    roundsPerOpponent: 2,
+    promotionSlots: 0,
+    relegationSlots: 0,
+    newsPriority: 1,
+  });
+  registerCompetitionDefinition({
+    id: 'Test Shield',
+    type: 'domestic-cup',
+    displayName: 'Test Shield',
+    countryScope: DEFAULT_COUNTRY_ID,
+    trackedForTrophies: false,
+    fixtureStrategy: 'inactive',
+    roundNames: ['Final'],
+    startWeek: 1,
+    spacingWeeks: 1,
+    sortPriority: 999,
+  });
+
+  const data = initGameData();
+  assert(Object.values(data.teams).every(team => Boolean(team.leagueId)), 'Every team should have a leagueId');
+  assert(Object.values(data.fixtures).every(fixture => Boolean(fixture.competitionId)), 'Every fixture should have a competitionId');
+
+  const runtime = buildSimulationRuntime({
+    teams: data.teams,
+    players: data.players,
+    fixtures: data.fixtures,
+  });
+  assert(runtime.leagueDefinitionsById['Test League'], 'Registered leagues should be visible in runtime definitions');
+  assert(runtime.competitionDefinitionsById['Test Shield'], 'Registered competitions should be visible in runtime definitions');
+  assert((runtime.teamsByLeague[LEAGUE_IDS.PREMIER_LEAGUE] || []).length === 20, 'Runtime should index Premier League teams');
+  assert((runtime.fixturesByCompetition[COMPETITION_IDS.LEAGUE] || []).length > 0, 'Runtime should index league fixtures');
+};
+
+const checkTacticAndTraitModuleRegistration = () => {
+  registerTeamTacticEffectModule({
+    id: 'test-system-module',
+    applies: ({ team }) => Boolean(team.tactics.systemIds?.includes('test-system')),
+    apply: effects => {
+      effects.chanceCreation.creatorBonusMultiplier *= 1.2;
+    },
+  });
+  registerPlayerTraitEffectModule({
+    id: 'test-trait-module',
+    applies: ({ traitCounts }) => Boolean(traitCounts['Test Trait']),
+    apply: effects => {
+      effects.energyDrain.multiplier *= 0.9;
+    },
+  });
+
+  const data = initGameData();
+  const team = Object.values(data.teams)[0];
+  const players = Object.values(data.players)
+    .filter(player => player.teamId === team.id)
+    .slice(0, 11);
+
+  const baseEffects = compileMatchEffects(
+    { ...team, tactics: { ...team.tactics, systemIds: [] } },
+    players.map(player => ({ ...player, traitIds: [] }))
+  );
+  const extendedEffects = compileMatchEffects(
+    { ...team, tactics: { ...team.tactics, systemIds: ['test-system'] } },
+    players.map((player, index) => ({
+      ...player,
+      traitIds: index === 0 ? ['Test Trait'] : [],
+    }))
+  );
+
+  assert(
+    extendedEffects.chanceCreation.creatorBonusMultiplier > baseEffects.chanceCreation.creatorBonusMultiplier,
+    'Registered team tactic modules should change compiled match effects'
+  );
+  assert(
+    extendedEffects.energyDrain.multiplier < baseEffects.energyDrain.multiplier,
+    'Registered player trait modules should change compiled match effects'
+  );
+};
+
+const checkLegacyHydrationMapping = () => {
+  const data = initGameData();
+  const firstTeam = Object.values(data.teams)[0];
+  const firstFixture = Object.values(data.fixtures)[0];
+  assert(firstTeam && firstFixture, 'Hydration regression setup requires initial team and fixture data');
+
+  const repaired = normalizeHydratedState(
+    {
+      teams: {
+        [firstTeam.id]: {
+          ...firstTeam,
+          leagueId: undefined,
+          division: 'Premier League',
+        },
+      },
+      players: {},
+      fixtures: {
+        [firstFixture.id]: {
+          ...firstFixture,
+          competitionId: undefined,
+          competition: 'League',
+          leagueId: undefined,
+          division: 'Premier League',
+        },
+      },
+      cups: {
+        'FA Cup': {
+          competitionId: undefined as never,
+          competition: 'FA Cup',
+          roundNumber: 1,
+          roundName: 'Round 1',
+          entrants: [firstTeam.id],
+          scheduledWeek: 2,
+          completed: false,
+        },
+      } as never,
+      trophyCabinet: { 'FA Cup': 2 } as never,
+      trophyHistory: [
+        {
+          competitionId: undefined as never,
+          competition: 'FA Cup',
+          season: 1,
+          teamId: firstTeam.id,
+          teamName: firstTeam.name,
+        },
+      ],
+      seasonResults: [
+        {
+          season: 1,
+          teamId: firstTeam.id,
+          teamName: firstTeam.name,
+          competitions: {
+            league: '1st (Premier League)',
+            carabaoCup: 'Winners',
+            faCup: 'Eliminated',
+            ucl: 'Not active yet',
+          },
+        } as never,
+      ],
+    },
+    useGameStore.getState()
+  );
+
+  assert(repaired.teams?.[firstTeam.id]?.leagueId === LEAGUE_IDS.PREMIER_LEAGUE, 'Legacy division names should map to canonical league ids');
+  assert(repaired.fixtures?.[firstFixture.id]?.competitionId === COMPETITION_IDS.LEAGUE, 'Legacy competition names should map to canonical competition ids');
+  assert(repaired.cups?.[COMPETITION_IDS.FA_CUP]?.competitionId === COMPETITION_IDS.FA_CUP, 'Legacy cup keys should map to canonical competition ids');
+  assert(repaired.trophyCabinet?.[COMPETITION_IDS.FA_CUP] === 2, 'Legacy trophy cabinet keys should map to canonical ids');
+  assert(repaired.trophyHistory?.[0]?.competitionId === COMPETITION_IDS.FA_CUP, 'Legacy trophy history should map to canonical ids');
+  assert(repaired.seasonResults?.[0]?.leagueId === LEAGUE_IDS.PREMIER_LEAGUE, 'Legacy season results should map league labels to canonical ids');
+};
+
+const checkCanonicalWorldGuards = () => {
+  const approvedLegacyReadFiles = new Set([
+    'src/core/domainRegistry.ts',
+    'src/store/setup/hydrationRepair.ts',
+  ]);
+  const approvedLiteralFiles = new Set([
+    'src/core/domainRegistry.ts',
+  ]);
+  const legacyReadPattern = /\.(division|competition)\b/;
+  const literalPattern = /['"](Premier League|Championship|League One|League Two|League|FA Cup|Carabao Cup|UEFA Champions League)['"]/;
+  const sourceFiles = [...collectSourceFiles('src'), ...collectSourceFiles('app')];
+
+  sourceFiles.forEach(filePath => {
+    const source = readSource(filePath);
+    if (!approvedLegacyReadFiles.has(filePath) && legacyReadPattern.test(source)) {
+      throw new Error(`Legacy field read found outside compatibility boundary: ${filePath}`);
+    }
+    if (!approvedLiteralFiles.has(filePath) && literalPattern.test(source)) {
+      throw new Error(`Hardcoded competition or league label found outside registry config: ${filePath}`);
+    }
+  });
 };
 
 const checkStaleFormationMapRecoveryModel = () => {
@@ -366,6 +606,8 @@ const runRegressionChecks = () => {
   console.log('[OK] Clean-sheet window checks passed');
   checkLiveSentOffMinutes();
   console.log('[OK] Live sent-off minute check passed');
+  checkCupCompetitionIntegration();
+  console.log('[OK] Cup competition integration passed');
   checkBranchGuards();
   console.log('[OK] Second-yellow and shape parity guards passed');
   checkUserTeamProgressionDoesNotAdaptFormation();
@@ -376,6 +618,14 @@ const runRegressionChecks = () => {
   console.log('[OK] Division bootstrap check passed');
   checkPromotionRelegation();
   console.log('[OK] Promotion and relegation checks passed');
+  checkRegistryBackedDefinitions();
+  console.log('[OK] Registry-backed league and competition definitions passed');
+  checkTacticAndTraitModuleRegistration();
+  console.log('[OK] Tactical and trait effect registration passed');
+  checkLegacyHydrationMapping();
+  console.log('[OK] Legacy hydration mapping passed');
+  checkCanonicalWorldGuards();
+  console.log('[OK] Canonical world guardrails passed');
   checkStaleFormationMapRecoveryModel();
   console.log('[OK] Stale formation-map recovery model passed');
   checkFormationMapRejectsWrongPositions();

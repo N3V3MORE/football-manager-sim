@@ -1,5 +1,54 @@
 export type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
-export type Division = 'Premier League' | 'Championship' | 'League One' | 'League Two';
+export type CountryId = string;
+export type LeagueId = string;
+export type CompetitionId = string;
+export type CupCompetitionId = string;
+export type TrophyCompetitionId = string;
+export type Division = LeagueId;
+export type Competition = CompetitionId;
+export type CupCompetition = CupCompetitionId;
+export type TrophyCompetition = TrophyCompetitionId;
+export type CompetitionType = 'league' | 'domestic-cup' | 'continental-cup';
+export type CompetitionFixtureStrategy = 'round-robin' | 'knockout' | 'inactive';
+export type TrophyCabinet = Record<TrophyCompetitionId, number>;
+
+export interface CountryDefinition {
+  id: CountryId;
+  displayName: string;
+  reelHint: string;
+  sortOrder: number;
+}
+
+export interface LeagueDefinition {
+  id: LeagueId;
+  countryId: CountryId;
+  displayName: string;
+  tier: number;
+  teamCount: number;
+  roundsPerOpponent: number;
+  promotionSlots: number;
+  relegationSlots: number;
+  newsPriority: number;
+}
+
+export interface CompetitionDefinition {
+  id: CompetitionId;
+  type: CompetitionType;
+  displayName: string;
+  countryScope: CountryId | 'europe';
+  trackedForTrophies: boolean;
+  fixtureStrategy: CompetitionFixtureStrategy;
+  roundNames: string[];
+  startWeek: number;
+  spacingWeeks: number;
+  sortPriority: number;
+}
+
+export interface WorldConfig {
+  countries: Record<CountryId, CountryDefinition>;
+  leagues: Record<LeagueId, LeagueDefinition>;
+  competitions: Record<CompetitionId, CompetitionDefinition>;
+}
 export type Formation = 
   | '4-3-3' 
   | '3-4-3' 
@@ -54,6 +103,7 @@ export interface TeamTactics {
   tempo: 'Slow' | 'Normal' | 'Fast';
   defensiveLine: 'Deep' | 'Standard' | 'High';
   pressing: 'None' | 'Medium' | 'High';
+  systemIds?: string[];
 }
 
 export interface PlayerStats {
@@ -70,6 +120,15 @@ export interface PlayerStats {
   gk_speed?: number;
   gk_positioning?: number;
   [key: string]: number | undefined; // For detailed micro-stats
+}
+
+export interface PlayerCompetitionStats {
+  minutesPlayed: number;
+  goals: number;
+  assists: number;
+  cleanSheets: number;
+  yellowCards: number;
+  redCards: number;
 }
 
 export interface Player {
@@ -100,8 +159,11 @@ export interface Player {
   cleanSheets: number;
   yellowCards: number;
   redCards: number;
+  seasonStatsByScope: Record<string, PlayerCompetitionStats>;
+  previousSeasonStatsByScope: Record<string, PlayerCompetitionStats>;
   nationality: string;
   playerTraits?: string;
+  traitIds?: string[];
   clubJerseyNumber?: number | null;
   stats: PlayerStats;
 }
@@ -109,8 +171,9 @@ export interface Player {
 export interface Team {
   id: string;
   name: string;
-  countryId?: string;
-  division: Division;
+  countryId?: CountryId;
+  leagueId: LeagueId;
+  division?: Division;
   clubClass?: string;
   manager: Manager;
   points: number;
@@ -140,20 +203,60 @@ export interface BoardObjective {
 export interface Fixture {
   id: string;
   week: number;
+  competitionId: CompetitionId;
+  competition?: Competition;
+  leagueId?: LeagueId;
   division?: Division;
+  roundNumber?: number;
+  roundName?: string;
   homeTeamId: string;
   awayTeamId: string;
   homeScore: number | null;
   awayScore: number | null;
   isPlayed: boolean;
+  winnerTeamId?: string;
+  decidedBy?: 'PEN' | 'AET';
+}
+
+export interface CupState {
+  competitionId: CupCompetitionId;
+  competition?: CupCompetition;
+  roundNumber: number;
+  roundName: string;
+  entrants: string[];
+  scheduledWeek: number;
+  currentRoundByeTeamId?: string;
+  completed: boolean;
+}
+
+export interface TrophyHistoryEntry {
+  competitionId: TrophyCompetitionId;
+  competition?: TrophyCompetition;
+  season: number;
+  teamId: string;
+  teamName: string;
+}
+
+export interface SeasonResult {
+  season: number;
+  teamId: string;
+  teamName: string;
+  leagueId: LeagueId;
+  leagueResult: string;
+  competitions: Record<CompetitionId, string>;
 }
 
 export interface GameState {
+  season: number;
   currentWeek: number;
   userTeamId: string | null;
   teams: Record<string, Team>;
   players: Record<string, Player>;
   fixtures: Record<string, Fixture>;
+  cups: Record<CupCompetition, CupState>;
+  trophyCabinet: TrophyCabinet;
+  trophyHistory: TrophyHistoryEntry[];
+  seasonResults: SeasonResult[];
   news: string[];
   boardObjectives: BoardObjective[];
 }

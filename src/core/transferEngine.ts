@@ -8,11 +8,35 @@ export const computeWeeklyTransfers = (
 ): { players: Record<string, Player>, teams: Record<string, Team> } => {
   const updatedPlayers = { ...players };
   const updatedTeams = { ...teams };
+  const teamPlayerIds: Record<string, string[]> = {};
+  const listedPlayerIdsByPosition: Record<string, Set<string>> = {
+    GK: new Set<string>(),
+    DEF: new Set<string>(),
+    MID: new Set<string>(),
+    FWD: new Set<string>(),
+  };
+
+  Object.values(updatedPlayers).forEach(player => {
+    if (!teamPlayerIds[player.teamId]) {
+      teamPlayerIds[player.teamId] = [];
+    }
+    teamPlayerIds[player.teamId].push(player.id);
+
+    if (player.isTransferListed && player.teamId !== userTeamId) {
+      listedPlayerIdsByPosition[player.position]?.add(player.id);
+    }
+  });
+
+  const getTeamPlayers = (teamId: string) => (
+    (teamPlayerIds[teamId] || [])
+      .map(playerId => updatedPlayers[playerId])
+      .filter((player): player is Player => Boolean(player))
+  );
 
   const aiTeams = Object.values(updatedTeams).filter(t => t.id !== userTeamId);
 
   aiTeams.forEach(team => {
-    const squad = Object.values(updatedPlayers).filter(p => p.teamId === team.id);
+    const squad = getTeamPlayers(team.id);
 
     const sortedByOverall = [...squad].sort((a, b) => b.overallRating - a.overallRating);
     const protectedPlayers = new Set([
@@ -29,10 +53,13 @@ export const computeWeeklyTransfers = (
       return { ...p, effectiveRating: avgRating };
     });
 
-    const getDepth = (pos: string) => Object.values(updatedPlayers)
-      .filter(p => p.teamId === team.id && p.position === pos && !p.isTransferListed)
-      .length;
     const minDepth: Record<string, number> = { 'GK': 2, 'DEF': 6, 'MID': 6, 'FWD': 4 };
+    const depthByPosition = squad.reduce<Record<string, number>>((acc, player) => {
+      if (!player.isTransferListed) {
+        acc[player.position] = (acc[player.position] || 0) + 1;
+      }
+      return acc;
+    }, { GK: 0, DEF: 0, MID: 0, FWD: 0 });
 
     squadWithRatings.forEach(p => {
       if (protectedPlayers.has(p.id) || p.isTransferListed) return;
@@ -43,12 +70,15 @@ export const computeWeeklyTransfers = (
       else if (p.age >= 30 && minutesShare < 0.15 && Math.random() < 0.18) shouldList = true;
       else if (!p.isStarting && Math.random() < 0.03) shouldList = true;
 
-      if (shouldList && getDepth(p.position) > (minDepth[p.position] || 2)) {
+      if (shouldList && depthByPosition[p.position] > (minDepth[p.position] || 2)) {
         updatedPlayers[p.id] = { ...updatedPlayers[p.id], isTransferListed: true, askingPrice: p.marketValue };
+        depthByPosition[p.position] -= 1;
+        if (p.teamId !== userTeamId) {
+          listedPlayerIdsByPosition[p.position]?.add(p.id);
+        }
       }
     });
 
-    const listedPlayers = Object.values(updatedPlayers).filter(p => p.isTransferListed && p.teamId !== userTeamId);
     const starters = squad
       .filter(p => p.isStarting)
       .sort((a, b) => b.overallRating - a.overallRating);
@@ -78,7 +108,10 @@ export const computeWeeklyTransfers = (
     const weakestStarter = weakestPosition.weakest;
     const requiredUpgrade = weakestStarter.overallRating + 2;
     const budgetLimit = team.budget * 0.45;
-    const targets = listedPlayers.filter(p =>
+    const targets = Array.from(listedPlayerIdsByPosition[weakestPosition.position] || [])
+      .map(playerId => updatedPlayers[playerId])
+      .filter((player): player is Player => Boolean(player))
+      .filter(p =>
       p.teamId !== team.id &&
       p.position === weakestPosition.position &&
       p.overallRating >= requiredUpgrade &&
@@ -103,6 +136,12 @@ export const computeWeeklyTransfers = (
             target.id
           );
         }
+        teamPlayerIds[target.teamId] = (teamPlayerIds[target.teamId] || []).filter(playerId => playerId !== target.id);
+        if (!teamPlayerIds[team.id]) {
+          teamPlayerIds[team.id] = [];
+        }
+        teamPlayerIds[team.id].push(target.id);
+        listedPlayerIdsByPosition[target.position]?.delete(target.id);
         updatedPlayers[target.id] = {
           ...updatedPlayers[target.id],
           teamId: team.id,

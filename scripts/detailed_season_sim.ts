@@ -2,6 +2,15 @@ import { initGameData } from '../src/utils/initGame';
 import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
 import { getSeasonWeekLimit } from '../src/core/leagueUtils';
+import { advanceCupCompetitions } from '../src/core/cupUtils';
+import { getFixtureCompetitionId, isLeagueCompetitionId } from '../src/core/domainRegistry';
+import {
+  appendRuntimeFixtures,
+  buildSimulationRuntime,
+  getRuntimeFixturesForWeek,
+  refreshRuntimeTeamPlayerIds,
+  refreshRuntimeTeamsByLeague,
+} from '../src/core/simulationRuntime';
 import * as fs from 'fs';
 
 type StatSnapshot = {
@@ -23,6 +32,12 @@ type MatchAudit = {
 };
 
 const formatScore = (audit: MatchAudit) => audit.label;
+const getNextFixtureCounter = (fixtures: Record<string, unknown>) => (
+  Object.keys(fixtures).reduce((max, fixtureId) => {
+    const numericId = Number(fixtureId.slice(1));
+    return Number.isFinite(numericId) && numericId > max ? numericId : max;
+  }, 0) + 1
+);
 
 const countByValue = (items: string[]) => {
   const counts = new Map<string, number>();
@@ -54,9 +69,11 @@ async function runDetailedSim() {
       players: data.players,
       teams: data.teams,
       fixtures: data.fixtures,
+      cups: data.cups,
       currentWeek: 1,
       news: [] as string[],
     };
+    let runtime = buildSimulationRuntime(state);
 
   const outputLog: string[] = [];
   const matchAudits: MatchAudit[] = [];
@@ -75,7 +92,7 @@ async function runDetailedSim() {
 
   for (let w = 1; w <= seasonWeeks; w++) {
     outputLog.push(`\n--- WEEK ${w} ---`);
-    const weekFixtures = Object.values(state.fixtures).filter(f => f.week === w);
+    const weekFixtures = getRuntimeFixturesForWeek(runtime, state.fixtures, w);
 
     for (const fix of weekFixtures) {
       const home = state.teams[fix.homeTeamId];
@@ -90,7 +107,9 @@ async function runDetailedSim() {
         };
       });
 
-      const result = quickSimMatch(fix.id, state.players, state.teams, state.fixtures);
+      const result = quickSimMatch(fix.id, state.players, state.teams, state.fixtures, null, {
+        runtime,
+      });
       state.players = result.players;
       state.teams = result.teams;
       state.fixtures[fix.id] = result.fixture;
@@ -163,7 +182,30 @@ async function runDetailedSim() {
       });
     }
 
-    const prog = computeWeeklyProgression(state.currentWeek, state.players, state.teams, state.fixtures, state.news);
+    const shouldProcessCupProgression = weekFixtures.some(fixture => !isLeagueCompetitionId(getFixtureCompetitionId(fixture))) ||
+      Object.values(state.cups).some(cup => !cup.completed && cup.scheduledWeek <= w);
+    if (shouldProcessCupProgression) {
+      const previousFixtures = state.fixtures;
+      const cupProgression = advanceCupCompetitions(
+        state.fixtures,
+        state.cups,
+        w,
+        getNextFixtureCounter(state.fixtures)
+      );
+      appendRuntimeFixtures(runtime, previousFixtures, cupProgression.fixtures);
+      state.fixtures = cupProgression.fixtures;
+      state.cups = cupProgression.cupStates;
+    }
+
+    const prog = computeWeeklyProgression(
+      state.currentWeek,
+      state.players,
+      state.teams,
+      state.fixtures,
+      state.news,
+      null,
+      { runtime }
+    );
     state.players = prog.players;
     state.teams = prog.teams;
     state.currentWeek = prog.currentWeek;
@@ -172,6 +214,8 @@ async function runDetailedSim() {
     const trans = computeWeeklyTransfers(state.players, state.teams, null);
     state.players = trans.players;
     state.teams = trans.teams;
+    refreshRuntimeTeamPlayerIds(runtime, state.players);
+    refreshRuntimeTeamsByLeague(runtime, state.teams);
   }
 
   outputLog.push('\n=== FINAL PREMIER LEAGUE TABLE ===');

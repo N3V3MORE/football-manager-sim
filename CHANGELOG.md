@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.2.4 - Scoped season stats and screen cleanup
+
+What changed:
+- Split player season stats by league or competition scope so Premier League, FA Cup, and Carabao Cup numbers no longer share one leaderboard.
+- Preserved previous-season scoped stats across season rollover, so promoted or relegated clubs still see the old season under the correct league.
+- Reworked the stats screen to use scope chips for league and cup views, with clean-sheet leaders filtered to goalkeepers only.
+- Updated the hub season-stats summary to show a single top goalkeeper clean-sheet leader for the active scope.
+- Removed the squad swipe gesture to switch panes and kept the explicit Starting XI and Tactics controls.
+- Cleaned the settings screen by replacing the misleading objectives count with season/week context and removing manager style notes from that view.
+- Added scoped-stat hydration and regression coverage so old saves and both live/quick match paths stay consistent.
+
+## v3.2.3 - Cups, engine foundations, and canonical world config
+
+What changed:
+- Added FA Cup and Carabao Cup fixtures from the English league pyramid.
+- Showed cup competition and round labels in the calendar and match screens.
+- Added a trophies page so season results and trophy wins are tracked in-game.
+- Added a quick-sim week action and fixed live-match exit so the week advances cleanly after playing a fixture.
+- Kept cup fixtures out of league table updates and separated league-only tracker reporting from cup matches.
+- Split the store into action/setup modules and moved more season logic into pure runtime paths.
+- Added registry-backed league and competition definitions, simulation runtime caches, and a modular tactical-effect pipeline.
+- Added deterministic engine benchmarking plus stronger regression and save-integrity checks.
+- Reworked season skip so it simulates in memory, reduces persistence pressure, and keeps the app stable under long skips.
+- Migrated app-facing league and competition identity to canonical ids instead of display-string branching.
+- Added explicit legacy save mapping and canonical persistence so new saves write ids while old saves still hydrate cleanly.
+- Moved hub, calendar, stats, transfers, settings, league, and trophies screens onto registry-backed selectors.
+- Added static guardrails to block direct legacy field reads and hardcoded English competition labels outside approved config paths.
+
 ## v3.2.2 - Polish the league navigation
 
 What changed:

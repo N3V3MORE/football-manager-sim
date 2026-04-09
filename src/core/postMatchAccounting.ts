@@ -1,5 +1,5 @@
 import { Player } from '../models/types';
-import { addPlayerStat } from './matchUtils';
+import { recordPlayerScopedStat } from './playerStats';
 
 export const CLEAN_SHEET_MINUTES_REQUIRED = 60;
 
@@ -31,7 +31,8 @@ export const applyWindowedCleanSheets = (
   minuteMap: Record<string, number>,
   concededGoalMinutes: number[],
   concededGoalsTotal: number,
-  updatedPlayers: Record<string, Player>
+  updatedPlayers: Record<string, Player>,
+  scopeId: string
 ) => {
   teamParticipants
     .filter(player => player.position === 'GK' || player.position === 'DEF')
@@ -42,7 +43,7 @@ export const applyWindowedCleanSheets = (
       const windowStart = isStarter ? 0 : Math.max(0, 90 - minutes);
       const windowEnd = isStarter ? minutes : 90;
       if (qualifiesForWindowedCleanSheet(concededGoalMinutes, windowStart, windowEnd, concededGoalsTotal)) {
-        addPlayerStat(updatedPlayers, player.id, 'cleanSheets');
+        recordPlayerScopedStat(updatedPlayers, player.id, scopeId, 'cleanSheets');
       }
     });
 };

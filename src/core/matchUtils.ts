@@ -2,31 +2,38 @@ import { ENGINE_CONFIG } from '../config/engineConfig';
 import { Player } from '../models/types';
 import { PlayerCounterStat, RoleTag } from './matchTypes';
 
-export const runDuel = (att: number, def: number, luck: number = 30) => {
-  const curveStat = (s: number) => {
-    const gamma = ENGINE_CONFIG.RATING_CURVE_GAMMA || 1.0;
-    const clamped = Math.max(0, Math.min(100, s));
-    if (gamma <= 0 || gamma === 1) return clamped;
-    return Math.pow(clamped / 100, gamma) * 100;
-  };
-  const compress = (s: number) => {
-    const curved = curveStat(s);
-    return curved <= ENGINE_CONFIG.STAT_COMPRESSION_BASE
-      ? curved
-      : ENGINE_CONFIG.STAT_COMPRESSION_BASE + (curved - ENGINE_CONFIG.STAT_COMPRESSION_BASE) * ENGINE_CONFIG.STAT_COMPRESSION_FACTOR;
-  };
-  const rollA = compress(att) + (Math.random() * 2 - 1) * luck;
-  const rollB = compress(def) + (Math.random() * 2 - 1) * luck;
+const DUEL_CURVE_GAMMA = ENGINE_CONFIG.RATING_CURVE_GAMMA || 1.0;
+const DUEL_COMPRESSION_BASE = ENGINE_CONFIG.STAT_COMPRESSION_BASE;
+const DUEL_COMPRESSION_FACTOR = ENGINE_CONFIG.STAT_COMPRESSION_FACTOR;
+
+const curveStat = (stat: number) => {
+  const clamped = Math.max(0, Math.min(100, stat));
+  if (DUEL_CURVE_GAMMA <= 0 || DUEL_CURVE_GAMMA === 1) return clamped;
+  return Math.pow(clamped / 100, DUEL_CURVE_GAMMA) * 100;
+};
+
+const compressStat = (stat: number) => {
+  const curved = curveStat(stat);
+  return curved <= DUEL_COMPRESSION_BASE
+    ? curved
+    : DUEL_COMPRESSION_BASE + (curved - DUEL_COMPRESSION_BASE) * DUEL_COMPRESSION_FACTOR;
+};
+
+export const runDuel = (att: number, def: number, luck: number = 30, random: () => number = Math.random) => {
+  const rollA = compressStat(att) + (random() * 2 - 1) * luck;
+  const rollB = compressStat(def) + (random() * 2 - 1) * luck;
   return rollA > rollB;
 };
 
 export const weightedPick = <T>(items: T[], getWeight: (item: T) => number): T => {
-  const weights = items.map(item => Math.max(0.1, getWeight(item)));
-  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  let totalWeight = 0;
+  items.forEach(item => {
+    totalWeight += Math.max(0.1, getWeight(item));
+  });
   let roll = Math.random() * totalWeight;
 
   for (let i = 0; i < items.length; i++) {
-    roll -= weights[i];
+    roll -= Math.max(0.1, getWeight(items[i]));
     if (roll <= 0) return items[i];
   }
 

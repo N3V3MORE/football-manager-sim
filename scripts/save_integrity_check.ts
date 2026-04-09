@@ -2,6 +2,7 @@ import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../src/constants/for
 import { isPlayerSlotFit, rebuildFormationMap } from '../src/core/formationMapUtils';
 import { Formation, Team } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
+import { normalizeHydratedState, sanitizeStateForPersistence } from '../src/store/setup';
 
 const FORMATIONS: Formation[] = [
   '4-3-3',
@@ -32,11 +33,11 @@ const createSeededRandom = (seed: number) => {
   };
 };
 
-const withSeededRandom = <T,>(seed: number, task: () => T) => {
+const withSeededRandom = async <T,>(seed: number, task: () => T | Promise<T>) => {
   const originalRandom = Math.random;
   Math.random = createSeededRandom(seed);
   try {
-    return task();
+    return await task();
   } finally {
     Math.random = originalRandom;
   }
@@ -121,7 +122,19 @@ const initializeUserTeam = (formation: Formation) => {
   return userTeam;
 };
 
-const checkSeasonSkipContinuity = () => {
+const waitForSeasonSkipToFinish = async (timeoutMs: number) => {
+  const deadline = Date.now() + timeoutMs;
+
+  while (useGameStore.getState().isSeasonSkipInProgress) {
+    if (Date.now() > deadline) {
+      throw new Error('Season skip did not finish within timeout');
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+};
+
+const checkSeasonSkipContinuity = async () => {
   const before = initializeUserTeam('4-3-3');
   const beforeTactics = JSON.stringify(before.tactics);
   const beforeFormation = before.activeFormation;
@@ -130,6 +143,7 @@ const checkSeasonSkipContinuity = () => {
   validateUserLineup('before skip', before);
 
   useGameStore.getState().skipToEndOfSeason();
+  await waitForSeasonSkipToFinish(120000);
 
   const state = useGameStore.getState();
   const after = state.teams[before.id];
@@ -193,11 +207,39 @@ const checkManagerProfilesLoaded = () => {
   });
 };
 
-const runSaveIntegrityCheck = () => withSeededRandom(20260407, () => {
+const checkCanonicalPersistenceShape = () => {
+  const persistedState = sanitizeStateForPersistence(useGameStore.getState());
+
+  Object.values(persistedState.teams).forEach(team => {
+    assert(!('division' in team), `Persisted team ${team.name} should not include legacy division field`);
+    assert(Boolean(team.leagueId), `Persisted team ${team.name} should include canonical leagueId`);
+  });
+
+  Object.values(persistedState.fixtures).forEach(fixture => {
+    assert(!('competition' in fixture), `Persisted fixture ${fixture.id} should not include legacy competition field`);
+    assert(!('division' in fixture), `Persisted fixture ${fixture.id} should not include legacy division field`);
+    assert(Boolean(fixture.competitionId), `Persisted fixture ${fixture.id} should include canonical competitionId`);
+  });
+
+  Object.values(persistedState.cups).forEach(cup => {
+    assert(!('competition' in cup), `Persisted cup ${cup.competitionId} should not include legacy competition field`);
+  });
+
+  persistedState.trophyHistory.forEach(entry => {
+    assert(!('competition' in entry), `Persisted trophy history entry for ${entry.teamName} should not include legacy competition field`);
+  });
+
+  const rehydrated = normalizeHydratedState(persistedState, useGameStore.getState());
+  Object.values(rehydrated.teams || {}).forEach(team => {
+    assert(Boolean(team.leagueId), `Rehydrated team ${team.name} should keep canonical leagueId`);
+  });
+};
+
+const runSaveIntegrityCheck = () => withSeededRandom(20260407, async () => {
   console.log('--- SAVE INTEGRITY CHECK ---');
   validateFormationDefinitions();
   console.log('[OK] Formation definitions cover every Formation value');
-  checkSeasonSkipContinuity();
+  await checkSeasonSkipContinuity();
   console.log('[OK] Season skip keeps user lineup, tactics, and references intact');
   checkCorruptedMapRecovery();
   console.log('[OK] Corrupted formation maps recover to valid player slots');
@@ -205,7 +247,12 @@ const runSaveIntegrityCheck = () => withSeededRandom(20260407, () => {
   console.log('[OK] Bench bounds and 3-4-3 lineup validation passed');
   checkManagerProfilesLoaded();
   console.log('[OK] Manager profiles are loaded for every club');
+  checkCanonicalPersistenceShape();
+  console.log('[OK] Persisted saves keep canonical world identifiers only');
   console.log('--- SAVE INTEGRITY CHECK COMPLETE ---');
 });
 
-runSaveIntegrityCheck();
+runSaveIntegrityCheck().catch(error => {
+  console.error(error);
+  process.exit(1);
+});

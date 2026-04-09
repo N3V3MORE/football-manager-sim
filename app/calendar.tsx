@@ -6,6 +6,9 @@ import { useGameStore } from '@/src/store/gameStore';
 import { formatShortDate } from '@/src/utils/calendar';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { PageHeader } from '@/components/ui/page-header';
+import { getFixtureCompetitionLabel } from '@/src/core/competitionUtils';
+import { COMPETITION_IDS, getFixtureCompetitionId } from '@/src/core/domainRegistry';
+import { getUserFixtures } from '@/src/features/world/worldSelectors';
 
 export default function CalendarScreen() {
   const currentWeek = useGameStore(s => s.currentWeek);
@@ -16,9 +19,7 @@ export default function CalendarScreen() {
   if (!userTeamId) return <View style={styles.container} />;
 
   // Filter only user's fixtures
-  const myFixtures = Object.values(allFixtures)
-    .filter(f => f.homeTeamId === userTeamId || f.awayTeamId === userTeamId)
-    .sort((a, b) => a.week - b.week);
+  const myFixtures = getUserFixtures(allFixtures, userTeamId);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -66,6 +67,9 @@ export default function CalendarScreen() {
                 <View style={styles.dateCol}>
                   <Text style={styles.weekLabel}>WK {f.week}</Text>
                   <Text style={styles.dateLabel}>{formatShortDate(f.week)}</Text>
+                  {getFixtureCompetitionId(f) !== COMPETITION_IDS.LEAGUE && (
+                    <Text style={styles.competitionLabel}>{getFixtureCompetitionLabel(f)}</Text>
+                  )}
                 </View>
 
                 <View style={styles.badgeCol}>
@@ -109,6 +113,7 @@ const styles = StyleSheet.create({
   dateCol: { width: 60 },
   weekLabel: { color: '#64748b', fontSize: 10, fontWeight: '900' },
   dateLabel: { color: '#e2e8f0', fontSize: 13, fontWeight: '600', marginTop: 2 },
+  competitionLabel: { color: '#38bdf8', fontSize: 10, fontWeight: '800', marginTop: 2, textTransform: 'uppercase' },
   badgeCol: { width: 30, alignItems: 'center' },
   haBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   haText: { color: '#0f172a', fontWeight: '900', fontSize: 10 },

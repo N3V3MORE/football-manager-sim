@@ -5,11 +5,34 @@ import { useGameStore } from '@/src/store/gameStore';
 import { getTransferWindowLabel, isTransferWindowOpen } from '@/src/utils/calendar';
 import { Player } from '@/src/models/types';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
+import { getLeagueDisplayName } from '@/src/core/domainRegistry';
+import {
+  getMarketSections,
+  getTopLeagueForCountry,
+  getTransferLeagueOptionsForCountry,
+} from '@/src/features/world/worldSelectors';
 
 type TransferDialog =
   | { type: 'buy'; player: Player; fee: string; wage: string }
   | { type: 'sell'; player: Player; price: string }
   | null;
+
+type MarketSection = {
+  countryId: string;
+  countryName: string;
+  leagueId: string;
+  leagueName: string;
+  players: Player[];
+};
+
+const getCountryName = (countryId?: string) => {
+  if (!countryId) return 'Unknown Country';
+  return countryId
+    .split(/[_-]/g)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
 
 export default function TransfersScreen() {
   const currentWeek = useGameStore(s => s.currentWeek);
@@ -25,11 +48,34 @@ export default function TransfersScreen() {
 
   const [tab, setTab] = useState<'market' | 'squad'>('market');
   const [dialog, setDialog] = useState<TransferDialog>(null);
+  const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
+  const [selectedLeague, setSelectedLeague] = useState<string | null>(null);
 
   if (!userTeamId) return <View style={styles.container} />;
   const userTeam = teams[userTeamId];
 
-  const marketPlayers = sortPlayersByPositionGroup(Object.values(players).filter(p => p.isTransferListed && p.teamId !== userTeamId));
+  const marketSections = getMarketSections(players, teams).filter(section =>
+    section.players.some(player => player.teamId !== userTeamId)
+  ) as MarketSection[];
+  const marketPlayerCount = marketSections.reduce(
+    (total, section) => total + section.players.filter(player => player.teamId !== userTeamId).length,
+    0
+  );
+  const availableCountries = Array.from(new Set(marketSections.map(section => section.countryId)));
+  const activeCountryId = selectedCountryId && availableCountries.includes(selectedCountryId)
+    ? selectedCountryId
+    : (availableCountries[0] || null);
+  const countrySections = activeCountryId
+    ? marketSections.filter(section => section.countryId === activeCountryId)
+    : [];
+  const availableLeagues = getTransferLeagueOptionsForCountry(marketSections, activeCountryId);
+  const topLeagueForCountry = activeCountryId ? getTopLeagueForCountry(activeCountryId) : null;
+  const activeLeague = selectedLeague && availableLeagues.includes(selectedLeague)
+    ? selectedLeague
+    : topLeagueForCountry;
+  const visibleMarketSections = activeLeague
+    ? countrySections.filter(section => section.leagueId === activeLeague)
+    : [];
   const mySquad = sortPlayersByPositionGroup(Object.values(players).filter(p => p.teamId === userTeamId));
 
   const handleBuy = (player: Player) => {
@@ -103,7 +149,7 @@ export default function TransfersScreen() {
 
       <View style={styles.tabs}>
         <TouchableOpacity style={[styles.tab, tab === 'market' && styles.tabActive]} onPress={() => setTab('market')}>
-          <Text style={[styles.tabText, tab === 'market' && styles.tabTextActive]}>Market ({marketPlayers.length})</Text>
+          <Text style={[styles.tabText, tab === 'market' && styles.tabTextActive]}>Market ({marketPlayerCount})</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, tab === 'squad' && styles.tabActive]} onPress={() => setTab('squad')}>
           <Text style={[styles.tabText, tab === 'squad' && styles.tabTextActive]}>Sell Players</Text>
@@ -112,26 +158,82 @@ export default function TransfersScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {tab === 'market' && (
-          marketPlayers.length === 0 ? <Text style={styles.empty}>No players listed.</Text> :
-          marketPlayers.map(p => (
-            <View key={p.id} style={styles.card}>
-              <View style={styles.cardLeft}>
-                 <Text style={styles.pos}>{p.subPosition || p.position}</Text>
-                 <View style={styles.playerTextBlock}>
-                   <Text style={styles.name} numberOfLines={1}>{p.name}</Text>
-                   <Text style={styles.club} numberOfLines={1}>{teams[p.teamId]?.name}</Text>
-                 </View>
-              </View>
-              <View style={styles.cardRight}>
-                <View style={styles.ratingBox}>
-                   <Text style={styles.rating}>{p.overallRating}</Text>
-                </View>
-                <TouchableOpacity style={styles.buyBtn} onPress={() => handleBuy(p)}>
-                   <Text style={styles.buyText}>GBP {p.askingPrice.toFixed(1)}m</Text>
-                </TouchableOpacity>
-              </View>
+          marketSections.length === 0 ? <Text style={styles.empty}>No players listed.</Text> :
+          <>
+            <View style={styles.marketFilterBlock}>
+              <Text style={styles.filterLabel}>Country</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                {availableCountries.map(countryId => {
+                  const isActive = countryId === activeCountryId;
+                  return (
+                    <TouchableOpacity
+                      key={countryId}
+                      style={[styles.filterChip, isActive && styles.filterChipActive]}
+                      onPress={() => {
+                        setSelectedCountryId(countryId);
+                        setSelectedLeague(null);
+                      }}
+                    >
+                      <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                        {getCountryName(countryId)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {availableLeagues.length > 0 && (
+                <>
+                  <Text style={styles.filterLabel}>League</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                    {availableLeagues.map(leagueId => {
+                      const isActive = leagueId === activeLeague;
+                      return (
+                        <TouchableOpacity
+                          key={leagueId}
+                          style={[styles.filterChip, isActive && styles.filterChipActive]}
+                          onPress={() => setSelectedLeague(leagueId)}
+                        >
+                          <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                            {getLeagueDisplayName(leagueId)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </>
+              )}
             </View>
-          ))
+
+            {visibleMarketSections.map(section => (
+              <View key={`${section.countryId}-${section.leagueId}`} style={styles.marketSection}>
+                <Text style={styles.countryHeader}>{section.countryName}</Text>
+                <View style={styles.leagueHeaderRow}>
+                  <Text style={styles.leagueHeaderText}>{section.leagueName}</Text>
+                  <Text style={styles.leagueHeaderCount}>{section.players.filter(player => player.teamId !== userTeamId).length}</Text>
+                </View>
+                {section.players.filter(player => player.teamId !== userTeamId).map(p => (
+                  <View key={p.id} style={styles.card}>
+                    <View style={styles.cardLeft}>
+                      <Text style={styles.pos}>{p.subPosition || p.position}</Text>
+                      <View style={styles.playerTextBlock}>
+                        <Text style={styles.name} numberOfLines={1}>{p.name}</Text>
+                        <Text style={styles.club} numberOfLines={1}>{teams[p.teamId]?.name}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.cardRight}>
+                      <View style={styles.ratingBox}>
+                        <Text style={styles.rating}>{p.overallRating}</Text>
+                      </View>
+                      <TouchableOpacity style={styles.buyBtn} onPress={() => handleBuy(p)}>
+                        <Text style={styles.buyText}>GBP {p.askingPrice.toFixed(1)}m</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </>
         )}
 
         {tab === 'squad' && (
@@ -240,6 +342,18 @@ const styles = StyleSheet.create({
   tabText: { color: '#64748b', fontWeight: '800' },
   tabTextActive: { color: '#38bdf8' },
   scroll: { padding: 16, gap: 10 },
+  marketFilterBlock: { marginBottom: 8 },
+  filterLabel: { color: '#64748b', fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 },
+  filterRow: { gap: 8, paddingBottom: 10 },
+  filterChip: { borderWidth: 1, borderColor: '#334155', borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#0f172a' },
+  filterChipActive: { borderColor: '#38bdf8', backgroundColor: '#0ea5e920' },
+  filterChipText: { color: '#94a3b8', fontSize: 12, fontWeight: '700' },
+  filterChipTextActive: { color: '#38bdf8', fontWeight: '900' },
+  marketSection: { marginBottom: 8 },
+  countryHeader: { color: '#38bdf8', fontSize: 12, fontWeight: '900', letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' },
+  leagueHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 2 },
+  leagueHeaderText: { color: '#cbd5e1', fontSize: 12, fontWeight: '800' },
+  leagueHeaderCount: { color: '#64748b', fontSize: 11, fontWeight: '800' },
   empty: { color: '#64748b', textAlign: 'center', marginTop: 20 },
   card: { backgroundColor: '#1e293b', padding: 12, borderRadius: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
   cardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
