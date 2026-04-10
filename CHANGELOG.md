@@ -9,6 +9,7 @@ What changed:
 - Stopped `position` objectives from completing permanently off early tied-table ordering before the season meaningfully settles.
 - Split the Hub, Squad, Transfers, Calendar, Stats, and Settings screens into smaller feature components without changing the existing design.
 - Centralized repeated team-colour fallback handling and trimmed duplicated screen-level render code.
+- Added extra CI stress checks for live-match energy, board-objective repeat-award guards, full-season state consistency, and clamped weekly budgets so they cannot fall below zero.
 
 Notes:
 - Re-ran `lint`, `tsc`, `test:ci`, and regression/QA checks after the cleanup passes to keep the refactor honest.

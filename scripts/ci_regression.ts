@@ -14,6 +14,7 @@ import { applySubstitutions } from '../src/core/substitutionEngine';
 import { advanceSeason } from '../src/core/seasonTransition';
 import { Player } from '../src/models/types';
 import { evaluateBoardObjectives } from '../src/store/boardObjectiveHelpers';
+import { useGameStore } from '../src/store/gameStore';
 
 const runInvariantChecks = () => {
   assert.equal(didConcedeInWindow([], 0, 90, 0), false);
@@ -150,6 +151,8 @@ const runInvariantChecks = () => {
       bench = bench.filter(player => player.id !== on.id);
     },
   });
+  assert.equal(minuteMap[starterA.id], 60);
+  assert.equal(minuteMap[starterB.id], 90);
   assert.equal(minuteMap[benchC.id], 10);
   assert.equal(minuteMap[benchD.id], 20);
 
@@ -194,6 +197,69 @@ const runInvariantChecks = () => {
   assert.equal(objectiveResult.updatedObjectives.find(objective => objective.type === 'position')?.met, true);
   assert.equal(objectiveResult.updatedObjectives.find(objective => objective.type === 'wins')?.met, true);
   assert.equal(objectiveResult.updatedObjectives.find(objective => objective.type === 'spend')?.met, true);
+
+  const repeatedPositionCheck = evaluateBoardObjectives(
+    objectiveResult.updatedObjectives,
+    syntheticTeams[leadTeam.id],
+    syntheticTeams,
+    { isSeasonComplete: true }
+  );
+  assert.equal(repeatedPositionCheck.approvalChange, 0);
+
+  useGameStore.getState().initializeGame('T1');
+  const liveState = useGameStore.getState();
+  const liveFixture = Object.values(liveState.fixtures)
+    .find(item => item.homeTeamId !== 'T1' && item.awayTeamId !== 'T1');
+  assert.ok(liveFixture, 'Expected a non-user fixture for live energy regression check');
+
+  const homeStarterIds = Object.values(liveState.players)
+    .filter(player => player.teamId === liveFixture!.homeTeamId && player.isStarting)
+    .map(player => player.id);
+  const awayStarterIds = Object.values(liveState.players)
+    .filter(player => player.teamId === liveFixture!.awayTeamId && player.isStarting)
+    .map(player => player.id);
+  const trackedStarterIds = [...homeStarterIds.slice(0, 2), ...awayStarterIds.slice(0, 2)];
+  assert.equal(trackedStarterIds.length, 4, 'Expected tracked live-match starters for energy regression check');
+
+  const playersWithKnownEnergy = Object.fromEntries(
+    Object.entries(liveState.players).map(([id, player]) => [
+      id,
+      trackedStarterIds.includes(id) ? { ...player, energy: 50 } : player,
+    ])
+  );
+  useGameStore.setState(prev => ({
+    players: playersWithKnownEnergy,
+    fixtures: {
+      ...prev.fixtures,
+      [liveFixture!.id]: {
+        ...liveFixture!,
+        homeScore: 0,
+        awayScore: 0,
+        isPlayed: false,
+      },
+    },
+    liveMatches: {
+      ...(prev.liveMatches || {}),
+      [liveFixture!.id]: {
+        initialized: true,
+        yellowCardPlayerIds: [],
+        sentOffPlayerIds: [],
+        sentOffMinutes: {},
+        homeGoalMinutes: [],
+        awayGoalMinutes: [],
+        homeStarterIds,
+        awayStarterIds,
+      },
+    },
+  }));
+  useGameStore.getState().finishLiveMatch(liveFixture!.id);
+  trackedStarterIds.forEach(playerId => {
+    assert.equal(
+      useGameStore.getState().players[playerId].energy,
+      50,
+      `finishLiveMatch should not apply a second energy drain to ${playerId}`
+    );
+  });
 
   const seededPlayers = Object.fromEntries(
     Object.entries(initGameData().players).map(([id, player]) => [
@@ -317,12 +383,78 @@ const runThresholdChecks = () => {
   assert.ok(formationUsage.back5 > 0, 'Expected some back-5 usage');
 };
 
+const runStateConsistencyStress = () => {
+  const seeds = [20260521, 20260522];
+
+  seeds.forEach(seed => {
+    const rng = createSeededRandomGenerator(seed);
+    const data = initGameData();
+    let state = {
+      players: data.players,
+      teams: data.teams,
+      fixtures: data.fixtures,
+      currentWeek: 1,
+      news: [] as string[],
+    };
+
+    const seasonWeekLimit = getSeasonWeekLimit(state.fixtures);
+    for (let week = 1; week <= seasonWeekLimit; week++) {
+      const weekFixtures = Object.values(state.fixtures).filter(fixture => fixture.week === week);
+      for (const fixture of weekFixtures) {
+        const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures, null, { rng });
+        state.players = result.players;
+        state.teams = result.teams;
+        state.fixtures[fixture.id] = result.fixture;
+      }
+
+      const progression = computeWeeklyProgression(
+        state.currentWeek,
+        state.players,
+        state.teams,
+        state.fixtures,
+        state.news,
+        null,
+        rng
+      );
+      state.players = progression.players;
+      state.teams = progression.teams;
+      state.currentWeek = progression.currentWeek;
+      state.news = progression.news;
+
+      const transfers = computeWeeklyTransfers(state.players, state.teams, null, rng);
+      state.players = transfers.players;
+      state.teams = transfers.teams;
+
+      Object.values(state.players).forEach(player => {
+        assert.ok(Number.isFinite(player.energy) && player.energy >= 0 && player.energy <= 100, `Invalid player energy for ${player.id} in seed ${seed}`);
+        assert.ok(Number.isFinite(player.morale) && player.morale >= 0 && player.morale <= 100, `Invalid player morale for ${player.id} in seed ${seed}`);
+        assert.ok(Number.isFinite(player.matchesSuspended) && player.matchesSuspended >= 0, `Invalid suspension count for ${player.id} in seed ${seed}`);
+      });
+
+      Object.values(state.teams).forEach(team => {
+        assert.ok(Number.isFinite(team.budget) && team.budget >= 0, `Invalid team budget for ${team.id} in seed ${seed}`);
+        assert.ok(Number.isFinite(team.transferSpend) && team.transferSpend >= 0, `Invalid team transfer spend for ${team.id} in seed ${seed}`);
+        assert.ok(Number.isFinite(team.boardApproval) && team.boardApproval >= 0 && team.boardApproval <= 100, `Invalid board approval for ${team.id} in seed ${seed}`);
+      });
+
+      Object.values(state.fixtures)
+        .filter(fixture => fixture.isPlayed)
+        .forEach(fixture => {
+          assert.ok(Number.isFinite(fixture.homeScore), `Played fixture ${fixture.id} missing home score in seed ${seed}`);
+          assert.ok(Number.isFinite(fixture.awayScore), `Played fixture ${fixture.id} missing away score in seed ${seed}`);
+        });
+    }
+  });
+};
+
 const run = () => {
   console.log('--- CI REGRESSION CHECKS ---');
   runInvariantChecks();
   console.log('[OK] Invariant checks passed');
   runThresholdChecks();
   console.log('[OK] Seasonal threshold checks passed');
+  runStateConsistencyStress();
+  console.log('[OK] State consistency stress checks passed');
   console.log('--- CI REGRESSION COMPLETE ---');
 };
 

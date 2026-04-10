@@ -52,7 +52,7 @@ export const computeWeeklyProgression = (
       newBudget += 1.0 + (team.points * 0.05);
     }
 
-    updatedTeams[team.id] = { ...team, budget: newBudget };
+    updatedTeams[team.id] = { ...team, budget: Math.max(0, newBudget) };
   });
 
   applyTacticalAdaptation(
