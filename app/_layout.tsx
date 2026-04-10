@@ -61,6 +61,7 @@ export default function RootLayout() {
         <Stack.Screen name="league" options={{ headerShown: false }} />
         <Stack.Screen name="board" options={{ headerShown: false }} />
         <Stack.Screen name="calendar" options={{ headerShown: false }} />
+        <Stack.Screen name="inbox" options={{ headerShown: false }} />
         <Stack.Screen name="stats" options={{ headerShown: false }} />
         <Stack.Screen name="match" options={{ presentation: 'fullScreenModal', title: 'Match Day' }} />
       </Stack>

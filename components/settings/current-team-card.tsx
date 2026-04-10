@@ -4,10 +4,12 @@ import { Team } from '@/src/models/types';
 
 type CurrentTeamCardProps = {
   team: Team | null;
+  injuredCount?: number;
+  expiringCount?: number;
   onChangeTeam: () => void;
 };
 
-export function CurrentTeamCard({ team, onChangeTeam }: CurrentTeamCardProps) {
+export function CurrentTeamCard({ team, injuredCount = 0, expiringCount = 0, onChangeTeam }: CurrentTeamCardProps) {
   const manager = team?.manager;
 
   return (
@@ -15,6 +17,11 @@ export function CurrentTeamCard({ team, onChangeTeam }: CurrentTeamCardProps) {
       <Text style={styles.cardTitle}>Current Team</Text>
       <Text style={styles.teamName}>{team?.name || 'No team selected'}</Text>
       {team && <Text style={styles.teamDivision}>{team.division}</Text>}
+      {team ? (
+        <Text style={styles.statusSummary}>
+          {injuredCount} injured | {expiringCount} expiring contracts
+        </Text>
+      ) : null}
       {manager && (
         <View style={styles.managerBlock}>
           <Text style={styles.managerLabel}>Manager</Text>
@@ -44,6 +51,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '900', color: '#e2e8f0', marginBottom: 10 },
   teamName: { fontSize: 18, fontWeight: '900', color: '#38bdf8', marginBottom: 12 },
   teamDivision: { color: '#94a3b8', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', marginBottom: 12 },
+  statusSummary: { color: '#cbd5e1', fontSize: 12, fontWeight: '700', marginBottom: 12 },
   managerBlock: {
     backgroundColor: '#0f172a',
     borderRadius: 12,

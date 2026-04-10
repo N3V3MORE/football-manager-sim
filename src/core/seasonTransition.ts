@@ -7,6 +7,8 @@ import {
   sortTeamsByDivisionAndName,
   sortTeamsByTable,
 } from './leagueUtils';
+import { getRenewalOffer, shouldRenewContract } from './contractUtils';
+import { removePlayerFromTeamSelections } from './formationMapUtils';
 import { generateBoardObjectives } from '../utils/initGame';
 
 const resetTeamStats = (team: Team): Team => ({
@@ -31,6 +33,8 @@ const formatTeamList = (teams: Team[]) => teams.map(team => team.name).join(', '
 const resetPlayerSeasonStats = (player: Player): Player => ({
   ...player,
   matchesSuspended: 0,
+  injuryWeeks: 0,
+  injuryType: undefined,
   minutesPlayed: 0,
   goals: 0,
   assists: 0,
@@ -39,6 +43,21 @@ const resetPlayerSeasonStats = (player: Player): Player => ({
   redCards: 0,
   matchRatingHistory: [],
 });
+
+const findContractDestinationTeamId = (
+  player: Player,
+  teams: Record<string, Team>,
+  userTeamId: string | null
+) => {
+  const currentDivision = teams[player.teamId]?.division;
+  return Object.values(teams)
+    .filter(team => team.id !== player.teamId && team.id !== userTeamId)
+    .sort((a, b) => {
+      if (a.division === currentDivision && b.division !== currentDivision) return -1;
+      if (b.division === currentDivision && a.division !== currentDivision) return 1;
+      return a.budget - b.budget;
+    })[0]?.id || null;
+};
 
 export const advanceSeason = (
   players: Record<string, Player>,
@@ -51,21 +70,76 @@ export const advanceSeason = (
   fixtures: Record<string, Fixture>;
   currentWeek: number;
   news: string[];
+  generatedNews: string[];
   boardObjectives: BoardObjective[];
 } => {
+  const seasonNews: string[] = [];
+  const contractAdjustedPlayers = { ...players };
+  const contractAdjustedTeams = { ...teams };
+
+  Object.values(players).forEach(player => {
+    if (player.contractLeft > 0) return;
+    const currentTeam = contractAdjustedTeams[player.teamId];
+    if (!currentTeam) return;
+
+    if (player.teamId === userTeamId) {
+      const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId);
+      if (!destinationTeamId) return;
+      contractAdjustedPlayers[player.id] = {
+        ...player,
+        teamId: destinationTeamId,
+        isStarting: false,
+        isSub: false,
+        morale: Math.max(60, player.morale),
+        contractLeft: 2,
+      };
+      contractAdjustedTeams[currentTeam.id] = removePlayerFromTeamSelections(currentTeam, player.id);
+      seasonNews.push(`${player.name} leaves ${currentTeam.name} after running down his contract.`);
+      return;
+    }
+
+    if (shouldRenewContract(player, currentTeam)) {
+      const renewal = getRenewalOffer(player);
+      contractAdjustedPlayers[player.id] = {
+        ...player,
+        contractLeft: renewal.years,
+        wage: renewal.wage,
+      };
+      return;
+    }
+
+    const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId);
+    if (!destinationTeamId) {
+      const renewal = getRenewalOffer(player);
+      contractAdjustedPlayers[player.id] = {
+        ...player,
+        contractLeft: renewal.years,
+        wage: renewal.wage,
+      };
+      return;
+    }
+
+    contractAdjustedPlayers[player.id] = {
+      ...player,
+      teamId: destinationTeamId,
+      isStarting: false,
+      isSub: false,
+      contractLeft: 2,
+    };
+    contractAdjustedTeams[currentTeam.id] = removePlayerFromTeamSelections(currentTeam, player.id);
+  });
+
   const nextPlayers = Object.fromEntries(
-    Object.entries(players).map(([playerId, player]) => [
+    Object.entries(contractAdjustedPlayers).map(([playerId, player]) => [
       playerId,
       resetPlayerSeasonStats(player),
     ])
   );
-
-  const seasonNews: string[] = [];
   const divisionTables = Object.fromEntries(
-    DIVISION_ORDER.map(division => [division, getDivisionTeams(teams, division)])
+    DIVISION_ORDER.map(division => [division, getDivisionTeams(contractAdjustedTeams, division)])
   ) as Record<Division, Team[]>;
   const nextDivisionByTeamId: Record<string, Division> = Object.fromEntries(
-    Object.values(teams).map(team => [team.id, team.division])
+    Object.values(contractAdjustedTeams).map(team => [team.id, team.division])
   ) as Record<string, Division>;
 
   DIVISION_ORDER.forEach((division, index) => {
@@ -93,7 +167,7 @@ export const advanceSeason = (
   });
 
   const resetTeams = Object.fromEntries(
-    Object.entries(teams).map(([teamId, team]) => {
+    Object.entries(contractAdjustedTeams).map(([teamId, team]) => {
       const nextDivision = nextDivisionByTeamId[teamId] || team.division;
       return [
         teamId,
@@ -127,6 +201,7 @@ export const advanceSeason = (
     fixtures: nextFixtures,
     currentWeek: 1,
     boardObjectives,
+    generatedNews: [...seasonNews, 'A new season has begun.'],
     news: [...seasonNews, 'A new season has begun.', ...news].slice(0, 20),
   };
 };

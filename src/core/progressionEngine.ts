@@ -14,7 +14,13 @@ export const computeWeeklyProgression = (
   oldNews: string[],
   userTeamId: string | null = null,
   rng?: RandomGenerator
-): { players: Record<string, Player>, teams: Record<string, Team>, currentWeek: number, news: string[] } => {
+): {
+  players: Record<string, Player>;
+  teams: Record<string, Team>;
+  currentWeek: number;
+  news: string[];
+  generatedNews: string[];
+} => {
   const random = resolveRandom(rng);
   const playedFixtures = Object.values(fixtures).filter(f => f.week === currentWeek);
   const seasonWeekLimit = getSeasonWeekLimit(fixtures);
@@ -35,14 +41,25 @@ export const computeWeeklyProgression = (
   allPlayers.forEach(player => {
     const newEnergy = Math.min(100, player.energy + ENGINE_CONFIG.WEEKLY_ENERGY_RECOVERY);
     const newSuspension = Math.max(0, player.matchesSuspended - 1);
-    if (newEnergy !== player.energy || newSuspension !== player.matchesSuspended) {
-      updatedPlayers[player.id] = { ...player, energy: newEnergy, matchesSuspended: newSuspension };
+    const newInjuryWeeks = Math.max(0, (player.injuryWeeks || 0) - 1);
+    if (
+      newEnergy !== player.energy ||
+      newSuspension !== player.matchesSuspended ||
+      newInjuryWeeks !== (player.injuryWeeks || 0)
+    ) {
+      updatedPlayers[player.id] = {
+        ...player,
+        energy: newEnergy,
+        matchesSuspended: newSuspension,
+        injuryWeeks: newInjuryWeeks,
+        injuryType: newInjuryWeeks > 0 ? player.injuryType : undefined,
+      };
     }
   });
 
   const updatedTeams = { ...teams };
   Object.values(updatedTeams).forEach(team => {
-    const teamPlayers = allPlayers.filter(player => player.teamId === team.id);
+    const teamPlayers = Object.values(updatedPlayers).filter(player => player.teamId === team.id);
     const weeklyWageTotalThousand = teamPlayers.reduce((sum, player) => sum + (player.wage || 0), 0);
     const wageCostM = weeklyWageTotalThousand / 1000;
     let newBudget = team.budget - wageCostM;
@@ -99,6 +116,7 @@ export const computeWeeklyProgression = (
   return {
     currentWeek: currentWeek + 1,
     news: [...newNews, ...oldNews].slice(0, 20),
+    generatedNews: newNews,
     players: updatedPlayers,
     teams: updatedTeams,
   };

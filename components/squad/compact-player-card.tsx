@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Player } from '@/src/models/types';
 import { getPositionColor } from '@/src/constants/positionColors';
+import { formatContractLength, getPlayerAvailabilityStatus, isContractExpiringSoon, isPlayerInjured } from '@/src/core/playerStatusUtils';
 
 type CompactPlayerCardProps = {
   item: Player;
@@ -19,8 +20,11 @@ export function CompactPlayerCard({
   onLongPress,
 }: CompactPlayerCardProps) {
   const isSuspended = item.matchesSuspended > 0;
+  const isInjured = isPlayerInjured(item);
   const isExhausted = item.energy < 70;
-  const warningColor = (isSuspended || isExhausted) ? '#ef4444' : undefined;
+  const isExpiring = isContractExpiringSoon(item);
+  const warningColor = (isSuspended || isInjured || isExhausted || isExpiring) ? '#ef4444' : undefined;
+  const statusLine = `${getPlayerAvailabilityStatus(item)} | ${formatContractLength(item)}`;
 
   return (
     <View>
@@ -37,8 +41,11 @@ export function CompactPlayerCard({
         <View style={styles.playerMeta}>
           <Text style={[styles.playerName, warningColor && { color: warningColor }]} numberOfLines={1}>
             {item.name} {isSuspended && <Text style={styles.suspensionTag}>[SUSP]</Text>}
+            {isInjured && <Text style={styles.suspensionTag}>[INJ]</Text>}
+            {isExpiring && <Text style={styles.contractTag}>[EXP]</Text>}
           </Text>
           <Text style={styles.nationality}>{item.nationality} | {Math.floor(item.energy)}% Energy</Text>
+          <Text style={styles.statusMeta}>{statusLine}</Text>
         </View>
         <View style={styles.playerRowRight}>
           <View style={styles.ratingBox}>
@@ -118,7 +125,9 @@ const styles = StyleSheet.create({
   playerMeta: { flex: 1 },
   playerName: { fontSize: 14, fontWeight: '700', color: '#f1f5f9' },
   suspensionTag: { fontSize: 10, color: '#ef4444' },
+  contractTag: { fontSize: 10, color: '#f59e0b' },
   nationality: { fontSize: 10, color: '#64748b', fontWeight: '600' },
+  statusMeta: { fontSize: 10, color: '#94a3b8', fontWeight: '600', marginTop: 2 },
   playerRowRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   ratingBox: { backgroundColor: '#cbd5e1', width: 30, height: 30, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
   ratingText: { color: '#0f172a', fontWeight: '900', fontSize: 13 },

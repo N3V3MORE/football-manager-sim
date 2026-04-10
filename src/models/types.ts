@@ -90,6 +90,8 @@ export interface Player {
   isTransferListed: boolean; // true = listed for sale
   askingPrice: number;      // asking price in millions GBP (0 if not listed)
   matchesSuspended: number; // dynamically used for suspensions
+  injuryWeeks: number;      // full weeks unavailable through injury
+  injuryType?: string;
   wage: number;             // wage in thousands per week
   contractLeft: number;     // years remaining on contract
   impactCoefficient: number;// modifier for clutch/hero moments
@@ -149,6 +151,62 @@ export interface Fixture {
   isPlayed: boolean;
 }
 
+export type InboxMessageSource = 'assistant' | 'system';
+
+export type InboxMessageCategory =
+  | 'system_news'
+  | 'season_update'
+  | 'board_update'
+  | 'injury_update'
+  | 'pre_match_energy'
+  | 'pre_match_availability'
+  | 'lineup_suggestion'
+  | 'tactic_suggestion'
+  | 'post_match_report'
+  | 'transfer_advice'
+  | 'squad_warning'
+  | 'contract_warning';
+
+export type InboxAction =
+  | {
+      type: 'apply_lineup';
+      payload: {
+        teamId: string;
+        formationMap: Record<string, string>;
+        startingIds: string[];
+        subIds: string[];
+      };
+    }
+  | {
+      type: 'apply_tactics';
+      payload: {
+        teamId: string;
+        tactics: Partial<TeamTactics>;
+      };
+    }
+  | {
+      type: 'renew_contract';
+      payload: {
+        playerId: string;
+        years: number;
+        wage: number;
+      };
+    };
+
+export interface InboxMessage {
+  id: string;
+  week: number;
+  source: InboxMessageSource;
+  category: InboxMessageCategory;
+  title: string;
+  body: string;
+  isRead: boolean;
+  action?: InboxAction;
+  fixtureId?: string;
+  playerId?: string;
+  teamId?: string;
+}
+
 export interface GameState {
   currentWeek: number;
   userTeamId: string | null;
@@ -156,5 +214,6 @@ export interface GameState {
   players: Record<string, Player>;
   fixtures: Record<string, Fixture>;
   news: string[];
+  inboxMessages: InboxMessage[];
   boardObjectives: BoardObjective[];
 }

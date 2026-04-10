@@ -8,6 +8,8 @@ import { applySubstitutions } from './substitutionEngine';
 import { applySharedPostMatchAccounting } from './postMatchAccounting';
 import { rebuildFormationMap } from './formationMapUtils';
 import { applyMinuteCaps, buildStarterBenchMinuteMap } from './minuteMapUtils';
+import { applyMatchInjuries } from './injuryEngine';
+import { isPlayerUnavailable } from './playerStatusUtils';
 import { defaultRandomGenerator, RandomGenerator, resolveRandom } from './random';
 import { applyMatchResult } from './teamUtils';
 import {
@@ -280,8 +282,8 @@ export const quickSimMatch = (
     const shouldPreserveManual = Boolean(userTeamId && teamId === userTeamId);
     if (shouldPreserveManual) {
       const teamPlayers = Object.values(updatedPlayers).filter(p => p.teamId === teamId);
-      const eligibleTeamPlayers = teamPlayers.filter(p => p.matchesSuspended === 0);
-      const savedStarters = teamPlayers.filter(player => player.isStarting);
+      const eligibleTeamPlayers = teamPlayers.filter(player => !isPlayerUnavailable(player));
+      const savedStarters = teamPlayers.filter(player => player.isStarting && !isPlayerUnavailable(player));
       const cleanFormationMap = rebuildFormationMap(
         getSlotsForFormation(team.activeFormation),
         savedStarters,
@@ -312,7 +314,7 @@ export const quickSimMatch = (
           }
         });
       }
-      starters = Object.values(updatedPlayers).filter(p => p.teamId === teamId && p.isStarting && p.matchesSuspended === 0);
+      starters = Object.values(updatedPlayers).filter(player => player.teamId === teamId && player.isStarting && !isPlayerUnavailable(player));
       if (starters.length < 11) {
         const fillCandidates = eligibleTeamPlayers
           .filter(player => !player.isStarting)
@@ -327,7 +329,7 @@ export const quickSimMatch = (
         updatedPlayers[id] = { ...updatedPlayers[id], ...lineupUpdates[id] };
       });
     }
-    const starters = Object.values(updatedPlayers).filter(p => p.teamId === teamId && p.isStarting && p.matchesSuspended === 0);
+    const starters = Object.values(updatedPlayers).filter(player => player.teamId === teamId && player.isStarting && !isPlayerUnavailable(player));
     return starters;
   };
 
@@ -340,12 +342,12 @@ export const quickSimMatch = (
     let bench = Object.values(updatedPlayers).filter(p => (
       p.teamId === teamId &&
       p.isSub &&
-      p.matchesSuspended === 0 &&
+      !isPlayerUnavailable(p) &&
       !starterIds.has(p.id)
     ));
     if (bench.length < 7) {
       const extra = Object.values(updatedPlayers)
-        .filter(p => p.teamId === teamId && !p.isStarting && !p.isSub && p.matchesSuspended === 0 && !starterIds.has(p.id))
+        .filter(p => p.teamId === teamId && !p.isStarting && !p.isSub && !isPlayerUnavailable(p) && !starterIds.has(p.id))
         .sort((a, b) => b.overallRating - a.overallRating)
         .slice(0, 7 - bench.length);
       extra.forEach(player => {
@@ -354,7 +356,7 @@ export const quickSimMatch = (
       bench = Object.values(updatedPlayers).filter(p => (
         p.teamId === teamId &&
         p.isSub &&
-        p.matchesSuspended === 0 &&
+        !isPlayerUnavailable(p) &&
         !starterIds.has(p.id)
       ));
     }
@@ -536,6 +538,10 @@ export const quickSimMatch = (
     updatedPlayers,
     rng,
   });
+  applyMatchInjuries(homeParticipants, homeMinutes, updatedPlayers, rng)
+    .forEach(event => matchEvents.push(`${event.playerName} suffers a ${event.injuryType} and will miss ${event.weeks} week${event.weeks === 1 ? '' : 's'}.`));
+  applyMatchInjuries(awayParticipants, awayMinutes, updatedPlayers, rng)
+    .forEach(event => matchEvents.push(`${event.playerName} suffers a ${event.injuryType} and will miss ${event.weeks} week${event.weeks === 1 ? '' : 's'}.`));
 
   const updatedFixture = { ...fixture, homeScore: hScore, awayScore: aScore, isPlayed: true };
 

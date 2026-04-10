@@ -14,6 +14,7 @@ import { FormationSelectionModal } from '@/components/squad/formation-selection-
 import { PlayerPickerModal } from '@/components/squad/player-picker-modal';
 import { SquadInfoModal } from '@/components/squad/squad-info-modal';
 import { TacticSection } from '@/components/squad/tactic-section';
+import { isPlayerUnavailable } from '@/src/core/playerStatusUtils';
 
 const FORMATIONS: Formation[] = [
   '4-3-3',
@@ -129,7 +130,7 @@ export default function SquadScreen() {
   const baseFormation = activeFormation.split(' ')[0];
   const slots = getSlotsForFormation(activeFormation);
 
-  const starters  = sortedSquad.filter(p => p.isStarting);
+  const starters  = sortedSquad.filter(player => player.isStarting && !isPlayerUnavailable(player));
   const bench     = sortedSquad.filter(p => p.isSub);
   const reserves  = sortedSquad.filter(p => !p.isStarting && !p.isSub);
 
@@ -204,7 +205,7 @@ export default function SquadScreen() {
   };
 
   const getPickerSections = (slot: Slot) => {
-    const pool = mySquad.filter(p => !p.isStarting)
+    const pool = mySquad.filter(player => !player.isStarting && !isPlayerUnavailable(player))
       .sort((a, b) => b.overallRating - a.overallRating);
 
     const recommended = pool.filter(p => getSlotFitScore(p, slot) > -Infinity);

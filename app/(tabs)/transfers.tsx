@@ -5,6 +5,7 @@ import { useGameStore } from '@/src/store/gameStore';
 import { getTransferWindowLabel, isTransferWindowOpen } from '@/src/utils/calendar';
 import { Player } from '@/src/models/types';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
+import { formatContractLength, getPlayerAvailabilityStatus, isContractExpiringSoon } from '@/src/core/playerStatusUtils';
 import { TransferDialog, TransferDialogState } from '@/components/transfers/transfer-dialog';
 import { TransferPlayerCard } from '@/components/transfers/transfer-player-card';
 import { TransferTabs } from '@/components/transfers/transfer-tabs';
@@ -110,7 +111,7 @@ export default function TransfersScreen() {
             <TransferPlayerCard
               key={p.id}
               player={p}
-              subLabel={teams[p.teamId]?.name || ''}
+              subLabel={`${teams[p.teamId]?.name || ''} | ${getPlayerAvailabilityStatus(p)} | ${formatContractLength(p)}`}
               actionLabel={`GBP ${p.askingPrice.toFixed(1)}m`}
               onAction={() => handleBuy(p)}
             />
@@ -122,7 +123,7 @@ export default function TransfersScreen() {
             <TransferPlayerCard
               key={p.id}
               player={p}
-              subLabel={`Value: GBP ${p.marketValue}m`}
+              subLabel={`Value: GBP ${p.marketValue}m | ${getPlayerAvailabilityStatus(p)} | ${formatContractLength(p)}${isContractExpiringSoon(p) ? ' | Expiring' : ''}`}
               actionLabel={p.isTransferListed ? `Unlist (GBP ${p.askingPrice}m)` : 'List'}
               actionVariant={p.isTransferListed ? 'danger' : 'primary'}
               onAction={() => handleSellToggle(p)}

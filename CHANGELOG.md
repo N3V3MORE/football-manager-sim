@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.4.0 - Add player availability and contract pressure
+
+What changed:
+- Added injury state, weekly recovery, and availability gating so injured or suspended players cannot leak into lineup, bench, or match selection.
+- Added contract-expiry handling, one-tap renewals, and season-rollover departures for user players whose deals are allowed to expire.
+- Extended the assistant coach inbox with recovery updates, contract warnings, renewal recommendations, and post-match injury notes.
+- Added a contract-management surface in Settings with Contract Watch and Availability Watch cards so squad issues are visible outside the inbox.
+- Kept direct renewals and inbox renewal actions on the same store path so stale contract warnings are cleared instead of lingering as bad actions.
+- Expanded deterministic regression coverage for injury recovery, availability enforcement, contract renewal, and season-end departures.
+
+Notes:
+- Re-ran `lint`, `tsc`, `test:ci`, `test:regression`, and `qa` after the v3.4 work.
+
+## v3.3.0 - Add the assistant coach inbox
+
+What changed:
+- Replaced the old latest-news feed with a structured inbox and a Hub inbox preview.
+- Added mixed inbox messages for assistant coach advice, system news, board updates, and post-match reports.
+- Added actionable assistant items for lineup and tactic suggestions, with transfer notes staying advice-only.
+- Added save-safe inbox persistence, legacy `news` migration, message dedupe, and inbox size capping.
+- Added a dedicated Inbox screen and reusable inbox message cards without changing the main tab structure.
+- Expanded CI regression coverage for inbox migration, dedupe, action application, post-match reporting, and seeded stress runs with inbox generation enabled.
+
 ## v3.2.3 - Fix backend accounting and modularize the frontend
 
 What changed:

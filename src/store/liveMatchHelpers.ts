@@ -2,6 +2,7 @@ import { Player, Team } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { autoAssignLineup } from '../core/lineupEngine';
 import { applyMatchResult } from '../core/teamUtils';
+import { isPlayerUnavailable } from '../core/playerStatusUtils';
 
 export type LiveMatchState = {
   initialized: boolean;
@@ -35,7 +36,7 @@ export const getEligibleStarters = (
   .filter(player => (
     player.teamId === teamId &&
     player.isStarting &&
-    player.matchesSuspended === 0 &&
+    !isPlayerUnavailable(player) &&
     !sentOffPlayers.has(player.id)
   ));
 

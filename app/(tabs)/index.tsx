@@ -4,10 +4,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '@/src/store/gameStore';
 import { useRouter } from 'expo-router';
 import { BoardRoomCard } from '@/components/hub/board-room-card';
+import { InboxPreviewCard } from '@/components/hub/inbox-preview-card';
 import { getTeamTheme } from '@/src/constants/teamColors';
-import { LatestNewsCard } from '@/components/hub/latest-news-card';
 import { getSeasonWeekLimit, sortTeamsByTable } from '@/src/core/leagueUtils';
-import { Fixture, Player, Team } from '@/src/models/types';
+import { Fixture, InboxMessage, Player, Team } from '@/src/models/types';
 import { HubHeader } from '@/components/hub/hub-header';
 import { MiniTableCard } from '@/components/hub/mini-table-card';
 import { NextFixtureCard } from '@/components/hub/next-fixture-card';
@@ -21,6 +21,8 @@ type UpcomingFixtureRow = {
   week: number;
   match: Fixture | undefined;
 };
+
+type InboxPreviewMessage = InboxMessage;
 
 type MiniTableTeam = Team & {
   position: number;
@@ -51,7 +53,7 @@ export default function HubScreen() {
   const teams = useGameStore(state => state.teams);
   const fixtures = useGameStore(state => state.fixtures);
   const advanceWeek = useGameStore(state => state.advanceWeek);
-  const news = useGameStore(state => state.news);
+  const inboxMessages = useGameStore(state => state.inboxMessages);
   const players = useGameStore(state => state.players);
 
   const myTeam = userTeamId ? teams[userTeamId] : null;
@@ -146,6 +148,15 @@ export default function HubScreen() {
   const topScorer = useMemo(() => getTopPlayerByStat(allPlayers, 'goals'), [allPlayers]);
   const topAssister = useMemo(() => getTopPlayerByStat(allPlayers, 'assists'), [allPlayers]);
   const topCS = useMemo(() => getTopPlayerByStat(allPlayers, 'cleanSheets'), [allPlayers]);
+  const unreadInboxCount = useMemo(
+    () => inboxMessages.filter(message => !message.isRead).length,
+    [inboxMessages]
+  );
+  const inboxPreviewMessages = useMemo<InboxPreviewMessage[]>(() => {
+    const unread = inboxMessages.filter(message => !message.isRead);
+    const read = inboxMessages.filter(message => message.isRead);
+    return [...unread, ...read].slice(0, 3);
+  }, [inboxMessages]);
 
   const seasonLeaders = useMemo(() => ([
     { label: 'Top Scorer', player: topScorer, stat: topScorer ? `${topScorer.goals} goals` : 'None yet' },
@@ -171,7 +182,11 @@ export default function HubScreen() {
           weekLabel={weekToDate(currentWeek)}
         />
 
-        <LatestNewsCard news={news} />
+        <InboxPreviewCard
+          messages={inboxPreviewMessages}
+          unreadCount={unreadInboxCount}
+          onPress={() => router.push('/inbox')}
+        />
 
         <NextFixtureCard
           homeTeam={homeTeam}
