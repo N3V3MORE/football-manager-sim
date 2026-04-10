@@ -44,9 +44,9 @@ type MatchReport = {
   awayScore: number;
   totalGoals: number;
   playerDeltas: PlayerMatchDelta[];
-  scorers: Array<{ playerId: string; name: string; teamName: string; goals: number }>;
-  assisters: Array<{ playerId: string; name: string; teamName: string; assists: number }>;
-  cards: Array<{ playerId: string; name: string; teamName: string; yellowCards: number; redCards: number }>;
+  scorers: { playerId: string; name: string; teamName: string; goals: number }[];
+  assisters: { playerId: string; name: string; teamName: string; assists: number }[];
+  cards: { playerId: string; name: string; teamName: string; yellowCards: number; redCards: number }[];
   eventMessages: string[];
   auditFlags: string[];
 };
@@ -57,10 +57,10 @@ type TransferSnapshot = {
 };
 
 type TransferActivity = {
-  moves: Array<{ playerId: string; name: string; fromTeam: string; toTeam: string; fee: number }>;
-  newlyListed: Array<{ playerId: string; name: string; teamName: string; askingPrice: number }>;
-  unlisted: Array<{ playerId: string; name: string; teamName: string }>;
-  budgetDeltas: Array<{ teamId: string; teamName: string; delta: number; budget: number }>;
+  moves: { playerId: string; name: string; fromTeam: string; toTeam: string; fee: number }[];
+  newlyListed: { playerId: string; name: string; teamName: string; askingPrice: number }[];
+  unlisted: { playerId: string; name: string; teamName: string }[];
+  budgetDeltas: { teamId: string; teamName: string; delta: number; budget: number }[];
 };
 
 type TableRow = {
@@ -112,7 +112,7 @@ const round = (value: number, decimals = 2) => {
   return Math.round(value * factor) / factor;
 };
 
-const countByPlayerId = (items: Array<{ playerId: string; name: string; value: number }>) => {
+const countByPlayerId = (items: { playerId: string; name: string; value: number }[]) => {
   const counts = new Map<string, { playerId: string; name: string; value: number }>();
   items.forEach(item => {
     const existing = counts.get(item.playerId);
@@ -412,14 +412,14 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
     news: [] as string[],
   };
 
-  const weeks: Array<{
+  const weeks: {
     week: number;
     matches: MatchReport[];
     transfers: TransferActivity;
     table: TableRow[];
     news: string[];
     tacticalChanges: TacticalChange[];
-  }> = [];
+  }[] = [];
   const allMatches: MatchReport[] = [];
   const tacticalChangeCounts: Record<string, number> = Object.fromEntries(
     Object.keys(state.teams).map(teamId => [teamId, 0])

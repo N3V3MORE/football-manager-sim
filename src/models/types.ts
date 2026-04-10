@@ -165,7 +165,10 @@ export type InboxMessageCategory =
   | 'post_match_report'
   | 'transfer_advice'
   | 'squad_warning'
-  | 'contract_warning';
+  | 'contract_warning'
+  | 'career_sack_warning'
+  | 'career_job_offer'
+  | 'career_milestone';
 
 export type InboxAction =
   | {
@@ -191,6 +194,12 @@ export type InboxAction =
         years: number;
         wage: number;
       };
+    }
+  | {
+      type: 'accept_job_offer';
+      payload: {
+        teamId: string;
+      };
     };
 
 export interface InboxMessage {
@@ -207,6 +216,39 @@ export interface InboxMessage {
   teamId?: string;
 }
 
+export interface TrophyEntry {
+  season: number;
+  division: Division;
+  type: 'champion' | 'promoted' | 'relegated';
+}
+
+export interface SeasonSummary {
+  season: number;
+  teamId: string;
+  teamName: string;
+  division: Division;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  finalPosition: number;
+  outcome: 'champion' | 'promoted' | 'stayed' | 'relegated' | 'sacked';
+}
+
+export interface CareerRecord {
+  seasonsManaged: number;
+  totalWins: number;
+  totalDraws: number;
+  totalLosses: number;
+  totalGoalsFor: number;
+  totalGoalsAgainst: number;
+  reputation: number;
+  trophies: TrophyEntry[];
+  seasonHistory: SeasonSummary[];
+  consecutiveLowApprovalWeeks: number;
+}
+
 export interface GameState {
   currentWeek: number;
   userTeamId: string | null;
@@ -216,4 +258,5 @@ export interface GameState {
   news: string[];
   inboxMessages: InboxMessage[];
   boardObjectives: BoardObjective[];
+  careerRecord: CareerRecord;
 }

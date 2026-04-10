@@ -1,14 +1,14 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AvailabilityWatchCard } from '@/components/settings/availability-watch-card';
-import { ContractWatchCard } from '@/components/settings/contract-watch-card';
+
 import { CurrentTeamCard } from '@/components/settings/current-team-card';
 import { DevToolsCard } from '@/components/settings/dev-tools-card';
 import { TeamSelectionSheet } from '@/components/settings/team-selection-sheet';
 import { useGameStore } from '@/src/store/gameStore';
 import { sortTeamsByDivisionAndName } from '@/src/core/leagueUtils';
-import { isContractExpiringSoon, isPlayerInjured, isPlayerUnavailable } from '@/src/core/playerStatusUtils';
+import { isContractExpiringSoon, isPlayerInjured } from '@/src/core/playerStatusUtils';
+
 
 export default function SettingsScreen() {
   const userTeamId = useGameStore(state => state.userTeamId);
@@ -18,7 +18,7 @@ export default function SettingsScreen() {
   const skipToEndOfSeason = useGameStore(state => state.skipToEndOfSeason);
   const changeTeam = useGameStore(state => state.changeTeam);
   const initializeGame = useGameStore(state => state.initializeGame);
-  const renewPlayerContract = useGameStore(state => state.renewPlayerContract);
+
   const [showChangeTeam, setShowChangeTeam] = useState(false);
 
   const userTeam = userTeamId ? teams[userTeamId] : null;
@@ -35,14 +35,7 @@ export default function SettingsScreen() {
     () => userSquad.filter(player => isContractExpiringSoon(player)).length,
     [userSquad]
   );
-  const unavailablePlayers = useMemo(
-    () => userSquad.filter(player => isPlayerUnavailable(player)),
-    [userSquad]
-  );
-  const expiringPlayers = useMemo(
-    () => userSquad.filter(player => isContractExpiringSoon(player)),
-    [userSquad]
-  );
+
 
   const advanceWeeks = useCallback((count: number) => {
     for (let i = 0; i < count; i++) {
@@ -50,10 +43,7 @@ export default function SettingsScreen() {
     }
   }, [advanceWeek]);
 
-  const handleRenewContract = useCallback((playerId: string, years: number, wage: number) => {
-    const result = renewPlayerContract(playerId, years, wage);
-    Alert.alert(result.success ? 'Contract Agreed' : 'Contract Failed', result.message);
-  }, [renewPlayerContract]);
+
 
   const handleResetSeason = () => {
     if (!userTeamId) return;
@@ -75,16 +65,9 @@ export default function SettingsScreen() {
           onChangeTeam={() => setShowChangeTeam(true)}
         />
 
-        <AvailabilityWatchCard players={unavailablePlayers} />
 
-        <ContractWatchCard
-          team={userTeam}
-          players={expiringPlayers}
-          onRenew={handleRenewContract}
-        />
 
         <DevToolsCard
-          onAdvanceWeek={advanceWeek}
           onAdvanceFiveWeeks={() => advanceWeeks(5)}
           onSkipSeason={skipToEndOfSeason}
           onResetSeason={handleResetSeason}

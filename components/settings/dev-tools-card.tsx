@@ -1,15 +1,14 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+
 type DevToolsCardProps = {
-  onAdvanceWeek: () => void;
   onAdvanceFiveWeeks: () => void;
   onSkipSeason: () => void;
   onResetSeason: () => void;
 };
 
 export function DevToolsCard({
-  onAdvanceWeek,
   onAdvanceFiveWeeks,
   onSkipSeason,
   onResetSeason,
@@ -18,14 +17,9 @@ export function DevToolsCard({
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Dev Tools</Text>
       <Text style={styles.note}>Temporary controls live here until proper settings are added.</Text>
-      <View style={styles.row}>
-        <TouchableOpacity style={styles.devBtn} onPress={onAdvanceWeek}>
-          <Text style={styles.devBtnText}>Next Week</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.devBtn, styles.warningBtn]} onPress={onAdvanceFiveWeeks}>
-          <Text style={[styles.devBtnText, styles.warningText]}>+5 Weeks</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity style={[styles.devBtn, styles.warningBtn]} onPress={onAdvanceFiveWeeks}>
+        <Text style={[styles.devBtnText, styles.warningText]}>+5 Weeks</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={[styles.devBtn, styles.warningBtn]} onPress={onSkipSeason}>
         <Text style={[styles.devBtnText, styles.warningText]}>Skip Season</Text>
       </TouchableOpacity>
@@ -39,7 +33,7 @@ export function DevToolsCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#111827',
-    borderRadius: 14,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#1e293b',
     padding: 16,
@@ -52,7 +46,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderColor: '#334155',
-    borderRadius: 10,
+    borderRadius: 0,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 8,

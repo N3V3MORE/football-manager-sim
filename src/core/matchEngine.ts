@@ -1,8 +1,7 @@
 import { Team, Player, Fixture } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
-import { getSlotsForFormation } from '../constants/formations';
 import type { TeamShapeProfile } from './matchTypes';
-import { buildQuickSimLineup } from './lineupEngine';
+import { getTeamMatchBench, getTeamMatchStarters } from './lineupEngine';
 import { buildFallbackShapeProfile, buildTeamShapeProfile } from './shapeEngine';
 import { applySubstitutions } from './substitutionEngine';
 import { applySharedPostMatchAccounting } from './postMatchAccounting';
@@ -28,6 +27,118 @@ import {
 export { autoAssignLineup } from './lineupEngine';
 export { buildTeamShapeProfile } from './shapeEngine';
 export { getFormModifier, getMoraleModifier, runDuel } from './matchUtils';
+
+const LOW_INTENSITY_COMMENTARY_CHANCE = 0.04;
+
+const pickCommentary = (random: () => number, options: string[]) => (
+  options[Math.floor(random() * options.length)] || options[0] || null
+);
+
+const buildNeutralPossessionEvent = (
+  attacker: Team,
+  defender: Team,
+  random: () => number
+) => pickCommentary(random, [
+  `${attacker.name} recycle possession and start the move again.`,
+  `${defender.name} stay compact and force the play sideways.`,
+  `A patient spell from ${attacker.name}, but ${defender.name} keep their shape.`,
+  `${attacker.name} probe for an opening without finding the final pass.`,
+  `${defender.name} slow the tempo and close the central lanes.`,
+]);
+
+const buildPhaseOneStopEvent = (
+  defender: Team,
+  creator: Player,
+  random: () => number
+) => pickCommentary(random, [
+  `${defender.name} read the build-up early and stop ${creator.name} in midfield.`,
+  `${creator.name} cannot play through ${defender.name}'s midfield line.`,
+  `${defender.name} compress the space and kill the move before it develops.`,
+  `The middle closes quickly and ${defender.name} hold firm.`,
+]);
+
+const buildFinalThirdStopEvent = (
+  creator: Player,
+  defender: Team,
+  activeDefender: Player,
+  random: () => number
+) => pickCommentary(random, [
+  `${activeDefender.name} times the tackle and stops ${creator.name} cleanly.`,
+  `${creator.name} looks for the gap, but ${activeDefender.name} shuts the door.`,
+  `${defender.name} crowd the ball carrier out and clear the danger.`,
+  `${activeDefender.name} stands ${creator.name} up and wins the duel.`,
+]);
+
+const buildFoulEvent = (
+  defender: Player,
+  type: 'Y' | 'R',
+  random: () => number
+) => (
+  type === 'R'
+    ? pickCommentary(random, [
+      `${defender.name} wipes out the break and is shown a red card.`,
+      `${defender.name} goes through the man and sees straight red.`,
+      `${defender.name} makes a desperate challenge and the referee reaches for red.`,
+    ])
+    : pickCommentary(random, [
+      `${defender.name} clips the runner and goes into the book.`,
+      `${defender.name} stops the move with a foul and takes a yellow card.`,
+      `${defender.name} arrives late and the referee books him.`,
+    ])
+);
+
+const buildGoalEvent = (
+  attacker: Team,
+  finisher: Player,
+  assister: Player | undefined,
+  isThroughBall: boolean,
+  isWideRoute: boolean,
+  random: () => number
+) => {
+  if (assister) {
+    if (isThroughBall) {
+      return pickCommentary(random, [
+        `GOAL! ${assister.name} slides it through and ${finisher.name} finishes for ${attacker.name}.`,
+        `GOAL! ${finisher.name} runs onto ${assister.name}'s pass and buries it for ${attacker.name}.`,
+        `GOAL! ${attacker.name} split the line and ${finisher.name} does the rest. Assist ${assister.name}.`,
+      ]);
+    }
+    if (isWideRoute) {
+      return pickCommentary(random, [
+        `GOAL! ${attacker.name} work it wide and ${finisher.name} turns in the delivery from ${assister.name}.`,
+        `GOAL! ${assister.name} serves it from the flank and ${finisher.name} applies the finish for ${attacker.name}.`,
+        `GOAL! ${finisher.name} meets the service from ${assister.name} and scores for ${attacker.name}.`,
+      ]);
+    }
+
+    return pickCommentary(random, [
+      `GOAL! ${finisher.name} scores for ${attacker.name}! Assist: ${assister.name}.`,
+      `GOAL! ${attacker.name} piece it together and ${finisher.name} finishes the move set up by ${assister.name}.`,
+      `GOAL! ${finisher.name} converts for ${attacker.name} after the opening is created by ${assister.name}.`,
+    ]);
+  }
+
+  return pickCommentary(random, [
+    `GOAL! ${finisher.name} creates room and scores for ${attacker.name}.`,
+    `GOAL! ${finisher.name} does it alone and finds the finish for ${attacker.name}.`,
+    `GOAL! ${finisher.name} takes charge of the move and converts for ${attacker.name}.`,
+  ]);
+};
+
+const buildMissEvent = (
+  finisher: Player,
+  goalkeeper: Player,
+  defender: Player,
+  random: () => number
+) => pickCommentary(random, [
+  `GREAT SAVE! ${goalkeeper.name} gets across to deny ${finisher.name}.`,
+  `WIDE! ${finisher.name} drags the effort past the post.`,
+  `OVER! ${finisher.name} cannot keep the shot down.`,
+  `PALMED AWAY! ${goalkeeper.name} reacts well to the effort from ${finisher.name}.`,
+  `BLOCK! ${defender.name} throws himself in front of ${finisher.name}'s shot.`,
+  `${finisher.name} gets the strike away, but ${goalkeeper.name} stands tall.`,
+  `Half a chance for ${finisher.name}, but the finish is not there.`,
+]);
 
 // Match engine phase simulation
 export const simulatePossession = (
@@ -109,7 +220,12 @@ export const simulatePossession = (
   );
 
   // Chance a possession is interesting
-  if (random() > bigMomentChance) return { goal: false, event: null };
+  if (random() > bigMomentChance) {
+    const event = random() < LOW_INTENSITY_COMMENTARY_CHANCE
+      ? buildNeutralPossessionEvent(attacker, defender, random)
+      : null;
+    return { goal: false, event };
+  }
 
   // Phase 1: Midfield Build-up
   const progressionPool = [...attRoles.DM, ...attRoles.CM, ...attRoles.AM, ...attRoles.WIDE_MID, ...attRoles.FB, ...attRoles.WB];
@@ -140,7 +256,9 @@ export const simulatePossession = (
   const buildOutEdge = attShape.buildOutSupport - defShape.centralShield;
   const phaseOneAttack = activeMid.stats.passing * passBonus * 1.1 * (1 + clamp(buildOutEdge * 0.02, -0.1, 0.16));
   const phase1Success = runDuel(phaseOneAttack, phaseOneDefense * interceptBonus, ENGINE_CONFIG.DUEL_LUCK_MIDFIELD, rng);
-  if (!phase1Success && random() > ENGINE_CONFIG.PHASE_ONE_FAIL_ESCAPE_CHANCE) return { goal: false, event: null };
+  if (!phase1Success && random() > ENGINE_CONFIG.PHASE_ONE_FAIL_ESCAPE_CHANCE) {
+    return { goal: false, event: buildPhaseOneStopEvent(defender, activeMid, random) };
+  }
 
   // Phase 2: Final Third / Chance Creation
   const wideAttackWidth = attRoles.WINGER.length + attRoles.WB.length + attRoles.WIDE_MID.length;
@@ -204,10 +322,9 @@ export const simulatePossession = (
   if (!runDuel(creationStat, defenderStat, ENGINE_CONFIG.DUEL_LUCK_ATTACK, rng)) {
     if (random() < ENGINE_CONFIG.FOUL_CHANCE) {
       const type = random() < ENGINE_CONFIG.RED_CARD_CHANCE ? 'R' : 'Y';
-      const cardText = type === 'R' ? 'is shown a red card' : 'is booked';
-      return { goal: false, event: `${activeDefender.name} stops the attack and ${cardText}.`, foul: { player: activeDefender, type } };
+      return { goal: false, event: buildFoulEvent(activeDefender, type, random), foul: { player: activeDefender, type } };
     }
-    return { goal: false, event: null };
+    return { goal: false, event: buildFinalThirdStopEvent(creator, defender, activeDefender, random) };
   }
 
   // Phase 3: Finishing
@@ -239,19 +356,16 @@ export const simulatePossession = (
 
   if (runDuel(shotStat, reflexStat, ENGINE_CONFIG.DUEL_LUCK_SHOOTING, rng)) {
     const assister = creator.id !== finisher.id ? creator : undefined;
-    let eventDesc = `GOAL! ${finisher.name} scores for ${attacker.name}!`;
-    if (assister) eventDesc += ` (Assist: ${assister.name})`;
-
-    return { goal: true, scorer: finisher, assister, event: eventDesc };
+    return {
+      goal: true,
+      scorer: finisher,
+      assister,
+      event: buildGoalEvent(attacker, finisher, assister, isThroughBall, isWideRoute, random),
+    };
   }
 
-  const missEvents = [
-    `GREAT SAVE! ${gk.name} denies ${finisher.name}!`,
-    `WIDE! ${finisher.name} misses the target.`,
-    `TIPPED OVER! ${gk.name} saves the shot from ${finisher.name}!`,
-    `BLOCK! ${activeDefender.name} denies ${finisher.name}!`
-  ];
-  return { goal: false, event: missEvents[Math.floor(random() * Math.min(missEvents.length, ENGINE_CONFIG.MISS_EVENT_POOL_SIZE))] };
+  const missEvent = buildMissEvent(finisher, gk, activeDefender, random);
+  return { goal: false, event: missEvent };
 };
 
 
@@ -277,93 +391,13 @@ export const quickSimMatch = (
   const updatedTeams = { ...teams };
   const matchEvents: string[] = [];
 
-  const getTeamStarters = (teamId: string) => {
-    const team = updatedTeams[teamId];
-    const shouldPreserveManual = Boolean(userTeamId && teamId === userTeamId);
-    if (shouldPreserveManual) {
-      const teamPlayers = Object.values(updatedPlayers).filter(p => p.teamId === teamId);
-      const eligibleTeamPlayers = teamPlayers.filter(player => !isPlayerUnavailable(player));
-      const savedStarters = teamPlayers.filter(player => player.isStarting && !isPlayerUnavailable(player));
-      const cleanFormationMap = rebuildFormationMap(
-        getSlotsForFormation(team.activeFormation),
-        savedStarters,
-        team.formationMap || {}
-      );
-      updatedTeams[teamId] = { ...team, formationMap: cleanFormationMap };
-      const mappedStarterIds = Array.from(new Set(Object.values(cleanFormationMap)));
-      if (mappedStarterIds.length > 0) {
-        const mappedSet = new Set(mappedStarterIds.slice(0, 11));
-        const enforceMapXi = mappedStarterIds.length >= 11;
-        eligibleTeamPlayers.forEach(player => {
-          if (mappedSet.has(player.id)) {
-            updatedPlayers[player.id] = { ...updatedPlayers[player.id], isStarting: true, isSub: false };
-          } else if (enforceMapXi && player.isStarting) {
-            updatedPlayers[player.id] = { ...updatedPlayers[player.id], isStarting: false, isSub: true };
-          }
-        });
-      }
-      let starters = eligibleTeamPlayers.filter(p => p.isStarting);
-      if (starters.length > 11) {
-        const keepIds = new Set(starters
-          .sort((a, b) => (b.overallRating + b.energy * 0.1) - (a.overallRating + a.energy * 0.1))
-          .slice(0, 11)
-          .map(p => p.id));
-        starters.forEach(player => {
-          if (!keepIds.has(player.id)) {
-            updatedPlayers[player.id] = { ...updatedPlayers[player.id], isStarting: false, isSub: true };
-          }
-        });
-      }
-      starters = Object.values(updatedPlayers).filter(player => player.teamId === teamId && player.isStarting && !isPlayerUnavailable(player));
-      if (starters.length < 11) {
-        const fillCandidates = eligibleTeamPlayers
-          .filter(player => !player.isStarting)
-          .sort((a, b) => (b.overallRating + b.energy * 0.1) - (a.overallRating + a.energy * 0.1))
-          .slice(0, 11 - starters.length);
-        starters = [...starters, ...fillCandidates];
-      }
-      return starters.slice(0, 11);
-    } else {
-      const lineupUpdates = buildQuickSimLineup(teamId, updatedPlayers, team.activeFormation);
-      Object.keys(lineupUpdates).forEach(id => {
-        updatedPlayers[id] = { ...updatedPlayers[id], ...lineupUpdates[id] };
-      });
-    }
-    const starters = Object.values(updatedPlayers).filter(player => player.teamId === teamId && player.isStarting && !isPlayerUnavailable(player));
-    return starters;
-  };
-
+  const homeStarters = getTeamMatchStarters(fixture.homeTeamId, userTeamId, updatedPlayers, updatedTeams, isPlayerUnavailable, rebuildFormationMap);
+  const awayStarters = getTeamMatchStarters(fixture.awayTeamId, userTeamId, updatedPlayers, updatedTeams, isPlayerUnavailable, rebuildFormationMap);
   const homeTeam = updatedTeams[fixture.homeTeamId];
   const awayTeam = updatedTeams[fixture.awayTeamId];
-  const homeStarters = getTeamStarters(fixture.homeTeamId);
-  const awayStarters = getTeamStarters(fixture.awayTeamId);
-  const getBench = (teamId: string, matchStarters: Player[]) => {
-    const starterIds = new Set(matchStarters.map(player => player.id));
-    let bench = Object.values(updatedPlayers).filter(p => (
-      p.teamId === teamId &&
-      p.isSub &&
-      !isPlayerUnavailable(p) &&
-      !starterIds.has(p.id)
-    ));
-    if (bench.length < 7) {
-      const extra = Object.values(updatedPlayers)
-        .filter(p => p.teamId === teamId && !p.isStarting && !p.isSub && !isPlayerUnavailable(p) && !starterIds.has(p.id))
-        .sort((a, b) => b.overallRating - a.overallRating)
-        .slice(0, 7 - bench.length);
-      extra.forEach(player => {
-        updatedPlayers[player.id] = { ...updatedPlayers[player.id], isSub: true };
-      });
-      bench = Object.values(updatedPlayers).filter(p => (
-        p.teamId === teamId &&
-        p.isSub &&
-        !isPlayerUnavailable(p) &&
-        !starterIds.has(p.id)
-      ));
-    }
-    return bench.slice(0, 7);
-  };
-  const homeBench = getBench(fixture.homeTeamId, homeStarters);
-  const awayBench = getBench(fixture.awayTeamId, awayStarters);
+  
+  const homeBench = getTeamMatchBench(fixture.homeTeamId, homeStarters, updatedPlayers, isPlayerUnavailable);
+  const awayBench = getTeamMatchBench(fixture.awayTeamId, awayStarters, updatedPlayers, isPlayerUnavailable);
 
   if (homeStarters.length === 0 || awayStarters.length === 0) return { players, teams, fixture, events: matchEvents };
 

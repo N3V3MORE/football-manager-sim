@@ -25,8 +25,15 @@ export const computeWeeklyProgression = (
   const playedFixtures = Object.values(fixtures).filter(f => f.week === currentWeek);
   const seasonWeekLimit = getSeasonWeekLimit(fixtures);
   const newNews: string[] = [];
+  
+  const userTeam = userTeamId ? teams[userTeamId] : null;
+  const userDivision = userTeam ? userTeam.division : undefined;
 
-  const bigWins = playedFixtures.filter(f => Math.abs((f.homeScore ?? 0) - (f.awayScore ?? 0)) >= 3);
+  const bigWins = playedFixtures.filter(f => {
+    const homeTeam = teams[f.homeTeamId];
+    if (userDivision && homeTeam && homeTeam.division !== userDivision) return false;
+    return Math.abs((f.homeScore ?? 0) - (f.awayScore ?? 0)) >= 3;
+  });
   if (bigWins.length > 0) {
     const fixture = bigWins[Math.floor(random() * bigWins.length)];
     const winner = (fixture.homeScore! > fixture.awayScore!) ? teams[fixture.homeTeamId] : teams[fixture.awayTeamId];
@@ -79,7 +86,10 @@ export const computeWeeklyProgression = (
     rng
   );
 
-  const sortedByGoals = [...allPlayers].sort((a, b) => b.goals - a.goals);
+  const divisionPlayers = userDivision 
+    ? allPlayers.filter(p => teams[p.teamId]?.division === userDivision)
+    : allPlayers;
+  const sortedByGoals = [...divisionPlayers].sort((a, b) => b.goals - a.goals);
   if (sortedByGoals.length > 0 && sortedByGoals[0].goals > 0) {
     const top = sortedByGoals[0];
     newNews.push(`${top.name} (${teams[top.teamId]?.name}) leads the golden boot with ${top.goals} goals.`);

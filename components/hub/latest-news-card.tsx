@@ -10,11 +10,11 @@ export function LatestNewsCard({ news }: LatestNewsCardProps) {
 
   return (
     <View style={styles.card}>
-      <Text style={styles.cardTitle}>Latest</Text>
+      <Text style={styles.cardTitle}>LEAGUE NEWS</Text>
       {items.length > 0 ? (
         items.map((item, index) => (
           <View key={`${index}-${item}`} style={styles.newsItem}>
-            <Text style={styles.newsText}>- {item}</Text>
+            <Text style={styles.newsText}>{item}</Text>
           </View>
         ))
       ) : (
@@ -28,13 +28,12 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#111827',
     marginHorizontal: 14,
-    marginTop: 14,
     padding: 16,
-    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#1e293b',
+    marginTop: 14,
   },
-  cardTitle: { fontSize: 16, fontWeight: '900', marginBottom: 12, color: '#ef4444', letterSpacing: 0.5 },
+  cardTitle: { fontSize: 13, fontWeight: '900', marginBottom: 16, color: '#facc15', letterSpacing: 1.2, textTransform: 'uppercase' },
   newsItem: { marginBottom: 8 },
   newsText: { fontSize: 14, color: '#cbd5e1', lineHeight: 22, fontWeight: '600' },
 });

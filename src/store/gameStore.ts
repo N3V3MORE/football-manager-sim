@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { GameState, InboxMessage, Player, Formation, Team, TeamTactics } from '../models/types';
+import { CareerRecord, GameState, InboxMessage, Player, Formation, Team, TeamTactics } from '../models/types';
 import { initGameData, generateBoardObjectives } from '../utils/initGame';
 import { getSlotsForFormation } from '../constants/formations';
 import { ENGINE_CONFIG } from '../config/engineConfig';
@@ -18,6 +18,13 @@ import { addPlayerStat, scaleLineupForMatch } from '../core/matchUtils';
 import { applySharedPostMatchAccounting } from '../core/postMatchAccounting';
 import { computeWeeklyTransfers, computeWeeklyProgression } from '../core/progressionEngine';
 import { advanceSeason } from '../core/seasonTransition';
+import {
+  applySeasonEndToCareer,
+  buildSeasonSummary,
+  createDefaultCareerRecord,
+  evaluateSackingRisk,
+  generateJobOfferCandidates,
+} from '../core/careerEngine';
 import { rebuildFormationMap, removePlayerFromTeamSelections } from '../core/formationMapUtils';
 import { defaultRandomGenerator } from '../core/random';
 import { buildStarterMinuteMap } from '../core/minuteMapUtils';
@@ -37,9 +44,12 @@ import {
   buildLegacyInboxMessages,
   generateAssistantWeekMessages,
   generateBoardInboxMessages,
+  generateCareerInboxMessages,
   generatePostMatchReportMessage,
+  generateSackWarningMessage,
   generateSystemInboxMessages,
   mergeInboxMessages,
+  pruneInboxMessagesForManagedTeam,
 } from './inboxHelpers';
 
 interface GameStore extends GameState {
@@ -88,6 +98,19 @@ const safeStorage = {
   },
 };
 
+const DEFAULT_CAREER_RECORD: CareerRecord = {
+  seasonsManaged: 0,
+  totalWins: 0,
+  totalDraws: 0,
+  totalLosses: 0,
+  totalGoalsFor: 0,
+  totalGoalsAgainst: 0,
+  reputation: 50,
+  trophies: [],
+  seasonHistory: [],
+  consecutiveLowApprovalWeeks: 0,
+};
+
 const DEFAULT_GAME_STATE: GameState = {
   currentWeek: 1,
   userTeamId: null,
@@ -97,6 +120,7 @@ const DEFAULT_GAME_STATE: GameState = {
   news: [],
   inboxMessages: [],
   boardObjectives: [],
+  careerRecord: DEFAULT_CAREER_RECORD,
 };
 
 const applyLineupSuggestionToTeam = (
@@ -168,6 +192,22 @@ const sanitizePersistedState = (state: Partial<GameStore>): Partial<GameStore> =
     ) as Record<string, Player>
     : {};
 
+  const rawCareer = state.careerRecord && typeof state.careerRecord === 'object'
+    ? state.careerRecord as Partial<CareerRecord>
+    : {};
+  const careerRecord: CareerRecord = {
+    seasonsManaged: Number.isFinite(rawCareer.seasonsManaged) ? rawCareer.seasonsManaged! : 0,
+    totalWins: Number.isFinite(rawCareer.totalWins) ? rawCareer.totalWins! : 0,
+    totalDraws: Number.isFinite(rawCareer.totalDraws) ? rawCareer.totalDraws! : 0,
+    totalLosses: Number.isFinite(rawCareer.totalLosses) ? rawCareer.totalLosses! : 0,
+    totalGoalsFor: Number.isFinite(rawCareer.totalGoalsFor) ? rawCareer.totalGoalsFor! : 0,
+    totalGoalsAgainst: Number.isFinite(rawCareer.totalGoalsAgainst) ? rawCareer.totalGoalsAgainst! : 0,
+    reputation: Number.isFinite(rawCareer.reputation) ? rawCareer.reputation! : 50,
+    trophies: Array.isArray(rawCareer.trophies) ? rawCareer.trophies : [],
+    seasonHistory: Array.isArray(rawCareer.seasonHistory) ? rawCareer.seasonHistory : [],
+    consecutiveLowApprovalWeeks: Number.isFinite(rawCareer.consecutiveLowApprovalWeeks) ? rawCareer.consecutiveLowApprovalWeeks! : 0,
+  };
+
   return {
   ...state,
   currentWeek: Number.isFinite(state.currentWeek) && (state.currentWeek || 0) > 0 ? state.currentWeek : 1,
@@ -183,6 +223,7 @@ const sanitizePersistedState = (state: Partial<GameStore>): Partial<GameStore> =
     ),
   boardObjectives: Array.isArray(state.boardObjectives) ? state.boardObjectives : [],
   liveMatches: state.liveMatches && typeof state.liveMatches === 'object' ? state.liveMatches : {},
+  careerRecord,
   };
 };
 
@@ -211,6 +252,7 @@ export const useGameStore = create<GameStore>()(
       news: [],
       inboxMessages: [],
       boardObjectives: [],
+      careerRecord: DEFAULT_CAREER_RECORD,
       liveMatches: {},
 
       initializeGame: (userTeamId) => {
@@ -254,6 +296,7 @@ export const useGameStore = create<GameStore>()(
           boardObjectives: objectives,
           news: initialNews,
           inboxMessages,
+          careerRecord: createDefaultCareerRecord(),
           liveMatches: {},
         });
       },
@@ -345,6 +388,33 @@ export const useGameStore = create<GameStore>()(
               players: nextPlayers,
               teams: nextTeams,
               inboxMessages: clearContractWarningMessages(state.inboxMessages, playerId),
+            };
+          } else if (message.action.type === 'accept_job_offer') {
+            const { teamId } = message.action.payload;
+            const nextTeam = state.teams[teamId];
+            if (!nextTeam) return state;
+            const boardObjectives = generateBoardObjectives(
+              nextTeam.clubClass || 'C',
+              nextTeam.name,
+              nextTeam.division
+            );
+            const carriedMessages = pruneInboxMessagesForManagedTeam(
+              state.inboxMessages.filter(item => item.category !== 'career_job_offer'),
+              teamId
+            );
+            const nextAssistantMessages = generateAssistantWeekMessages({
+              currentWeek: state.currentWeek,
+              userTeamId: teamId,
+              teams: nextTeams,
+              players: nextPlayers,
+              fixtures: state.fixtures,
+            });
+            return {
+              userTeamId: teamId,
+              boardObjectives,
+              players: nextPlayers,
+              teams: nextTeams,
+              inboxMessages: mergeInboxMessages(carriedMessages, nextAssistantMessages),
             };
           }
 
@@ -700,23 +770,88 @@ export const useGameStore = create<GameStore>()(
             objectivesAfter: afterBoardState.boardObjectives,
           })
           : [];
+
+        // Career: track consecutive low-approval weeks and generate sack warnings
+        const sackMessages: InboxMessage[] = [];
+        set(state => {
+          if (!state.userTeamId) return state;
+          const team = state.teams[state.userTeamId];
+          if (!team) return state;
+          const { newConsecutiveWeeks, shouldWarn, isSackingImminent } =
+            evaluateSackingRisk(team.boardApproval, state.careerRecord.consecutiveLowApprovalWeeks);
+          if (shouldWarn || isSackingImminent) {
+            sackMessages.push(generateSackWarningMessage(initialWeek, newConsecutiveWeeks, state.userTeamId));
+          }
+          return {
+            careerRecord: {
+              ...state.careerRecord,
+              consecutiveLowApprovalWeeks: newConsecutiveWeeks,
+            },
+          };
+        });
+
         const weekMessages = [
           ...generateSystemInboxMessages(initialWeek, generatedProgressionNews),
           ...boardMessages,
+          ...sackMessages,
         ];
 
         const postUpdateState = get();
         const seasonWeekLimit = getSeasonWeekLimit(postUpdateState.fixtures);
         if (postUpdateState.currentWeek > seasonWeekLimit) {
           set(state => {
-            const nextSeason = advanceSeason(state.players, state.teams, state.userTeamId, state.news);
-            const nextAssistantMessages = generateAssistantWeekMessages({
-              currentWeek: nextSeason.currentWeek,
-              userTeamId: state.userTeamId,
-              teams: nextSeason.teams,
-              players: nextSeason.players,
-              fixtures: nextSeason.fixtures,
+            if (!state.userTeamId) {
+              const nextSeason = advanceSeason(state.players, state.teams, state.userTeamId, state.news);
+              return {
+                currentWeek: nextSeason.currentWeek,
+                teams: nextSeason.teams,
+                players: nextSeason.players,
+                fixtures: nextSeason.fixtures,
+                boardObjectives: nextSeason.boardObjectives,
+                news: nextSeason.news,
+                liveMatches: {},
+                inboxMessages: mergeInboxMessages(pruneInboxMessagesForManagedTeam(state.inboxMessages, null), [
+                  ...weekMessages,
+                  ...generateSystemInboxMessages(nextSeason.currentWeek, nextSeason.generatedNews),
+                ]),
+              };
+            }
+
+            const userTeam = state.teams[state.userTeamId];
+            const isSacked = state.careerRecord.consecutiveLowApprovalWeeks >= 4;
+            const seasonSummary = buildSeasonSummary(
+              state.careerRecord.seasonsManaged + 1,
+              userTeam,
+              state.teams
+            );
+            if (isSacked) seasonSummary.outcome = 'sacked';
+
+            const { careerRecord: updatedCareer, reputationDelta } = applySeasonEndToCareer(
+              state.careerRecord,
+              seasonSummary
+            );
+
+            const jobOfferTeams = generateJobOfferCandidates(state.teams, state.userTeamId, seasonSummary);
+            const careerMessages = generateCareerInboxMessages({
+              week: initialWeek,
+              summary: seasonSummary,
+              reputationDelta,
+              careerRecord: updatedCareer,
+              jobOfferTeams,
+              isSacked,
             });
+
+            const nextUserTeamId = isSacked ? null : state.userTeamId;
+            const nextSeason = advanceSeason(state.players, state.teams, nextUserTeamId, state.news);
+            const nextAssistantMessages = nextUserTeamId
+              ? generateAssistantWeekMessages({
+                  currentWeek: nextSeason.currentWeek,
+                  userTeamId: nextUserTeamId,
+                  teams: nextSeason.teams,
+                  players: nextSeason.players,
+                  fixtures: nextSeason.fixtures,
+                })
+              : [];
             return {
               currentWeek: nextSeason.currentWeek,
               teams: nextSeason.teams,
@@ -724,12 +859,14 @@ export const useGameStore = create<GameStore>()(
               fixtures: nextSeason.fixtures,
               boardObjectives: nextSeason.boardObjectives,
               news: nextSeason.news,
-              userTeamId: state.userTeamId,
+              userTeamId: nextUserTeamId,
+              careerRecord: updatedCareer,
               liveMatches: {},
               inboxMessages: mergeInboxMessages(
-                state.inboxMessages,
+                pruneInboxMessagesForManagedTeam(state.inboxMessages, nextUserTeamId),
                 [
                   ...weekMessages,
+                  ...careerMessages,
                   ...generateSystemInboxMessages(nextSeason.currentWeek, nextSeason.generatedNews),
                   ...nextAssistantMessages,
                 ]
@@ -956,7 +1093,29 @@ export const useGameStore = create<GameStore>()(
       },
 
       changeTeam: (teamId: string) => {
-        set({ userTeamId: teamId });
+        set(state => {
+          const nextTeam = state.teams[teamId];
+          if (!nextTeam) return state;
+          const nextAssistantMessages = generateAssistantWeekMessages({
+            currentWeek: state.currentWeek,
+            userTeamId: teamId,
+            teams: state.teams,
+            players: state.players,
+            fixtures: state.fixtures,
+          });
+          return {
+            userTeamId: teamId,
+            boardObjectives: generateBoardObjectives(
+              nextTeam.clubClass || 'C',
+              nextTeam.name,
+              nextTeam.division
+            ),
+            inboxMessages: mergeInboxMessages(
+              pruneInboxMessagesForManagedTeam(state.inboxMessages, teamId),
+              nextAssistantMessages
+            ),
+          };
+        });
       },
 
       buyPlayer: (playerId: string, fee: number, wageOffered: number) => {
@@ -1067,7 +1226,7 @@ export const useGameStore = create<GameStore>()(
     {
       name: 'football-manager-storage',
       storage: createJSONStorage(() => safeStorage),
-      version: 5,
+      version: 6,
       migrate: (persistedState, version) => {
         const rawState = (persistedState || {}) as Partial<GameStore>;
         const sanitized = sanitizePersistedState(rawState);

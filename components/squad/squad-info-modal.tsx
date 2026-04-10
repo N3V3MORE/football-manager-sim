@@ -31,9 +31,9 @@ export function SquadInfoModal({ visible, onClose }: SquadInfoModalProps) {
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', paddingHorizontal: 30 },
-  card: { backgroundColor: '#1e293b', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: '#334155' },
+  card: { backgroundColor: '#1e293b', borderRadius: 0, padding: 24, borderWidth: 1, borderColor: '#334155' },
   title: { fontSize: 18, fontWeight: '900', color: '#f8fafc', marginBottom: 16 },
   body: { color: '#94a3b8', lineHeight: 22, fontSize: 14 },
-  closeButton: { marginTop: 20, backgroundColor: '#334155', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  closeButton: { marginTop: 20, backgroundColor: '#334155', borderRadius: 0, paddingVertical: 12, alignItems: 'center' },
   closeText: { color: '#f8fafc', fontWeight: '900' },
 });

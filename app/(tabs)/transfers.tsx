@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   header: { padding: 16, backgroundColor: '#1e293b' },
   title: { fontSize: 24, fontWeight: '900', color: '#f8fafc' },
   budget: { fontSize: 16, color: '#10B981', fontWeight: '700', marginTop: 4 },
-  banner: { padding: 10, borderRadius: 8, marginTop: 12, alignItems: 'center' },
+  banner: { padding: 10, borderRadius: 0, marginTop: 12, alignItems: 'center' },
   bannerOpen: { backgroundColor: '#065f46' },
   bannerClosed: { backgroundColor: '#7f1d1d' },
   bannerText: { color: '#fff', fontWeight: '700', fontSize: 13 },

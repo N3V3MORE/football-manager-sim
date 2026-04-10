@@ -1,16 +1,16 @@
 export const ENGINE_CONFIG = {
   // MATCH TIMING & PACING
-  TOTAL_POSSESSIONS: 35, // Base total possessions per quick-sim match
+  TOTAL_POSSESSIONS: 28, // Scaled down from 35 to drastically reduce excessive shot attempts
   ENERGY_DRAIN_PER_MINUTE: 0.25, // Energy lost per minute played
   WEEKLY_ENERGY_RECOVERY: 50, // Energy regained after a week
 
   // SCORING & CHANCES
-  BIG_MOMENT_CHANCE: 0.52, // Rebalanced after slot-shape tactical integration
+  BIG_MOMENT_CHANCE: 0.35, // Drastically reduced from 0.52
   GLOBAL_HOME_ADVANTAGE: 1.04, // Slightly tuned
-  PHASE_ONE_FAIL_ESCAPE_CHANCE: 0.25,
-  ATTACKING_THROUGH_BALL_BASE_CHANCE: 0.4,
+  PHASE_ONE_FAIL_ESCAPE_CHANCE: 0.12, // Cut from 0.25 so midfield walls work better
+  ATTACKING_THROUGH_BALL_BASE_CHANCE: 0.35,
   MISS_EVENT_POOL_SIZE: 4,
-  WIDE_ROUTE_BASE_CHANCE: 0.32,
+  WIDE_ROUTE_BASE_CHANCE: 0.28,
   WIDE_ROUTE_MIN_CHANCE: 0.15,
   WIDE_ROUTE_MAX_CHANCE: 0.82,
   BIG_MOMENT_MIN_CHANCE: 0.2,

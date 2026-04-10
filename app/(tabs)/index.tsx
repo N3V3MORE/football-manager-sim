@@ -1,20 +1,22 @@
 import React, { useCallback, useMemo } from 'react';
-import { StyleSheet, Text, View, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '@/src/store/gameStore';
 import { useRouter } from 'expo-router';
 import { BoardRoomCard } from '@/components/hub/board-room-card';
-import { InboxPreviewCard } from '@/components/hub/inbox-preview-card';
+import { CareerStatsCard } from '@/components/hub/career-stats-card';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { getSeasonWeekLimit, sortTeamsByTable } from '@/src/core/leagueUtils';
-import { Fixture, InboxMessage, Player, Team } from '@/src/models/types';
+import { Fixture, Player, Team } from '@/src/models/types';
 import { HubHeader } from '@/components/hub/hub-header';
 import { MiniTableCard } from '@/components/hub/mini-table-card';
 import { NextFixtureCard } from '@/components/hub/next-fixture-card';
 import { SeasonStatsCard } from '@/components/hub/season-stats-card';
-import { UpcomingFixtureCardRow, UpcomingFixturesCard } from '@/components/hub/upcoming-fixtures-card';
+import { LatestNewsCard } from '@/components/hub/latest-news-card';
+import { CompetitionPanelsCard } from '@/components/hub/competition-panels-card';
+import { UpcomingFixturesCard, UpcomingFixtureCardRow } from '@/components/hub/upcoming-fixtures-card';
+import { Ionicons } from '@expo/vector-icons';
 
-// Week 1 = Aug 10 2024. Each week adds 7 days.
 const SEASON_START = new Date(2024, 7, 10);
 
 type UpcomingFixtureRow = {
@@ -22,10 +24,15 @@ type UpcomingFixtureRow = {
   match: Fixture | undefined;
 };
 
-type InboxPreviewMessage = InboxMessage;
-
 type MiniTableTeam = Team & {
   position: number;
+};
+
+type CompetitionPanelItem = {
+  title: string;
+  status: string;
+  note: string;
+  accent: string;
 };
 
 const weekToDate = (week: number): string => {
@@ -46,6 +53,85 @@ const getTopPlayerByStat = (allPlayers: Player[], stat: 'goals' | 'assists' | 'c
     .sort((a, b) => getStatValue(b, stat) - getStatValue(a, stat))[0]
 );
 
+const formatOrdinal = (value: number) => {
+  const mod10 = value % 10;
+  const mod100 = value % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${value}st`;
+  if (mod10 === 2 && mod100 !== 12) return `${value}nd`;
+  if (mod10 === 3 && mod100 !== 13) return `${value}rd`;
+  return `${value}th`;
+};
+
+const getEuropePanel = (team: Team, position: number): CompetitionPanelItem => {
+  if (team.division !== 'Premier League') {
+    return {
+      title: 'Europe',
+      status: 'Not eligible',
+      note: 'Reach the top flight first',
+      accent: '#64748b',
+    };
+  }
+
+  if (position <= 4) {
+    return {
+      title: 'Europe',
+      status: 'UCL pace',
+      note: `Holding ${formatOrdinal(position)} place`,
+      accent: '#38bdf8',
+    };
+  }
+
+  if (position === 5) {
+    return {
+      title: 'Europe',
+      status: 'Europa pace',
+      note: 'European place in hand',
+      accent: '#22c55e',
+    };
+  }
+
+  if (position <= 7) {
+    return {
+      title: 'Europe',
+      status: 'Conference pace',
+      note: `League place ${formatOrdinal(position)}`,
+      accent: '#f59e0b',
+    };
+  }
+
+  if (position <= 10) {
+    return {
+      title: 'Europe',
+      status: 'Chasing',
+      note: `${formatOrdinal(position)} place, still in range`,
+      accent: '#facc15',
+    };
+  }
+
+  return {
+    title: 'Europe',
+    status: 'Outside spots',
+    note: `${formatOrdinal(position)} place in league`,
+    accent: '#64748b',
+  };
+};
+
+const buildCompetitionPanels = (team: Team, position: number, currentWeek: number): CompetitionPanelItem[] => ([
+  {
+    title: 'Carabao',
+    status: currentWeek < 3 ? 'Awaiting draw' : 'No data',
+    note: currentWeek < 3 ? 'Domestic cup opens early' : 'Cup progress backend not live',
+    accent: '#38bdf8',
+  },
+  {
+    title: 'FA Cup',
+    status: currentWeek < 19 ? 'Not started' : 'No data',
+    note: currentWeek < 19 ? 'Main rounds start later' : 'Cup progress backend not live',
+    accent: '#22c55e',
+  },
+  getEuropePanel(team, position),
+]);
+
 export default function HubScreen() {
   const router = useRouter();
   const currentWeek = useGameStore(state => state.currentWeek);
@@ -55,6 +141,8 @@ export default function HubScreen() {
   const advanceWeek = useGameStore(state => state.advanceWeek);
   const inboxMessages = useGameStore(state => state.inboxMessages);
   const players = useGameStore(state => state.players);
+  const news = useGameStore(state => state.news);
+  const careerRecord = useGameStore(state => state.careerRecord);
 
   const myTeam = userTeamId ? teams[userTeamId] : null;
   const myDivision = myTeam?.division ?? 'Premier League';
@@ -144,7 +232,12 @@ export default function HubScreen() {
     })
   ), [currentWeek, upcomingFixtures, teams, userTeamId]);
 
-  const allPlayers = useMemo(() => Object.values(players), [players]);
+  const allPlayers = useMemo(() => {
+    return Object.values(players).filter(player => {
+      const playerTeam = teams[player.teamId];
+      return playerTeam && playerTeam.division === myDivision;
+    });
+  }, [players, teams, myDivision]);
   const topScorer = useMemo(() => getTopPlayerByStat(allPlayers, 'goals'), [allPlayers]);
   const topAssister = useMemo(() => getTopPlayerByStat(allPlayers, 'assists'), [allPlayers]);
   const topCS = useMemo(() => getTopPlayerByStat(allPlayers, 'cleanSheets'), [allPlayers]);
@@ -152,11 +245,7 @@ export default function HubScreen() {
     () => inboxMessages.filter(message => !message.isRead).length,
     [inboxMessages]
   );
-  const inboxPreviewMessages = useMemo<InboxPreviewMessage[]>(() => {
-    const unread = inboxMessages.filter(message => !message.isRead);
-    const read = inboxMessages.filter(message => message.isRead);
-    return [...unread, ...read].slice(0, 3);
-  }, [inboxMessages]);
+
 
   const seasonLeaders = useMemo(() => ([
     { label: 'Top Scorer', player: topScorer, stat: topScorer ? `${topScorer.goals} goals` : 'None yet' },
@@ -164,62 +253,157 @@ export default function HubScreen() {
     { label: 'Clean Sheets', player: topCS, stat: topCS ? `${topCS.cleanSheets} clean sheets` : 'None yet' },
   ]), [topAssister, topCS, topScorer]);
 
-  if (!myTeam || !myTheme) return <View style={styles.container}><Text style={{ color: '#fff', margin: 20 }}>Loading...</Text></View>;
+  if (!myTeam || !myTheme) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Between Jobs</Text>
+          <Text style={styles.emptyCopy}>
+            You are not currently attached to a club. Check your inbox for job offers and season updates.
+          </Text>
+          <LatestNewsCard news={news} />
+          {careerRecord.seasonsManaged > 0 ? (
+            <CareerStatsCard careerRecord={careerRecord} onPress={() => router.push('/board')} />
+          ) : null}
+          <TouchableOpacity
+            style={styles.emptyInboxButton}
+            onPress={() => router.push('/inbox')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="mail" size={18} color="#0f172a" />
+            <Text style={styles.emptyInboxText}>
+              Open Inbox{unreadInboxCount > 0 ? ` (${unreadInboxCount})` : ''}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const myPosition = miniTableData.myPosition;
   const myRecord = `${myTeam.wins}W ${myTeam.draws}D ${myTeam.losses}L`;
   const nextFixtureLabel = `${homeTheme?.stadium || 'TBD'} | ${weekToDate(currentWeek)}`;
+  const competitionPanels = buildCompetitionPanels(myTeam, myPosition, currentWeek);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <HubHeader
-          team={myTeam}
-          theme={myTheme}
-          position={myPosition}
-          record={myRecord}
-          currentWeek={currentWeek}
-          weekLabel={weekToDate(currentWeek)}
-        />
+      <View style={{ flex: 1 }}>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <HubHeader
+            team={myTeam}
+            theme={myTheme}
+            position={myPosition}
+            record={myRecord}
+            currentWeek={currentWeek}
+            weekLabel={weekToDate(currentWeek)}
+          />
+          <LatestNewsCard news={news} />
 
-        <InboxPreviewCard
-          messages={inboxPreviewMessages}
-          unreadCount={unreadInboxCount}
+          <NextFixtureCard
+            homeTeam={homeTeam}
+            awayTeam={awayTeam}
+            userTeamId={userTeamId}
+            subLabel={nextFixtureLabel}
+            onPress={handlePlayMatch}
+          />
+
+          <MiniTableCard
+            title={myDivision}
+            rows={miniTableData.rows}
+            userTeamId={userTeamId}
+            onPress={() => router.push('/league')}
+          />
+
+          <CompetitionPanelsCard items={competitionPanels} />
+
+          <UpcomingFixturesCard rows={upcomingFixtureRows} onPress={() => router.push('/calendar')} />
+
+          <SeasonStatsCard leaders={seasonLeaders} onPress={() => router.push('/stats')} />
+
+          <BoardRoomCard
+            boardApproval={myTeam.boardApproval}
+            managerName={myTeam.manager.name}
+            onPress={() => router.push('/board')}
+          />
+
+          {careerRecord && careerRecord.seasonsManaged > 0 && (
+            <CareerStatsCard
+              careerRecord={careerRecord}
+              onPress={() => router.push('/board')}
+            />
+          )}
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+
+        <TouchableOpacity 
+          style={styles.floatingInbox}
           onPress={() => router.push('/inbox')}
-        />
-
-        <NextFixtureCard
-          homeTeam={homeTeam}
-          awayTeam={awayTeam}
-          userTeamId={userTeamId}
-          subLabel={nextFixtureLabel}
-          onPress={handlePlayMatch}
-        />
-
-        <UpcomingFixturesCard rows={upcomingFixtureRows} onPress={() => router.push('/calendar')} />
-
-        <BoardRoomCard
-          boardApproval={myTeam.boardApproval}
-          managerName={myTeam.manager.name}
-          onPress={() => router.push('/board')}
-        />
-
-        <MiniTableCard
-          title={myDivision}
-          rows={miniTableData.rows}
-          userTeamId={userTeamId}
-          onPress={() => router.push('/league')}
-        />
-
-        <SeasonStatsCard leaders={seasonLeaders} onPress={() => router.push('/stats')} />
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
-
+          activeOpacity={0.8}
+        >
+          <Ionicons name="mail" size={22} color="#facc15" />
+          {unreadInboxCount > 0 && <View style={styles.unreadDot} />}
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0f1e' },
+  emptyState: {
+    flex: 1,
+    padding: 20,
+    gap: 16,
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    color: '#f8fafc',
+    fontSize: 28,
+    fontWeight: '900',
+  },
+  emptyCopy: {
+    color: '#94a3b8',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  emptyInboxButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#facc15',
+    paddingVertical: 14,
+    borderRadius: 0,
+  },
+  emptyInboxText: {
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  floatingInbox: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    width: 44,
+    height: 44,
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 8,
+    height: 8,
+    backgroundColor: '#ef4444',
+  },
 });

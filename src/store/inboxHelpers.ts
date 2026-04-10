@@ -3,11 +3,13 @@ import { getRenewalOffer, getContractAdviceLabel, shouldRenewContract } from '..
 import { getSlotFitScore, rebuildFormationMap, rebuildFormationSlotPlayers } from '../core/formationMapUtils';
 import { formatContractLength, isContractExpiringSoon, isPlayerUnavailable } from '../core/playerStatusUtils';
 import {
+  CareerRecord,
   Fixture,
   InboxAction,
   InboxMessage,
   InboxMessageCategory,
   Player,
+  SeasonSummary,
   Team,
   TeamTactics,
 } from '../models/types';
@@ -63,6 +65,16 @@ const buildMessage = (draft: MessageDraft): InboxMessage => ({
   ...draft,
   id: buildMessageId(draft),
 });
+
+const hashSeed = (value: string) => (
+  Array.from(value).reduce((hash, char, index) => (
+    (hash * 31 + char.charCodeAt(0) + index) % 2147483647
+  ), 7)
+);
+
+const pickTemplate = <T,>(seed: string, options: T[]): T => (
+  options[hashSeed(seed) % options.length]
+);
 
 const average = (values: number[]) => (
   values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length
@@ -296,14 +308,16 @@ const buildTacticSuggestion = (
 };
 
 export const buildLegacyInboxMessages = (news: string[], week = 1) => (
-  news.map(item => buildMessage({
-    week,
-    source: 'system',
-    category: getSystemMessageCategory(item),
-    title: getMessageTitleForNews(item),
-    body: item,
-    isRead: true,
-  }))
+  news
+    .filter(item => getSystemMessageCategory(item) !== 'system_news')
+    .map(item => buildMessage({
+      week,
+      source: 'system',
+      category: getSystemMessageCategory(item),
+      title: getMessageTitleForNews(item),
+      body: item,
+      isRead: true,
+    }))
 );
 
 export const mergeInboxMessages = (existing: InboxMessage[], additions: InboxMessage[]) => {
@@ -316,15 +330,33 @@ export const mergeInboxMessages = (existing: InboxMessage[], additions: InboxMes
   return [...uniqueAdditions, ...existing].slice(0, MAX_INBOX_MESSAGES);
 };
 
+const PERSISTENT_CAREER_CATEGORIES = new Set<InboxMessageCategory>([
+  'career_milestone',
+  'career_sack_warning',
+]);
+
+export const pruneInboxMessagesForManagedTeam = (
+  messages: InboxMessage[],
+  nextTeamId: string | null
+) => (
+  messages.filter(message => {
+    if (!message.teamId) return true;
+    if (nextTeamId && message.teamId === nextTeamId) return true;
+    return PERSISTENT_CAREER_CATEGORIES.has(message.category);
+  })
+);
+
 export const generateSystemInboxMessages = (week: number, news: string[]) => (
-  news.map(item => buildMessage({
-    week,
-    source: 'system',
-    category: getSystemMessageCategory(item),
-    title: getMessageTitleForNews(item),
-    body: item,
-    isRead: false,
-  }))
+  news
+    .filter(item => getSystemMessageCategory(item) !== 'system_news')
+    .map(item => buildMessage({
+      week,
+      source: 'system',
+      category: getSystemMessageCategory(item),
+      title: getMessageTitleForNews(item),
+      body: item,
+      isRead: false,
+    }))
 );
 
 const generateRecoveryMessages = (
@@ -425,12 +457,22 @@ export const generateAssistantWeekMessages = ({
     .filter(player => player.position === 'GK' && !player.isStarting && !isPlayerUnavailable(player));
 
   if (lowEnergyStarters.length > 0) {
+    const lowEnergyNames = formatNames(lowEnergyStarters.slice(0, 3).map(player => player.name));
+    const energySeed = `${currentWeek}-${team.id}-${fixture.id}-energy-${lowEnergyStarters.map(player => player.id).join('-')}`;
     messages.push(buildMessage({
       week: currentWeek,
       source: 'assistant',
       category: 'pre_match_energy',
-      title: `Watch the legs for ${opponent.name}`,
-      body: `${formatNames(lowEnergyStarters.slice(0, 3).map(player => player.name))} are already low on energy. I would rotate before kick-off if we can.`,
+      title: pickTemplate(energySeed, [
+        `Watch the legs for ${opponent.name}`,
+        `Energy warning before ${opponent.name}`,
+        `Freshen the side for ${opponent.name}`,
+      ]),
+      body: pickTemplate(`${energySeed}-body`, [
+        `${lowEnergyNames} are already low on energy. I would rotate before kick-off if we can.`,
+        `${lowEnergyNames} are fading. I would change that before ${opponent.name} if possible.`,
+        `The legs are heavy on ${lowEnergyNames}. We should freshen the XI ahead of ${opponent.name}.`,
+      ]),
       isRead: false,
       fixtureId: fixture.id,
       teamId: team.id,
@@ -447,12 +489,21 @@ export const generateAssistantWeekMessages = ({
     }
     if (eligibleBench.length < 5) warnings.push('the bench is looking thin');
     if (reserveGoalkeepers.length === 0) warnings.push('there is no spare goalkeeper available');
+    const availabilitySeed = `${currentWeek}-${team.id}-${fixture.id}-availability-${warnings.join('|')}`;
     messages.push(buildMessage({
       week: currentWeek,
       source: 'assistant',
       category: 'pre_match_availability',
-      title: 'Availability check',
-      body: `${warnings.join('. ')}. Clean that up before we play ${opponent.name}.`,
+      title: pickTemplate(availabilitySeed, [
+        'Availability check',
+        'Team news update',
+        'Selection warning',
+      ]),
+      body: `${warnings.join('. ')}. ${pickTemplate(`${availabilitySeed}-body`, [
+        `Clean that up before we play ${opponent.name}.`,
+        `That needs sorting before ${opponent.name}.`,
+        `We should fix that before kick-off against ${opponent.name}.`,
+      ])}`,
       isRead: false,
       fixtureId: fixture.id,
       teamId: team.id,
@@ -468,16 +519,34 @@ export const generateAssistantWeekMessages = ({
       .filter(player => !player.isStarting)
       .slice(0, 2)
       .map(player => player.name);
+    const changedNames = formatNames(changedIn);
+    const lineupSeed = `${currentWeek}-${team.id}-${fixture.id}-lineup-${lineupAction.payload.startingIds.join('-')}`;
     const body = starters.length === 0
-      ? `You still have not set an XI. I have prepared a balanced starting side for ${opponent.name}.`
+      ? pickTemplate(`${lineupSeed}-unset`, [
+        `You still have not set an XI. I have prepared a balanced starting side for ${opponent.name}.`,
+        `There is no settled XI yet. I have set out a cleaner group for ${opponent.name}.`,
+        `We still need a starting side. I have prepared an XI for ${opponent.name} that gives us balance.`,
+      ])
       : changedIn.length > 0
-        ? `I would bring ${formatNames(changedIn)} in before ${opponent.name}. The current group needs fresher legs or better fit.`
-        : `I have prepared a cleaner XI for ${opponent.name}.`;
+        ? pickTemplate(`${lineupSeed}-changes`, [
+          `I would bring ${changedNames} in before ${opponent.name}. The current group needs fresher legs or better fit.`,
+          `${changedNames} should come into the side for ${opponent.name}. We need more legs and a cleaner setup.`,
+          `I would turn to ${changedNames} here. That gives us a stronger balance against ${opponent.name}.`,
+        ])
+        : pickTemplate(`${lineupSeed}-clean`, [
+          `I have prepared a cleaner XI for ${opponent.name}.`,
+          `The selection is tidier now for ${opponent.name}.`,
+          `I have lined up a more stable group for ${opponent.name}.`,
+        ]);
     messages.push(buildMessage({
       week: currentWeek,
       source: 'assistant',
       category: 'lineup_suggestion',
-      title: `Lineup suggestion for ${opponent.name}`,
+      title: pickTemplate(lineupSeed, [
+        `Lineup suggestion for ${opponent.name}`,
+        `Selection note for ${opponent.name}`,
+        `Proposed XI for ${opponent.name}`,
+      ]),
       body,
       isRead: false,
       action: lineupAction,
@@ -491,12 +560,21 @@ export const generateAssistantWeekMessages = ({
 
   const tiredStarters = starters.filter(player => player.energy < LOW_SQUAD_ENERGY_THRESHOLD);
   if (tiredStarters.length >= 4) {
+    const squadSeed = `${currentWeek}-${team.id}-${fixture.id}-squad-load-${tiredStarters.length}`;
     messages.push(buildMessage({
       week: currentWeek,
       source: 'assistant',
       category: 'squad_warning',
-      title: 'Squad load is climbing',
-      body: `${tiredStarters.length} likely starters are below ${LOW_SQUAD_ENERGY_THRESHOLD} energy. Rotation matters over the next stretch.`,
+      title: pickTemplate(squadSeed, [
+        'Squad load is climbing',
+        'Recovery window needed',
+        'Manage the workload',
+      ]),
+      body: pickTemplate(`${squadSeed}-body`, [
+        `${tiredStarters.length} likely starters are below ${LOW_SQUAD_ENERGY_THRESHOLD} energy. Rotation matters over the next stretch.`,
+        `We have ${tiredStarters.length} likely starters under ${LOW_SQUAD_ENERGY_THRESHOLD} energy. The schedule is starting to bite.`,
+        `Fatigue is stacking up: ${tiredStarters.length} likely starters are under ${LOW_SQUAD_ENERGY_THRESHOLD} energy and need help.`,
+      ]),
       isRead: false,
       teamId: team.id,
       fixtureId: fixture.id,
@@ -534,14 +612,27 @@ export const generateAssistantWeekMessages = ({
         return a.askingPrice - b.askingPrice;
       });
     const target = listedTargets[0];
+    const marketSeed = `${currentWeek}-${team.id}-${weakestPosition.position}-${target?.id || 'none'}`;
     const body = target
-      ? `${weakestPosition.position} still looks like the soft spot. ${target.name} at ${teams[target.teamId]?.name} would improve the squad and is listed at GBP ${target.askingPrice}m.`
-      : `${weakestPosition.position} looks like our thinnest position right now. Keep an eye on the market before the run gets harder.`;
+      ? pickTemplate(`${marketSeed}-target`, [
+        `${weakestPosition.position} still looks like the soft spot. ${target.name} at ${teams[target.teamId]?.name} would improve the squad and is listed at GBP ${target.askingPrice}m.`,
+        `I would keep pushing for a ${weakestPosition.position}. ${target.name} from ${teams[target.teamId]?.name} is listed at GBP ${target.askingPrice}m and would raise the floor.`,
+        `The squad still needs help at ${weakestPosition.position}. ${target.name} at ${teams[target.teamId]?.name} is available for GBP ${target.askingPrice}m and fits the gap.`,
+      ])
+      : pickTemplate(`${marketSeed}-generic`, [
+        `${weakestPosition.position} looks like our thinnest position right now. Keep an eye on the market before the run gets harder.`,
+        `We are lightest at ${weakestPosition.position}. I would stay alert for value there before the next stretch.`,
+        `${weakestPosition.position} remains the weak point in the squad. We should keep scanning the market for help.`,
+      ]);
     messages.push(buildMessage({
       week: currentWeek,
       source: 'assistant',
       category: 'transfer_advice',
-      title: 'Market note',
+      title: pickTemplate(marketSeed, [
+        'Market note',
+        'Recruitment note',
+        'Scouting note',
+      ]),
       body,
       isRead: false,
       teamId: team.id,
@@ -595,21 +686,54 @@ export const generatePostMatchReportMessage = ({
   const isHome = fixture.homeTeamId === userTeamId;
   const myGoals = isHome ? fixture.homeScore : fixture.awayScore;
   const theirGoals = isHome ? fixture.awayScore : fixture.homeScore;
+  const reportSeed = `${fixture.id}-${myGoals}-${theirGoals}-${team.id}`;
   const resultPrefix = myGoals > theirGoals
-    ? 'Strong result.'
+    ? pickTemplate(`${reportSeed}-win`, [
+      'Strong result.',
+      'That was a solid win.',
+      'We handled that match well.',
+    ])
     : myGoals === theirGoals
-      ? 'Job done, but not quite finished.'
-      : 'That one slipped on us.';
+      ? pickTemplate(`${reportSeed}-draw`, [
+        'Job done, but not quite finished.',
+        'A point taken, but there was more there.',
+        'We stayed in it, but never quite turned the game.',
+      ])
+      : pickTemplate(`${reportSeed}-loss`, [
+        'That one slipped on us.',
+        'We left that match behind us.',
+        'That result got away from us.',
+      ]);
 
-  let tacticalNote = 'The shape was serviceable, but there is still room to tighten the details.';
+  let tacticalNote = pickTemplate(`${reportSeed}-tactical-generic`, [
+    'The shape was serviceable, but there is still room to tighten the details.',
+    'Structurally we were fine in spells, but the details still need work.',
+    'There was enough structure there, though we still left loose moments in the match.',
+  ]);
   if (team.tactics.mentality === 'Defensive' && theirGoals === 0) {
-    tacticalNote = 'The defensive plan held up and protected the back line well.';
+    tacticalNote = pickTemplate(`${reportSeed}-tactical-defensive`, [
+      'The defensive plan held up and protected the back line well.',
+      'The compact setup worked and kept the back line protected.',
+      'We defended the box properly and the shape held together well.',
+    ]);
   } else if (team.tactics.mentality === 'Attacking' && myGoals >= 3) {
-    tacticalNote = 'The aggressive setup paid off and created enough volume in the final third.';
+    tacticalNote = pickTemplate(`${reportSeed}-tactical-attack-good`, [
+      'The aggressive setup paid off and created enough volume in the final third.',
+      'The front-foot approach worked and gave us enough threat in the box.',
+      'We pushed the game our way and the attacking setup gave us real momentum.',
+    ]);
   } else if (team.tactics.mentality === 'Attacking' && theirGoals >= 3) {
-    tacticalNote = 'We opened the game up too much and left space behind us.';
+    tacticalNote = pickTemplate(`${reportSeed}-tactical-attack-bad`, [
+      'We opened the game up too much and left space behind us.',
+      'The attacking shape left too much room for counters against us.',
+      'We committed too much and the spaces behind us were punished.',
+    ]);
   } else if (team.tactics.tempo === 'Slow' && myGoals === 0) {
-    tacticalNote = 'We controlled parts of it, but the tempo did not give us enough threat.';
+    tacticalNote = pickTemplate(`${reportSeed}-tactical-slow`, [
+      'We controlled parts of it, but the tempo did not give us enough threat.',
+      'We had spells of control, but the slow tempo blunted the attack.',
+      'The calmer rhythm helped us settle, but it left us short of cutting edge.',
+    ]);
   }
 
   const performerNote = keyPerformer
@@ -631,13 +755,95 @@ export const generatePostMatchReportMessage = ({
     week: currentWeek,
     source: 'assistant',
     category: 'post_match_report',
-    title: `Post-match: ${team.name} ${myGoals}-${theirGoals} ${opponent.name}`,
+    title: `${pickTemplate(`${reportSeed}-title`, ['Post-match', 'Match review', 'Analyst report'])}: ${team.name} ${myGoals}-${theirGoals} ${opponent.name}`,
     body: `${resultPrefix} ${performerNote} ${poorNote} ${disciplineNote} ${injuryNote} ${tacticalNote}`.replace(/\s+/g, ' ').trim(),
     isRead: false,
     fixtureId: fixture.id,
     teamId: team.id,
   });
 };
+
+type CareerInboxInput = {
+  week: number;
+  summary: SeasonSummary;
+  reputationDelta: number;
+  careerRecord: CareerRecord;
+  jobOfferTeams: Team[];
+  isSacked: boolean;
+};
+
+export const generateCareerInboxMessages = ({
+  week,
+  summary,
+  reputationDelta,
+  careerRecord,
+  jobOfferTeams,
+  isSacked,
+}: CareerInboxInput): InboxMessage[] => {
+  const messages: InboxMessage[] = [];
+
+  // Season-end career milestone message
+  const outcomeLabel =
+    summary.outcome === 'champion' ? 'Won the division' :
+    summary.outcome === 'promoted' ? 'Earned promotion' :
+    summary.outcome === 'relegated' ? 'Were relegated' :
+    summary.outcome === 'sacked' ? 'Were sacked' :
+    'Finished the season';
+  const repLine = reputationDelta === 0
+    ? `Reputation holds at ${careerRecord.reputation}.`
+    : `Reputation ${reputationDelta > 0 ? 'rises' : 'drops'} by ${Math.abs(reputationDelta)} to ${careerRecord.reputation}.`;
+  const trophyLine = careerRecord.trophies.length > 0
+    ? ` Career trophies: ${careerRecord.trophies.length}.`
+    : '';
+
+  messages.push(buildMessage({
+    week,
+    source: 'system',
+    category: 'career_milestone',
+    title: isSacked ? 'Contract terminated' : `Season ${careerRecord.seasonsManaged} complete`,
+    body: `${outcomeLabel} with ${summary.teamName} in ${summary.division}. ${repLine}${trophyLine} Record this season: ${summary.wins}W ${summary.draws}D ${summary.losses}L.`,
+    isRead: false,
+    teamId: summary.teamId,
+  }));
+
+  // Job offer messages
+  jobOfferTeams.forEach(team => {
+    const action: InboxAction = {
+      type: 'accept_job_offer',
+      payload: { teamId: team.id },
+    };
+    const reason = isSacked
+      ? `Following your departure from ${summary.teamName}, ${team.name} are looking for new leadership.`
+      : summary.outcome === 'champion' || summary.outcome === 'promoted'
+        ? `Your results at ${summary.teamName} have caught attention. ${team.name} want you in charge.`
+        : `${team.name} believe you are the right person to take them forward.`;
+    messages.push(buildMessage({
+      week,
+      source: 'system',
+      category: 'career_job_offer',
+      title: `Job offer: ${team.name}`,
+      body: `${reason} Budget: GBP ${team.budget.toFixed(1)}m. Division: ${team.division}. Accept to take charge immediately next season.`,
+      isRead: false,
+      action,
+      teamId: team.id,
+    }));
+  });
+
+  return messages;
+};
+
+export const generateSackWarningMessage = (week: number, consecutiveWeeks: number, teamId: string): InboxMessage =>
+  buildMessage({
+    week,
+    source: 'system',
+    category: 'career_sack_warning',
+    title: consecutiveWeeks >= 4 ? 'Board has lost confidence' : 'Board warning issued',
+    body: consecutiveWeeks >= 4
+      ? `The board has formally lost confidence in your management after ${consecutiveWeeks} consecutive weeks of critical approval ratings. Your position will not be renewed at season end.`
+      : `Approval has been below 20% for ${consecutiveWeeks} consecutive weeks. The board is watching closely - results must improve immediately.`,
+    isRead: false,
+    teamId,
+  });
 
 export const generateBoardInboxMessages = ({
   week,
@@ -655,17 +861,30 @@ export const generateBoardInboxMessages = ({
   const bandAfter = describeApprovalBand(teamAfter.boardApproval);
 
   if (newlyMetObjectives.length > 0 || Math.abs(approvalDelta) >= 8 || bandBefore !== bandAfter) {
+    const boardSeed = `${week}-${teamAfter.id}-${approvalDelta}-${bandAfter}-${newlyMetObjectives.map(objective => objective.id).join('-')}`;
     const objectiveLine = newlyMetObjectives.length > 0
       ? `Objectives met: ${newlyMetObjectives.map(objective => objective.description).join('; ')}. `
       : '';
     const approvalLine = approvalDelta === 0
-      ? `Board approval holds at ${Math.round(teamAfter.boardApproval)}% and the mood is ${bandAfter}.`
-      : `Board approval ${approvalDelta > 0 ? 'rises' : 'drops'} to ${Math.round(teamAfter.boardApproval)}% and the mood is now ${bandAfter}.`;
+      ? pickTemplate(`${boardSeed}-steady`, [
+        `Board approval holds at ${Math.round(teamAfter.boardApproval)}% and the mood is ${bandAfter}.`,
+        `The board stays steady at ${Math.round(teamAfter.boardApproval)}% and the current mood is ${bandAfter}.`,
+        `No shift this week: board approval remains ${Math.round(teamAfter.boardApproval)}% with the mood set at ${bandAfter}.`,
+      ])
+      : pickTemplate(`${boardSeed}-move`, [
+        `Board approval ${approvalDelta > 0 ? 'rises' : 'drops'} to ${Math.round(teamAfter.boardApproval)}% and the mood is now ${bandAfter}.`,
+        `The latest review leaves board approval at ${Math.round(teamAfter.boardApproval)}% and the mood at ${bandAfter}.`,
+        `Board sentiment ${approvalDelta > 0 ? 'improves' : 'slides'} to ${Math.round(teamAfter.boardApproval)}%, putting the mood at ${bandAfter}.`,
+      ]);
     messages.push(buildMessage({
       week,
       source: 'system',
       category: 'board_update',
-      title: 'Board update',
+      title: pickTemplate(boardSeed, [
+        'Board update',
+        'Board room note',
+        'Executive review',
+      ]),
       body: `${objectiveLine}${approvalLine}`.trim(),
       isRead: false,
       teamId: teamAfter.id,

@@ -11,6 +11,7 @@ type CurrentTeamCardProps = {
 
 export function CurrentTeamCard({ team, injuredCount = 0, expiringCount = 0, onChangeTeam }: CurrentTeamCardProps) {
   const manager = team?.manager;
+  const hasAlerts = injuredCount > 0 || expiringCount > 0;
 
   return (
     <View style={styles.card}>
@@ -19,7 +20,9 @@ export function CurrentTeamCard({ team, injuredCount = 0, expiringCount = 0, onC
       {team && <Text style={styles.teamDivision}>{team.division}</Text>}
       {team ? (
         <Text style={styles.statusSummary}>
-          {injuredCount} injured | {expiringCount} expiring contracts
+          {hasAlerts
+            ? `${injuredCount} injured, ${expiringCount} contracts to review`
+            : 'No immediate squad issues flagged'}
         </Text>
       ) : null}
       {manager && (
@@ -29,7 +32,6 @@ export function CurrentTeamCard({ team, injuredCount = 0, expiringCount = 0, onC
           <Text style={styles.managerMeta}>
             {manager.nationality} | Rep {manager.reputation}% | Fit {manager.clubFit}%
           </Text>
-          <Text style={styles.managerMeta}>{manager.tacticalIdentity}</Text>
         </View>
       )}
       <TouchableOpacity style={styles.primaryBtn} onPress={onChangeTeam}>
@@ -42,7 +44,7 @@ export function CurrentTeamCard({ team, injuredCount = 0, expiringCount = 0, onC
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#111827',
-    borderRadius: 14,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#1e293b',
     padding: 16,
@@ -54,7 +56,7 @@ const styles = StyleSheet.create({
   statusSummary: { color: '#cbd5e1', fontSize: 12, fontWeight: '700', marginBottom: 12 },
   managerBlock: {
     backgroundColor: '#0f172a',
-    borderRadius: 12,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#1e293b',
     padding: 12,
@@ -63,6 +65,6 @@ const styles = StyleSheet.create({
   managerLabel: { color: '#64748b', fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
   managerName: { color: '#f8fafc', fontSize: 16, fontWeight: '900', marginTop: 4 },
   managerMeta: { color: '#94a3b8', fontSize: 12, marginTop: 4, lineHeight: 17 },
-  primaryBtn: { backgroundColor: '#38bdf8', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  primaryBtn: { backgroundColor: '#38bdf8', borderRadius: 0, paddingVertical: 12, alignItems: 'center' },
   primaryBtnText: { color: '#0f172a', fontWeight: '900' },
 });

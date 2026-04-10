@@ -38,7 +38,7 @@ export function TeamColorBadge({ name, isUser, mirrored = false }: TeamColorBadg
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
   rowMirrored: { justifyContent: 'flex-end' },
-  chip: { width: 10, height: 10, borderRadius: 3 },
+  chip: { width: 10, height: 10, borderRadius: 0 },
   name: { fontSize: 14, fontWeight: '800', color: '#f8fafc' },
   nameMirrored: { textAlign: 'right' },
   userName: { color: '#38bdf8', fontWeight: '900' },

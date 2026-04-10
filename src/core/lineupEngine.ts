@@ -1,5 +1,5 @@
-import { getSlotsForFormation } from '../constants/formations';
-import { Player } from '../models/types';
+import { getSlotsForFormation, Slot } from '../constants/formations';
+import { Player, Team } from '../models/types';
 
 export const autoAssignLineup = (teamId: string, players: Record<string, Player>, formation: string) => {
   const teamPlayers = Object.values(players)
@@ -113,4 +113,97 @@ export const buildQuickSimLineup = (
   });
 
   return updates;
+};
+
+export const getTeamMatchStarters = (
+  teamId: string,
+  userTeamId: string | null | undefined,
+  updatedPlayers: Record<string, Player>,
+  updatedTeams: Record<string, Team>,
+  isPlayerUnavailable: (p: Player) => boolean,
+  rebuildFormationMap: (slots: Slot[][], starters: Player[], map: Record<string, string>) => Record<string, string>
+) => {
+  const team = updatedTeams[teamId];
+  const shouldPreserveManual = Boolean(userTeamId && teamId === userTeamId);
+  if (shouldPreserveManual) {
+    const teamPlayers = Object.values(updatedPlayers).filter(p => p.teamId === teamId);
+    const eligibleTeamPlayers = teamPlayers.filter(player => !isPlayerUnavailable(player));
+    const savedStarters = teamPlayers.filter(player => player.isStarting && !isPlayerUnavailable(player));
+    const cleanFormationMap = rebuildFormationMap(
+      getSlotsForFormation(team.activeFormation),
+      savedStarters,
+      team.formationMap || {}
+    );
+    updatedTeams[teamId] = { ...team, formationMap: cleanFormationMap };
+    const mappedStarterIds = Array.from(new Set(Object.values(cleanFormationMap)));
+    if (mappedStarterIds.length > 0) {
+      const mappedSet = new Set(mappedStarterIds.slice(0, 11));
+      const enforceMapXi = mappedStarterIds.length >= 11;
+      eligibleTeamPlayers.forEach(player => {
+        if (mappedSet.has(player.id)) {
+          updatedPlayers[player.id] = { ...updatedPlayers[player.id], isStarting: true, isSub: false };
+        } else if (enforceMapXi && player.isStarting) {
+          updatedPlayers[player.id] = { ...updatedPlayers[player.id], isStarting: false, isSub: true };
+        }
+      });
+    }
+    let starters = eligibleTeamPlayers.filter(p => p.isStarting);
+    if (starters.length > 11) {
+      const keepIds = new Set(starters
+        .sort((a, b) => (b.overallRating + b.energy * 0.1) - (a.overallRating + a.energy * 0.1))
+        .slice(0, 11)
+        .map(p => p.id));
+      starters.forEach(player => {
+        if (!keepIds.has(player.id)) {
+          updatedPlayers[player.id] = { ...updatedPlayers[player.id], isStarting: false, isSub: true };
+        }
+      });
+    }
+    starters = Object.values(updatedPlayers).filter(player => player.teamId === teamId && player.isStarting && !isPlayerUnavailable(player));
+    if (starters.length < 11) {
+      const fillCandidates = eligibleTeamPlayers
+        .filter(player => !player.isStarting)
+        .sort((a, b) => (b.overallRating + b.energy * 0.1) - (a.overallRating + a.energy * 0.1))
+        .slice(0, 11 - starters.length);
+      starters = [...starters, ...fillCandidates];
+    }
+    return starters.slice(0, 11);
+  } else {
+    const lineupUpdates = buildQuickSimLineup(teamId, updatedPlayers, team.activeFormation);
+    Object.keys(lineupUpdates).forEach(id => {
+      updatedPlayers[id] = { ...updatedPlayers[id], ...lineupUpdates[id] };
+    });
+  }
+  return Object.values(updatedPlayers).filter(player => player.teamId === teamId && player.isStarting && !isPlayerUnavailable(player));
+};
+
+export const getTeamMatchBench = (
+  teamId: string,
+  matchStarters: Player[],
+  updatedPlayers: Record<string, Player>,
+  isPlayerUnavailable: (p: Player) => boolean
+) => {
+  const starterIds = new Set(matchStarters.map(player => player.id));
+  let bench = Object.values(updatedPlayers).filter(p => (
+    p.teamId === teamId &&
+    p.isSub &&
+    !isPlayerUnavailable(p) &&
+    !starterIds.has(p.id)
+  ));
+  if (bench.length < 7) {
+    const extra = Object.values(updatedPlayers)
+      .filter(p => p.teamId === teamId && !p.isStarting && !p.isSub && !isPlayerUnavailable(p) && !starterIds.has(p.id))
+      .sort((a, b) => b.overallRating - a.overallRating)
+      .slice(0, 7 - bench.length);
+    extra.forEach(player => {
+      updatedPlayers[player.id] = { ...updatedPlayers[player.id], isSub: true };
+    });
+    bench = Object.values(updatedPlayers).filter(p => (
+      p.teamId === teamId &&
+      p.isSub &&
+      !isPlayerUnavailable(p) &&
+      !starterIds.has(p.id)
+    ));
+  }
+  return bench.slice(0, 7);
 };

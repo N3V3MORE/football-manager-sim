@@ -28,9 +28,10 @@ export default function RootLayout() {
     if (!hasHydrated) return;
 
     const state = useGameStore.getState();
-    const isStateValid = state.userTeamId && state.teams[state.userTeamId];
+    const hasManagedTeam = Boolean(state.userTeamId && state.teams[state.userTeamId]);
+    const hasLeagueData = Object.keys(state.teams).length > 0 && Object.keys(state.fixtures).length > 0;
 
-    if (!isStateValid) {
+    if (!hasManagedTeam && !hasLeagueData) {
       state.initializeGame('temp');
       return;
     }
@@ -52,7 +53,7 @@ export default function RootLayout() {
     }
   }, [hasHydrated, userTeamId]);
 
-  if (!hasHydrated || !userTeamId) return null; // Wait for initialization
+  if (!hasHydrated) return null;
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

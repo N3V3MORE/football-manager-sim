@@ -49,7 +49,7 @@ export function FormationSelectionModal({
 
 const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: 40 },
-  dropdownModal: { backgroundColor: '#1e293b', borderRadius: 16, borderWidth: 1, borderColor: '#334155', overflow: 'hidden' },
+  dropdownModal: { backgroundColor: '#1e293b', borderRadius: 0, borderWidth: 1, borderColor: '#334155', overflow: 'hidden' },
   dropdownModalTitle: { fontSize: 14, fontWeight: '900', color: '#64748b', textAlign: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#334155', textTransform: 'uppercase', letterSpacing: 1 },
   dropdownItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#1e293b' },
   dropdownItemActive: { backgroundColor: '#0f172a' },

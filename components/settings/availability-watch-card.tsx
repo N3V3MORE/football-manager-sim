@@ -42,7 +42,7 @@ export function AvailabilityWatchCard({ players }: AvailabilityWatchCardProps) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#111827',
-    borderRadius: 14,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#1e293b',
     padding: 16,
@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
   note: { color: '#64748b', fontSize: 12, lineHeight: 18, marginBottom: 12 },
   row: {
     backgroundColor: '#0f172a',
-    borderRadius: 12,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#1e293b',
     padding: 12,

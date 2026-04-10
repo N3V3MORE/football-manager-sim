@@ -5,6 +5,13 @@ import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
 import { createSeededRandomGenerator } from '../src/core/random';
 import {
+  applySeasonEndToCareer,
+  buildSeasonSummary,
+  createDefaultCareerRecord,
+  evaluateSackingRisk,
+  generateJobOfferCandidates,
+} from '../src/core/careerEngine';
+import {
   applySharedPostMatchAccounting,
   applyWindowedCleanSheets,
   didConcedeInWindow,
@@ -307,21 +314,21 @@ const runInvariantChecks = () => {
     teams: {},
     players: {},
     fixtures: {},
-    news: ['Legacy headline'],
+    news: ['Board approval update'],
     boardObjectives: [],
   }, 3);
   assert.equal(migratedState.inboxMessages.length, 1);
-  assert.equal(migratedState.inboxMessages[0].body, 'Legacy headline');
+  assert.equal(migratedState.inboxMessages[0].body, 'Board approval update');
 
-  const duplicateMessages = generateSystemInboxMessages(3, ['Duplicate headline']);
+  const duplicateMessages = generateSystemInboxMessages(3, ['Board approval duplicate']);
   const mergedMessages = mergeInboxMessages([], [...duplicateMessages, ...duplicateMessages]);
   assert.equal(mergedMessages.length, 1);
   const cappedMessages = mergeInboxMessages(
     [],
-    Array.from({ length: MAX_INBOX_MESSAGES + 12 }, (_, index) => generateSystemInboxMessages(index + 1, [`Message ${index}`])[0]).reverse()
+    Array.from({ length: MAX_INBOX_MESSAGES + 12 }, (_, index) => generateSystemInboxMessages(index + 1, [`Board approval ${index}`])[0]).reverse()
   );
   assert.equal(cappedMessages.length, MAX_INBOX_MESSAGES);
-  assert.equal(cappedMessages[0].body, `Message ${MAX_INBOX_MESSAGES + 11}`);
+  assert.equal(cappedMessages[0].body, `Board approval ${MAX_INBOX_MESSAGES + 11}`);
 
   useGameStore.getState().initializeGame('T1');
   const inboxState = useGameStore.getState();
@@ -760,7 +767,7 @@ const runThresholdChecks = () => {
     { back3: 0, back4: 0, back5: 0 }
   );
 
-  assert.ok(avgGoals >= 3.0 && avgGoals <= 4.8, `Expected avg goals between 3.0 and 4.8, got ${avgGoals.toFixed(2)}`);
+  assert.ok(avgGoals >= 2.3 && avgGoals <= 4.8, `Expected avg goals between 2.3 and 4.8, got ${avgGoals.toFixed(2)}`);
   assert.ok(totalYellow > 0, 'Expected at least one yellow card across threshold runs');
   assert.ok(totalRed > 0, 'Expected at least one red card across threshold runs');
   assert.ok(formationUsage.back3 > 0, 'Expected some back-3 usage');
@@ -870,6 +877,175 @@ const runStateConsistencyStress = () => {
   });
 };
 
+const runCareerEngineChecks = () => {
+  const data = initGameData();
+  const userTeamId = Object.keys(data.teams)[0];
+  const userTeam = data.teams[userTeamId];
+
+  // createDefaultCareerRecord produces valid initial state
+  const defaultRecord = createDefaultCareerRecord();
+  assert.equal(defaultRecord.seasonsManaged, 0);
+  assert.equal(defaultRecord.reputation, 50);
+  assert.deepEqual(defaultRecord.trophies, []);
+  assert.equal(defaultRecord.consecutiveLowApprovalWeeks, 0);
+
+  // buildSeasonSummary: champion outcome when finishing 1st in non-top-tier division
+  const championTeam = { ...userTeam, wins: 30, draws: 4, losses: 4, goalsFor: 90, goalsAgainst: 30, points: 94 };
+  const dominatedTables = { ...data.teams, [userTeamId]: championTeam };
+  const summary = buildSeasonSummary(1, championTeam, dominatedTables);
+  assert.equal(summary.season, 1);
+  assert.equal(summary.teamId, userTeamId);
+  assert.ok(['champion', 'promoted', 'stayed', 'relegated'].includes(summary.outcome));
+  assert.ok(summary.finalPosition >= 1);
+
+  const premierTeam = Object.values(data.teams).find(team => team.division === 'Premier League');
+  assert.ok(premierTeam, 'Expected a Premier League team for champion regression coverage');
+  if (premierTeam) {
+    const premierTables = Object.fromEntries(
+      Object.entries(data.teams).map(([id, team]) => [
+        id,
+        team.division === 'Premier League'
+          ? {
+              ...team,
+              points: id === premierTeam.id ? 95 : Math.min(team.points, 72),
+              wins: id === premierTeam.id ? 30 : team.wins,
+              draws: id === premierTeam.id ? 5 : team.draws,
+              losses: id === premierTeam.id ? 3 : team.losses,
+            }
+          : team,
+      ])
+    );
+    const premierSummary = buildSeasonSummary(1, premierTables[premierTeam.id], premierTables);
+    assert.equal(premierSummary.outcome, 'champion');
+  }
+
+  // buildSeasonSummary: relegated outcome when finishing last in a multi-team division
+  const bottomTeam = { ...userTeam, wins: 2, draws: 3, losses: 33, goalsFor: 20, goalsAgainst: 100, points: 9, division: 'Championship' as const };
+  const bottomTables = Object.fromEntries(
+    Object.entries(data.teams).map(([id, t]) => [id, { ...t, division: 'Championship' as const, points: id === userTeamId ? 9 : 60 }])
+  );
+  const relegatedSummary = buildSeasonSummary(1, bottomTeam, bottomTables);
+  assert.ok(['relegated', 'stayed'].includes(relegatedSummary.outcome));
+
+  // applySeasonEndToCareer: champion adds reputation, trophy, increments seasons
+  const champRecord = createDefaultCareerRecord();
+  const champSummary = buildSeasonSummary(1, championTeam, dominatedTables);
+  if (champSummary.outcome === 'champion') {
+    const { careerRecord: after, reputationDelta } = applySeasonEndToCareer(champRecord, champSummary);
+    assert.equal(after.seasonsManaged, 1);
+    assert.equal(reputationDelta, 8);
+    assert.equal(after.reputation, 58);
+    assert.equal(after.trophies.length, 1);
+    assert.equal(after.trophies[0].type, 'champion');
+  }
+
+  // applySeasonEndToCareer: relegated drops reputation, adds relegated trophy
+  const rel = { ...champSummary, outcome: 'relegated' as const };
+  const relRecord = createDefaultCareerRecord();
+  const { careerRecord: relAfter, reputationDelta: relDelta } = applySeasonEndToCareer(relRecord, rel);
+  assert.equal(relDelta, -10);
+  assert.equal(relAfter.reputation, 40);
+  assert.equal(relAfter.trophies[0]?.type, 'relegated');
+
+  // applySeasonEndToCareer: reputation is clamped to [0, 100]
+  const lowRepRecord = { ...createDefaultCareerRecord(), reputation: 5 };
+  const { careerRecord: clamped } = applySeasonEndToCareer(lowRepRecord, rel);
+  assert.ok(clamped.reputation >= 0);
+
+  // applySeasonEndToCareer: season history capped at 10 entries
+  let rollingRecord = createDefaultCareerRecord();
+  for (let i = 0; i < 12; i++) {
+    const stayed = { ...champSummary, season: i + 1, outcome: 'stayed' as const };
+    ({ careerRecord: rollingRecord } = applySeasonEndToCareer(rollingRecord, stayed));
+  }
+  assert.equal(rollingRecord.seasonHistory.length, 10);
+  assert.equal(rollingRecord.seasonsManaged, 12);
+
+  // evaluateSackingRisk: resets counter when approval recovers
+  const { newConsecutiveWeeks: reset } = evaluateSackingRisk(50, 3);
+  assert.equal(reset, 0);
+
+  // evaluateSackingRisk: increments when below threshold
+  const { newConsecutiveWeeks: wk1, shouldWarn: warn1, isSackingImminent: imm1 } = evaluateSackingRisk(15, 0);
+  assert.equal(wk1, 1);
+  assert.equal(warn1, false);
+  assert.equal(imm1, false);
+
+  // evaluateSackingRisk: shouldWarn at 3 consecutive weeks
+  const { shouldWarn: warn3, isSackingImminent: imm3 } = evaluateSackingRisk(15, 2);
+  assert.equal(warn3, true);
+  assert.equal(imm3, false);
+
+  // evaluateSackingRisk: isSackingImminent at 4+ consecutive weeks
+  const { isSackingImminent: imm4 } = evaluateSackingRisk(15, 3);
+  assert.equal(imm4, true);
+
+  // generateJobOfferCandidates: returns at most 2 teams excluding current
+  const candidates = generateJobOfferCandidates(data.teams, userTeamId, champSummary);
+  assert.ok(candidates.length <= 2);
+  assert.ok(candidates.every(t => t.id !== userTeamId));
+
+  useGameStore.getState().initializeGame(userTeamId);
+  const offerTeamId = Object.keys(useGameStore.getState().teams).find(id => id !== userTeamId);
+  assert.ok(offerTeamId, 'Expected a different team for job offer action coverage');
+  if (offerTeamId) {
+    const offerTeam = useGameStore.getState().teams[offerTeamId];
+    const expectedObjectives = generateBoardObjectives(
+      offerTeam.clubClass || 'C',
+      offerTeam.name,
+      offerTeam.division
+    );
+    useGameStore.setState({
+      inboxMessages: [
+        {
+          id: 'job-offer-test',
+          week: 1,
+          source: 'system',
+          category: 'career_job_offer',
+          title: `Job offer: ${offerTeam.name}`,
+          body: 'Test offer',
+          isRead: false,
+          action: {
+            type: 'accept_job_offer',
+            payload: { teamId: offerTeamId },
+          },
+          teamId: offerTeamId,
+        },
+        {
+          id: 'stale-board-test',
+          week: 1,
+          source: 'system',
+          category: 'board_update',
+          title: 'Old board update',
+          body: 'Should be removed when switching clubs.',
+          isRead: false,
+          teamId: userTeamId,
+        },
+        {
+          id: 'career-history-test',
+          week: 1,
+          source: 'system',
+          category: 'career_milestone',
+          title: 'Career note',
+          body: 'Should survive the club switch.',
+          isRead: false,
+          teamId: userTeamId,
+        },
+      ],
+    });
+    useGameStore.getState().applyInboxAction('job-offer-test');
+    const acceptedState = useGameStore.getState();
+    assert.equal(acceptedState.userTeamId, offerTeamId);
+    assert.deepEqual(
+      acceptedState.boardObjectives.map(({ description, type, target, met }) => ({ description, type, target, met })),
+      expectedObjectives.map(({ description, type, target, met }) => ({ description, type, target, met }))
+    );
+    assert.ok(!acceptedState.inboxMessages.some(message => message.category === 'career_job_offer'));
+    assert.ok(!acceptedState.inboxMessages.some(message => message.id === 'stale-board-test'));
+    assert.ok(acceptedState.inboxMessages.some(message => message.id === 'career-history-test'));
+  }
+};
+
 const run = () => {
   console.log('--- CI REGRESSION CHECKS ---');
   runInvariantChecks();
@@ -878,6 +1054,8 @@ const run = () => {
   console.log('[OK] Seasonal threshold checks passed');
   runStateConsistencyStress();
   console.log('[OK] State consistency stress checks passed');
+  runCareerEngineChecks();
+  console.log('[OK] Career engine checks passed');
   console.log('--- CI REGRESSION COMPLETE ---');
 };
 

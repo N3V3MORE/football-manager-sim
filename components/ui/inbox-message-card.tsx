@@ -27,11 +27,15 @@ const CATEGORY_LABELS: Record<InboxMessage['category'], string> = {
   transfer_advice: 'Market',
   squad_warning: 'Squad',
   contract_warning: 'Contract',
+  career_sack_warning: 'Career',
+  career_job_offer: 'Career',
+  career_milestone: 'Career',
 };
 
 const getActionLabel = (message: InboxMessage) => {
   if (!message.action) return null;
   if (message.action.type === 'apply_lineup') return 'Apply Lineup Suggestion';
+  if (message.action.type === 'accept_job_offer') return 'Accept Job Offer';
   if (message.action.type === 'renew_contract') return 'Renew Contract';
   return 'Apply Tactic Suggestion';
 };
@@ -83,7 +87,7 @@ export function InboxMessageCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#1e293b',
-    borderRadius: 14,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#334155',
     padding: 16,
@@ -104,7 +108,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   chip: {
-    borderRadius: 999,
+    borderRadius: 0,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
@@ -112,7 +116,7 @@ const styles = StyleSheet.create({
   systemChip: { backgroundColor: '#3f3f46' },
   chipText: { color: '#e2e8f0', fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   categoryChip: {
-    borderRadius: 999,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#475569',
     paddingHorizontal: 10,
@@ -129,7 +133,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: '#38bdf8',
-    borderRadius: 999,
+    borderRadius: 0,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -137,7 +141,7 @@ const styles = StyleSheet.create({
   secondaryButton: {
     borderWidth: 1,
     borderColor: '#475569',
-    borderRadius: 999,
+    borderRadius: 0,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -145,7 +149,7 @@ const styles = StyleSheet.create({
   dismissButton: {
     borderWidth: 1,
     borderColor: '#7f1d1d',
-    borderRadius: 999,
+    borderRadius: 0,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },

@@ -2,7 +2,7 @@
 
 Custom football manager sim built with React Native, Expo, and Zustand.
 
-The current focus is a fast, inspectable match engine that can run full-season and multi-season simulations for tuning team/player realism.
+The current focus is a fast, inspectable match engine that can run full-season and multi-season simulations for tuning team/player realism, with a full career meta-layer that persists across seasons.
 
 ## Current Engine
 
@@ -16,8 +16,18 @@ The current focus is a fast, inspectable match engine that can run full-season a
 - Card accounting tracks first yellows, second-yellow reds, straight reds, suspensions, and red-card event logs.
 - Clean sheets are awarded from player on-pitch windows against conceded goal minutes, with a 60-minute qualification to avoid short defensive cameos skewing player stats.
 - Player availability now tracks injuries and suspensions directly through weekly progression, squad selection, and season rollover.
-- The assistant coach inbox now carries pre-match advice, post-match reports, board/system updates, contract warnings, and recovery notes.
+- The assistant coach inbox now carries pre-match advice, post-match reports, board/system updates, contract warnings, recovery notes, sack warnings, job offers, and career milestones.
 - Season tracker audits score-log consistency, red-card logs, multi-yellow matches, formation usage, tactical changes, and player/team stat leaders.
+
+## Career Mode
+
+Manager reputation (0–100) is a live stat that changes with results: +8 for winning a division, +4 for promotion, −10 for relegation, −5 for being sacked, +2 for a winning-record season.
+
+Board approval below 20% for 3 consecutive weeks triggers a formal inbox warning; at 4+ weeks the board signals they will not renew your contract. At season end, if approval is still critical, you are sacked and offered jobs at clubs in an appropriate division tier.
+
+Strong seasons generate unsolicited job offers from higher-division clubs delivered through the inbox. Accepting a job offer hands over your current team to AI management and starts the next season at the new club with your reputation intact.
+
+The Board Room screen tracks your full career: seasons managed, W/D/L totals and bar, reputation, trophy cabinet (division titles and promotions), and a 10-season history with outcome pills.
 
 ## Gameplay
 
@@ -29,6 +39,7 @@ The current focus is a fast, inspectable match engine that can run full-season a
 - Use 7-player benches and formation maps for manual lineup continuity.
 - Run live match minutes or quick-sim fixtures.
 - Track league table, player stats, awards, budgets, transfers, morale, energy, injuries, suspensions, contracts, and inbox reports.
+- Build a multi-season career: manage board pressure, take job offers, accumulate trophies, and grow your reputation across divisions.
 
 ## Scripts
 
@@ -69,6 +80,6 @@ npm run start
 
 ## Version
 
-Current version: `v3.4.0`
+Current version: `v4.0.1`
 
 See [CHANGELOG.md](./CHANGELOG.md) for release notes.

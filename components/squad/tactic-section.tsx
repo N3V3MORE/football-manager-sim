@@ -42,8 +42,8 @@ export function TacticSection({
 const styles = StyleSheet.create({
   tacticsSection: { gap: 10 },
   tacticsSectionTitle: { color: '#94a3b8', fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1.5 },
-  tacticsOptionsRow: { flexDirection: 'row', backgroundColor: '#1e293b', borderRadius: 10, padding: 4, borderWidth: 1, borderColor: '#334155' },
-  tacticsOptBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 6 },
+  tacticsOptionsRow: { flexDirection: 'row', backgroundColor: '#1e293b', borderRadius: 0, padding: 4, borderWidth: 1, borderColor: '#334155' },
+  tacticsOptBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 0 },
   tacticsOptBtnActive: { backgroundColor: '#38bdf8' },
   tacticsOptText: { color: '#94a3b8', fontSize: 13, fontWeight: '800' },
   tacticsOptTextActive: { color: '#0f172a' },

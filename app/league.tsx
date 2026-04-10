@@ -22,11 +22,12 @@ import { DEFAULT_COUNTRY_ID, LEAGUE_COUNTRIES, getLeagueCountry } from '@/src/co
 import { sortTeamsByTable } from '@/src/core/leagueUtils';
 import { PageHeader } from '@/components/ui/page-header';
 
-const MINI_SLOT_WIDTH = 56;
-const MINI_DOT_SIZE = 32;
+const MINI_SLOT_WIDTH = 46;
+const MINI_SLOT_HEIGHT = 54;
+const MINI_DOT_SIZE = 24;
 
 const getMiniSlotPosition = (rowIdx: number, colIdx: number, rowLength: number, totalRows: number) => {
-  const rowPercent = totalRows > 1 ? 10 + (rowIdx / (totalRows - 1)) * 80 : 50;
+  const rowPercent = totalRows > 1 ? 11 + (rowIdx / (totalRows - 1)) * 63 : 42;
   return {
     left: `${((colIdx + 1) / (rowLength + 1)) * 100}%` as DimensionValue,
     top: `${rowPercent}%` as DimensionValue,
@@ -108,7 +109,7 @@ export default function LeagueTableScreen() {
                   { backgroundColor: assigned ? getPositionColor(assigned.position) : '#1e3a2f' },
                 ]}>
                   <Text style={styles.miniDotLabel}>
-                    {assigned ? (assigned.subPosition || assigned.position).substring(0, 3) : slot.label}
+                    {assigned ? (assigned.subPosition || assigned.position).substring(0, 2) : slot.label}
                   </Text>
                 </View>
                 <Text style={styles.miniDotName} numberOfLines={1}>
@@ -331,7 +332,7 @@ const styles = StyleSheet.create({
   reelChip: {
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: 0,
     backgroundColor: '#1e293b',
     borderWidth: 1,
     borderColor: '#334155',
@@ -358,7 +359,7 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
     paddingHorizontal: 10,
     paddingVertical: 7,
-    borderRadius: 999,
+    borderRadius: 0,
   },
   countryTopBtnText: { color: '#cbd5e1', fontSize: 11, fontWeight: '900' },
   divisionSection: { paddingHorizontal: 8, paddingTop: 2, paddingBottom: 20 },
@@ -378,13 +379,13 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: 0,
   },
   divisionJumpText: { color: '#cbd5e1', fontSize: 12, fontWeight: '800' },
   table: {
     backgroundColor: '#1e293b',
     margin: 8,
-    borderRadius: 8,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#334155',
     overflow: 'hidden',
@@ -414,7 +415,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     width: 14,
     height: 14,
-    borderRadius: 2,
+    borderRadius: 0,
     overflow: 'hidden',
     marginRight: 5,
   },
@@ -441,7 +442,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     width: 40,
     height: 6,
-    borderRadius: 3,
+    borderRadius: 0,
     overflow: 'hidden',
     marginBottom: 8,
   },
@@ -476,7 +477,7 @@ const styles = StyleSheet.create({
   modalPosPill: {
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 4,
+    borderRadius: 0,
     marginRight: 12,
     minWidth: 36,
     alignItems: 'center',
@@ -491,12 +492,12 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   miniPitch: {
-    height: 300,
+    height: 246,
     marginHorizontal: 14,
     marginTop: 4,
     marginBottom: 8,
     backgroundColor: '#14532d',
-    borderRadius: 12,
+    borderRadius: 0,
     borderWidth: 2,
     borderColor: '#166534',
     overflow: 'hidden',
@@ -510,7 +511,7 @@ const styles = StyleSheet.create({
     right: 10,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.55)',
-    borderRadius: 2,
+    borderRadius: 0,
   },
   miniPitchSlots: {
     position: 'absolute',
@@ -523,6 +524,7 @@ const styles = StyleSheet.create({
   miniSlotAnchor: {
     position: 'absolute',
     width: MINI_SLOT_WIDTH,
+    height: MINI_SLOT_HEIGHT,
     marginLeft: -(MINI_SLOT_WIDTH / 2),
     marginTop: -(MINI_DOT_SIZE / 2),
     alignItems: 'center',
@@ -531,31 +533,34 @@ const styles = StyleSheet.create({
     width: MINI_DOT_SIZE,
     height: MINI_DOT_SIZE,
     borderRadius: MINI_DOT_SIZE / 2,
+    alignSelf: 'center',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.35)',
   },
-  miniDotLabel: { color: '#fff', fontSize: 8, fontWeight: '900' },
+  miniDotLabel: { color: '#fff', fontSize: 7, fontWeight: '900', width: '100%', textAlign: 'center' },
   miniDotName: {
     color: '#fff',
-    fontSize: 8,
-    marginTop: 3,
+    fontSize: 7,
+    marginTop: 2,
     textAlign: 'center',
     fontWeight: '700',
-    width: MINI_SLOT_WIDTH + 14,
+    width: MINI_SLOT_WIDTH,
     alignSelf: 'center',
   },
   miniRating: {
     backgroundColor: '#cbd5e1',
     color: '#0f172a',
     alignSelf: 'center',
-    paddingHorizontal: 4,
+    minWidth: 20,
+    paddingHorizontal: 0,
     paddingVertical: 1,
-    borderRadius: 3,
-    marginTop: 2,
-    fontSize: 8,
+    borderRadius: 0,
+    marginTop: 1,
+    fontSize: 7,
     fontWeight: '900',
+    textAlign: 'center',
   },
   noLineupBox: { padding: 40, alignItems: 'center' },
   noLineupText: { color: '#64748b', fontStyle: 'italic', textAlign: 'center' },

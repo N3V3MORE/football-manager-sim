@@ -1,5 +1,36 @@
 # Changelog
 
+## v4.0.1 - Career flow fixes and presentation pass
+
+What changed:
+- Fixed the season-end career loop so titles, job offers, team changes, board objectives, and inbox context stay consistent through sack/re-hire transitions.
+- Restored the settings and inbox surfaces after the v4 integration pass, including career inbox actions and safer managed-team message pruning.
+- Tightened the squad and tactics presentation: pitch markers are aligned, the compact last-starting-XI pitch is smaller and cleaner, and the broader square-edge pass is now consistent across the shared squad UI.
+- Brought back the Hub competition watch panes for Carabao Cup, FA Cup, and Europe while keeping the current backend limitations explicit instead of faking round progression.
+- Expanded live match commentary plus assistant and board inbox phrasing so match flow and weekly communication feel less repetitive.
+- Added regression coverage for title handling, job-offer objective wiring, and the wider v4 state-transition path.
+
+Notes:
+- Re-ran `tsc`, `lint`, `test:ci`, and `test:regression` before release.
+
+## v4.0.0 - Manager career mode
+
+What changed:
+- Added a persistent `CareerRecord` that survives `advanceSeason`: seasons managed, total W/D/L/GF/GA, reputation (0–100), trophy cabinet, and a rolling 10-season history.
+- Reputation now moves dynamically: +8 for winning a division, +4 for promotion, −10 for relegation, −5 for being sacked, +2 for a winning-record season. Previously `Manager.reputation` was a static initialisation value.
+- Added sacking-risk tracking: `consecutiveLowApprovalWeeks` increments each week board approval stays below 20%. At 3 consecutive weeks the board issues a formal warning in the inbox; at 4+ the board declares they will not renew the contract at season end.
+- At season end the career engine evaluates the final table position, writes a `SeasonSummary`, updates the career record, and generates up to 2 job offer inbox messages from candidate clubs in an appropriate division tier. Accepting a job offer changes the managed team immediately, dismisses all other pending offers, and resets the sacking counter.
+- Added `TrophyEntry`, `SeasonSummary`, and `CareerRecord` types to `src/models/types.ts`. Extended `GameState` with `careerRecord`. Added `career_sack_warning`, `career_job_offer`, and `career_milestone` inbox categories and an `accept_job_offer` inbox action.
+- Added `src/core/careerEngine.ts` with `createDefaultCareerRecord`, `buildSeasonSummary`, `applySeasonEndToCareer`, `evaluateSackingRisk`, and `generateJobOfferCandidates`.
+- Added `generateCareerInboxMessages` and `generateSackWarningMessage` to `src/store/inboxHelpers.ts`.
+- Expanded the Board Room screen with a Career Summary panel (W/D/L bar, reputation, honours count), a Trophy Cabinet section, and a Season History list with outcome pills.
+- Added `components/hub/career-stats-card.tsx`: a compact Hub card showing seasons managed, honours, win rate, and titles. Appears on the Hub after the first season completes.
+- Bumped Zustand persist version to 6; existing saves migrate cleanly through `sanitizePersistedState`.
+- Added `runCareerEngineChecks` to `scripts/ci_regression.ts` covering default state shape, season summary derivation, reputation delta math, reputation clamping, season history cap, and sacking-risk thresholds.
+
+Notes:
+- Re-ran `test:ci` after all changes; all four check groups pass.
+
 ## v3.4.0 - Add player availability and contract pressure
 
 What changed:

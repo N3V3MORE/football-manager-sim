@@ -33,12 +33,12 @@ export function PlayerPickerRow({ item, onPress }: PlayerPickerRowProps) {
 
 const styles = StyleSheet.create({
   pickerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#334155', gap: 10 },
-  modalPosPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4, minWidth: 36, alignItems: 'center' },
+  modalPosPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 0, minWidth: 36, alignItems: 'center' },
   modalPosText: { color: '#fff', fontSize: 10, fontWeight: '900' },
   playerMeta: { flex: 1 },
   pickerName: { flex: 1, fontSize: 14, fontWeight: '700', color: '#f1f5f9' },
   pickerNat: { fontSize: 10, color: '#64748b', width: 60 },
-  pickerRating: { backgroundColor: '#cbd5e1', width: 32, height: 32, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+  pickerRating: { backgroundColor: '#cbd5e1', width: 32, height: 32, borderRadius: 0, justifyContent: 'center', alignItems: 'center' },
   pickerRatingText: { color: '#0f172a', fontWeight: '900', fontSize: 13 },
   pickerStarter: { fontSize: 10, color: '#38bdf8', fontWeight: '900' },
   suspensionText: { fontSize: 10, color: '#ef4444', fontWeight: 'bold' },

@@ -82,7 +82,7 @@ export function ContractWatchCard({ players, team, onRenew }: ContractWatchCardP
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#111827',
-    borderRadius: 14,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#1e293b',
     padding: 16,
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   note: { color: '#64748b', fontSize: 12, lineHeight: 18, marginBottom: 12 },
   row: {
     backgroundColor: '#0f172a',
-    borderRadius: 12,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#1e293b',
     padding: 12,
@@ -104,14 +104,14 @@ const styles = StyleSheet.create({
   name: { color: '#f8fafc', fontSize: 14, fontWeight: '800' },
   meta: { color: '#94a3b8', fontSize: 12, lineHeight: 18 },
   adviceChip: {
-    borderRadius: 999,
+    borderRadius: 0,
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   adviceText: { fontSize: 11, fontWeight: '900' },
   renewButton: {
-    borderRadius: 10,
+    borderRadius: 0,
     paddingVertical: 11,
     alignItems: 'center',
   },

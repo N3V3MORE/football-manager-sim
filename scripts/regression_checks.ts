@@ -360,6 +360,84 @@ const checkSeededFormationDiversity = () => {
   console.log(`Formation usage: ${JSON.stringify(formationUsage)}`);
 };
 
+const checkSanityMatchScores = () => {
+  const data = initGameData();
+  const state = {
+    players: data.players,
+    teams: data.teams,
+    fixtures: data.fixtures
+  };
+  
+  let highScores = 0;
+  const fixturesToPlay = Object.values(state.fixtures).slice(0, 100);
+  
+  fixturesToPlay.forEach(fixture => {
+    const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures);
+    state.players = result.players;
+    state.teams = result.teams;
+    state.fixtures[fixture.id] = result.fixture;
+    
+    const combinedGoals = result.fixture.homeScore! + result.fixture.awayScore!;
+    assert(combinedGoals < 15, `Unrealistic scoreline detected: ${result.fixture.homeScore} - ${result.fixture.awayScore}`);
+    
+    if (combinedGoals >= 7) {
+      highScores++;
+    }
+  });
+
+  // Ensure high scoring games exist but are rare (less than 15%)
+  assert(highScores <= 15, `Too many high scoring games (7+ goals) detected in 100 matches: ${highScores}%`);
+};
+
+const checkZustandStoreLiveMatchCleanup = () => {
+  useGameStore.getState().initializeGame('T1');
+  const store = useGameStore.getState();
+  
+  const fixtureId = Object.keys(store.fixtures)[0];
+  assert(fixtureId, 'Needs at least one fixture for store test');
+
+  // Trigger Live Match start
+  useGameStore.setState(prev => ({
+    liveMatches: {
+      ...prev.liveMatches,
+      [fixtureId]: {
+        initialized: true,
+        homeStarterIds: [],
+        awayStarterIds: [],
+        yellowCardPlayerIds: [],
+        sentOffPlayerIds: [],
+        sentOffMinutes: {},
+        homeGoalMinutes: [],
+        awayGoalMinutes: []
+      }
+    }
+  }));
+
+  let stateCheck = useGameStore.getState();
+  assert(stateCheck.liveMatches && stateCheck.liveMatches[fixtureId], 'Live match should exist in store');
+
+  // Call the store action to finish
+  useGameStore.getState().finishLiveMatch(fixtureId);
+  
+  stateCheck = useGameStore.getState();
+  assert(
+    !stateCheck.liveMatches || !stateCheck.liveMatches[fixtureId], 
+    'Store should perfectly clean up live match state after ending'
+  );
+};
+
+const checkRosterSizeConstraints = () => {
+  const data = initGameData();
+  const teams = Object.values(data.teams);
+  
+  teams.forEach(team => {
+    const squad = Object.values(data.players).filter(p => p.teamId === team.id);
+    assert(squad.length >= 14, `Team ${team.name} has critically small squad (${squad.length})`);
+    assert(squad.length <= 40, `Team ${team.name} has unrealistically large squad (${squad.length})`);
+  });
+};
+
+
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
   checkCleanSheetWindows();
@@ -382,6 +460,16 @@ const runRegressionChecks = () => {
   console.log('[OK] Wrong-position formation-map recovery passed');
   checkSeededFormationDiversity();
   console.log('[OK] Seeded formation diversity check passed');
+
+  checkSanityMatchScores();
+  console.log('[OK] Sanity Match Scores check passed');
+
+  checkZustandStoreLiveMatchCleanup();
+  console.log('[OK] Zustand Live Match cleanup check passed');
+
+  checkRosterSizeConstraints();
+  console.log('[OK] Roster Size constraints check passed');
+
   console.log('--- REGRESSION CHECKS COMPLETE ---');
 };
 

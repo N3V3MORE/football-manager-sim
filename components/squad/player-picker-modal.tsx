@@ -68,13 +68,13 @@ export function PlayerPickerModal({
 
 const styles = StyleSheet.create({
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  pickerSheet: { backgroundColor: '#1e293b', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', paddingBottom: 40 },
+  pickerSheet: { backgroundColor: '#1e293b', borderTopLeftRadius: 0, borderTopRightRadius: 0, maxHeight: '80%', paddingBottom: 40 },
   pickerHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#334155', gap: 10 },
   pickerTitle: { flex: 1, fontSize: 15, fontWeight: '900', color: '#f8fafc' },
   pickerClose: { padding: 6 },
   pickerSection: { fontSize: 11, fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
   emptyNote: { fontSize: 11, color: '#475569', fontStyle: 'italic', paddingLeft: 4, marginBottom: 4 },
-  modalPosPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4, minWidth: 36, alignItems: 'center' },
+  modalPosPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 0, minWidth: 36, alignItems: 'center' },
   modalPosText: { color: '#fff', fontSize: 10, fontWeight: '900' },
   modalCloseText: { color: '#94a3b8', fontSize: 18, fontWeight: '900' },
 });

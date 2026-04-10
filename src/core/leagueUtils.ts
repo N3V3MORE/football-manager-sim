@@ -4,31 +4,21 @@ export const DIVISION_ORDER: Division[] = ['Premier League', 'Championship', 'Le
 export const PROMOTION_COUNT = 3;
 export const RELEGATION_COUNT = 3;
 
-export const getDivisionMaxWeeks = (division: Division) => {
-  switch (division) {
-    case 'Premier League':
-      return 38;
-    case 'Championship':
-    case 'League One':
-    case 'League Two':
-      return 46;
-    default:
-      return 38;
-  }
+const DIVISION_MAX_WEEKS: Record<Division, number> = {
+  'Premier League': 38,
+  'Championship': 46,
+  'League One': 46,
+  'League Two': 46,
 };
+export const getDivisionMaxWeeks = (division: Division) => DIVISION_MAX_WEEKS[division] || 38;
 
-export const getDivisionTeamCount = (division: Division) => {
-  switch (division) {
-    case 'Premier League':
-      return 20;
-    case 'Championship':
-    case 'League One':
-    case 'League Two':
-      return 24;
-    default:
-      return 20;
-  }
+const DIVISION_TEAM_COUNTS: Record<Division, number> = {
+  'Premier League': 20,
+  'Championship': 24,
+  'League One': 24,
+  'League Two': 24,
 };
+export const getDivisionTeamCount = (division: Division) => DIVISION_TEAM_COUNTS[division] || 20;
 
 export const getSeasonWeekLimit = (fixtures: Record<string, Fixture>) => (
   Object.values(fixtures).reduce((max, fixture) => Math.max(max, fixture.week), 0)

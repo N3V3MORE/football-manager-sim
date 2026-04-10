@@ -7,6 +7,8 @@ import { getPositionColor } from '@/src/constants/positionColors';
 export const PITCH_SLOT_WIDTH = 68;
 export const PITCH_SLOT_HEIGHT = 78;
 export const PITCH_DOT_SIZE = 40;
+const TOP_SLOT_PERCENT = 8;
+const BOTTOM_SLOT_PERCENT = 74;
 
 type DraggableDotProps = {
   slot: Slot;
@@ -19,8 +21,8 @@ type DraggableDotProps = {
 
 export const getPitchSlotPosition = (rowIdx: number, colIdx: number, rowLength: number, totalRows: number) => {
   const rowPercent = totalRows > 1
-    ? 10 + (rowIdx / (totalRows - 1)) * 80
-    : 50;
+    ? TOP_SLOT_PERCENT + (rowIdx / (totalRows - 1)) * (BOTTOM_SLOT_PERCENT - TOP_SLOT_PERCENT)
+    : (TOP_SLOT_PERCENT + BOTTOM_SLOT_PERCENT) / 2;
 
   return {
     left: `${((colIdx + 1) / (rowLength + 1)) * 100}%`,
@@ -74,6 +76,7 @@ export function DraggableDot({
           activeOpacity={0.8}
           delayPressIn={50}
           disabled={dragging}
+          hitSlop={10}
         >
           <View
             style={[
@@ -102,29 +105,39 @@ export function DraggableDot({
 
 const styles = StyleSheet.create({
   pitchDot: { alignItems: 'center', width: PITCH_SLOT_WIDTH },
-  pitchDotDraggable: { alignItems: 'center', width: PITCH_SLOT_WIDTH },
-  pitchDotTouch: { alignItems: 'center', width: PITCH_SLOT_WIDTH + 20 },
+  pitchDotDraggable: { alignItems: 'center', width: PITCH_SLOT_WIDTH, minHeight: PITCH_SLOT_HEIGHT },
+  pitchDotTouch: { alignItems: 'center', width: PITCH_SLOT_WIDTH },
   pitchDotCircle: {
     width: PITCH_DOT_SIZE,
     height: PITCH_DOT_SIZE,
     borderRadius: PITCH_DOT_SIZE / 2,
+    alignSelf: 'center',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.35)',
   },
   pitchDotEmpty: { borderStyle: 'dotted', borderColor: '#4ade80' },
-  pitchDotLabel: { color: '#fff', fontSize: 9, fontWeight: '900' },
+  pitchDotLabel: { color: '#fff', fontSize: 9, fontWeight: '900', width: '100%', textAlign: 'center' },
   pitchDotName: {
     color: '#fff',
     fontSize: 9,
     marginTop: 4,
     textAlign: 'center',
     fontWeight: '700',
-    width: PITCH_SLOT_WIDTH + 20,
+    width: PITCH_SLOT_WIDTH,
     alignSelf: 'center',
   },
   emptyName: { color: '#4ade80' },
-  pitchRatingBadge: { backgroundColor: '#cbd5e1', alignSelf: 'center', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 3, marginTop: 3 },
-  pitchRatingText: { fontSize: 9, fontWeight: '900', color: '#0f172a' },
+  pitchRatingBadge: {
+    backgroundColor: '#cbd5e1',
+    alignSelf: 'center',
+    width: 24,
+    height: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 0,
+    marginTop: 3,
+  },
+  pitchRatingText: { fontSize: 9, fontWeight: '900', color: '#0f172a', textAlign: 'center' },
 });

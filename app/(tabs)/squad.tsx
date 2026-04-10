@@ -392,13 +392,13 @@ const styles = StyleSheet.create({
   header:      { padding: 16, backgroundColor: '#1e293b', borderBottomWidth: 1, borderBottomColor: '#334155' },
   headerRow:   { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   title:       { fontSize: 24, fontWeight: '900', color: '#f8fafc', flex: 1 },
-  infoBtn:     { width: 30, height: 30, borderRadius: 15, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center' },
+  infoBtn:     { width: 30, height: 30, borderRadius: 0, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center' },
   infoBtnText: { color: '#94a3b8', fontSize: 14, fontWeight: '900' },
 
   // Formation dropdown trigger
   dropdownBtn: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#0f172a', borderRadius: 10, borderWidth: 1, borderColor: '#334155',
+    backgroundColor: '#0f172a', borderRadius: 0, borderWidth: 1, borderColor: '#334155',
     paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12,
   },
   dropdownLabel: { fontSize: 11, color: '#64748b', fontWeight: '700', marginRight: 6, textTransform: 'uppercase' },
@@ -407,12 +407,12 @@ const styles = StyleSheet.create({
   paneSwitch: {
     flexDirection: 'row',
     backgroundColor: '#0f172a',
-    borderRadius: 10,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#334155',
     padding: 4,
   },
-  paneSwitchBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 7 },
+  paneSwitchBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 0 },
   paneSwitchBtnActive: { backgroundColor: '#38bdf8' },
   paneSwitchText: { color: '#94a3b8', fontSize: 12, fontWeight: '900' },
   paneSwitchTextActive: { color: '#0f172a' },
@@ -420,13 +420,13 @@ const styles = StyleSheet.create({
   // Pitch
   pitchWrapper:      { paddingHorizontal: 10, paddingVertical: 10 },
   pitch: {
-    backgroundColor: '#14532d', borderRadius: 12,
+    backgroundColor: '#14532d', borderRadius: 0,
     height: 480,
     borderWidth: 2, borderColor: '#166534', overflow: 'hidden', position: 'relative',
   },
   pitchOutline: {
     position: 'absolute', top: 12, bottom: 12, left: 12, right: 12, 
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)', borderRadius: 2
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)', borderRadius: 0
   },
   pitchSlots: {
     position: 'absolute',

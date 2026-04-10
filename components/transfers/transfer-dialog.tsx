@@ -87,15 +87,15 @@ export function TransferDialog({
 
 const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
-  modalCard: { backgroundColor: '#1e293b', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#334155' },
+  modalCard: { backgroundColor: '#1e293b', borderRadius: 0, padding: 18, borderWidth: 1, borderColor: '#334155' },
   modalTitle: { color: '#f8fafc', fontSize: 18, fontWeight: '900' },
   modalSubtitle: { color: '#94a3b8', fontSize: 13, marginTop: 4, marginBottom: 16, fontWeight: '700' },
   fieldLabel: { color: '#cbd5e1', fontSize: 12, fontWeight: '900', marginTop: 10, marginBottom: 6 },
   fieldHint: { color: '#64748b', fontSize: 11, marginTop: 6, lineHeight: 16 },
-  input: { backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155', borderRadius: 10, color: '#f8fafc', fontSize: 16, fontWeight: '800', paddingHorizontal: 12, paddingVertical: 10 },
+  input: { backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155', borderRadius: 0, color: '#f8fafc', fontSize: 16, fontWeight: '800', paddingHorizontal: 12, paddingVertical: 10 },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  modalCancel: { flex: 1, backgroundColor: '#334155', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  modalCancel: { flex: 1, backgroundColor: '#334155', borderRadius: 0, paddingVertical: 12, alignItems: 'center' },
   modalCancelText: { color: '#cbd5e1', fontWeight: '900' },
-  modalSubmit: { flex: 1, backgroundColor: '#38bdf8', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  modalSubmit: { flex: 1, backgroundColor: '#38bdf8', borderRadius: 0, paddingVertical: 12, alignItems: 'center' },
   modalSubmitText: { color: '#0f172a', fontWeight: '900' },
 });

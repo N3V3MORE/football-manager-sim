@@ -44,16 +44,16 @@ export function TransferPlayerCard({
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#1e293b', padding: 12, borderRadius: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  card: { backgroundColor: '#1e293b', padding: 12, borderRadius: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
   cardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   playerTextBlock: { flex: 1, minWidth: 0 },
-  pos: { width: 34, textAlign: 'center', backgroundColor: '#334155', color: '#fff', paddingVertical: 4, borderRadius: 4, fontSize: 10, fontWeight: '900' },
+  pos: { width: 34, textAlign: 'center', backgroundColor: '#334155', color: '#fff', paddingVertical: 4, borderRadius: 0, fontSize: 10, fontWeight: '900' },
   name: { color: '#f8fafc', fontWeight: '700', fontSize: 15 },
   club: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
   cardRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  ratingBox: { backgroundColor: '#cbd5e1', width: 28, height: 28, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+  ratingBox: { backgroundColor: '#cbd5e1', width: 28, height: 28, borderRadius: 0, justifyContent: 'center', alignItems: 'center' },
   rating: { color: '#0f172a', fontWeight: '900', fontSize: 12 },
-  actionBtn: { backgroundColor: '#38bdf8', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+  actionBtn: { backgroundColor: '#38bdf8', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 0 },
   actionBtnDanger: { backgroundColor: '#ef4444' },
   actionText: { color: '#0f172a', fontWeight: '900', fontSize: 12 },
   actionTextDanger: { color: '#fff' },
