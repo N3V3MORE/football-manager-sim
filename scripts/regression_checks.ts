@@ -217,7 +217,7 @@ const checkPromotionRelegation = () => {
     });
   });
 
-  const nextSeason = advanceSeason(data.players, teams, null, []);
+  const nextSeason = advanceSeason(data.players, teams, data.competitions, null, []);
   const nextCounts = Object.values(nextSeason.teams).reduce<Record<string, number>>((acc, team) => {
     acc[team.division] = (acc[team.division] || 0) + 1;
     return acc;

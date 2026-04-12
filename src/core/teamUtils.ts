@@ -1,6 +1,11 @@
 import { Team } from '../models/types';
 
-export const applyMatchResult = (team: Team, goalsFor: number, goalsAgainst: number) => {
+export const applyMatchResult = (
+  team: Team,
+  goalsFor: number,
+  goalsAgainst: number,
+  includeTableStats = true
+) => {
   let points = 0;
   let wins = 0;
   let draws = 0;
@@ -11,6 +16,13 @@ export const applyMatchResult = (team: Team, goalsFor: number, goalsAgainst: num
   else { losses = 1; }
 
   const formToken = wins ? 'W' : draws ? 'D' : 'L';
+  if (!includeTableStats) {
+    return {
+      ...team,
+      form: [...(team.form || []), formToken].slice(-5),
+    };
+  }
+
   return {
     ...team,
     points: team.points + points,

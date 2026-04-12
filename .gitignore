@@ -46,3 +46,8 @@ app-example
 # local simulation outputs
 detailed_season_results.txt
 season_tracking_report.json
+
+# local agent/indexing folders
+.serena/
+.antigravity/
+.stitch/

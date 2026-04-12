@@ -1,32 +1,53 @@
-import { Division, Fixture, Team } from '../models/types';
+import { CompetitionId, CompetitionState, Division, Fixture, LeagueDivision, Team } from '../models/types';
 
-export const DIVISION_ORDER: Division[] = ['Premier League', 'Championship', 'League One', 'League Two'];
+export const DIVISION_ORDER: LeagueDivision[] = ['Premier League', 'Championship', 'League One', 'League Two'];
 export const PROMOTION_COUNT = 3;
 export const RELEGATION_COUNT = 3;
+export const LEAGUE_COMPETITION_BY_DIVISION: Record<LeagueDivision, CompetitionId> = {
+  'Premier League': 'premier-league',
+  Championship: 'championship',
+  'League One': 'league-one',
+  'League Two': 'league-two',
+};
 
-const DIVISION_MAX_WEEKS: Record<Division, number> = {
+const DIVISION_MAX_WEEKS: Record<LeagueDivision, number> = {
   'Premier League': 38,
   'Championship': 46,
   'League One': 46,
   'League Two': 46,
 };
-export const getDivisionMaxWeeks = (division: Division) => DIVISION_MAX_WEEKS[division] || 38;
+export const getDivisionMaxWeeks = (division: LeagueDivision) => DIVISION_MAX_WEEKS[division] || 38;
 
-const DIVISION_TEAM_COUNTS: Record<Division, number> = {
+const DIVISION_TEAM_COUNTS: Record<LeagueDivision, number> = {
   'Premier League': 20,
   'Championship': 24,
   'League One': 24,
   'League Two': 24,
 };
-export const getDivisionTeamCount = (division: Division) => DIVISION_TEAM_COUNTS[division] || 20;
+export const getDivisionTeamCount = (division: LeagueDivision) => DIVISION_TEAM_COUNTS[division] || 20;
 
-export const getSeasonWeekLimit = (fixtures: Record<string, Fixture>) => (
-  Object.values(fixtures).reduce((max, fixture) => Math.max(max, fixture.week), 0)
+export const isLeagueDivision = (division: Division): division is LeagueDivision => (
+  DIVISION_ORDER.includes(division as LeagueDivision)
 );
+
+export const getSeasonWeekLimit = (
+  fixtures: Record<string, Fixture>,
+  competitions?: Record<string, CompetitionState>
+) => {
+  const fixtureLimit = Object.values(fixtures).reduce((max, fixture) => Math.max(max, fixture.week), 0);
+  const competitionLimit = competitions
+    ? Object.values(competitions).reduce((max, competition) => (
+      Math.max(max, ...competition.rounds.map(round => round.week))
+    ), 0)
+    : 0;
+  return Math.max(fixtureLimit, competitionLimit);
+};
 
 export const sortTeamsByDivisionAndName = (teams: Team[]) => (
   [...teams].sort((a, b) => {
-    const divisionDelta = DIVISION_ORDER.indexOf(a.division) - DIVISION_ORDER.indexOf(b.division);
+    const leftDivisionIndex = isLeagueDivision(a.division) ? DIVISION_ORDER.indexOf(a.division) : DIVISION_ORDER.length;
+    const rightDivisionIndex = isLeagueDivision(b.division) ? DIVISION_ORDER.indexOf(b.division) : DIVISION_ORDER.length;
+    const divisionDelta = leftDivisionIndex - rightDivisionIndex;
     if (divisionDelta !== 0) return divisionDelta;
     return a.name.localeCompare(b.name);
   })
@@ -44,8 +65,9 @@ export const sortTeamsByTable = (teams: Team[]) => (
 
 export const buildRoundRobinFixtures = (
   teamIds: string[],
-  division: Division,
-  fixtureCounterStart = 1
+  division: LeagueDivision,
+  fixtureCounterStart = 1,
+  weekSlots?: number[]
 ) => {
   const fixtures: Record<string, Fixture> = {};
   const hasOddTeamCount = teamIds.length % 2 !== 0;
@@ -71,10 +93,16 @@ export const buildRoundRobinFixtures = (
   firstHalf.forEach(fixture => {
     const homeId = `F${fixtureCounter++}`;
     const awayId = `F${fixtureCounter++}`;
+    const firstLegWeek = weekSlots?.[fixture.week - 1] ?? fixture.week;
+    const secondLegWeek = weekSlots?.[fixture.week + rounds - 1] ?? fixture.week + rounds;
     fixtures[homeId] = {
       id: homeId,
-      week: fixture.week,
+      week: firstLegWeek,
       division,
+      competitionId: LEAGUE_COMPETITION_BY_DIVISION[division],
+      competitionType: 'league',
+      round: 'league',
+      isKnockout: false,
       homeTeamId: fixture.home,
       awayTeamId: fixture.away,
       homeScore: null,
@@ -83,8 +111,12 @@ export const buildRoundRobinFixtures = (
     };
     fixtures[awayId] = {
       id: awayId,
-      week: fixture.week + rounds,
+      week: secondLegWeek,
       division,
+      competitionId: LEAGUE_COMPETITION_BY_DIVISION[division],
+      competitionType: 'league',
+      round: 'league',
+      isKnockout: false,
       homeTeamId: fixture.away,
       awayTeamId: fixture.home,
       homeScore: null,

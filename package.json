@@ -16,7 +16,8 @@
     "test:regression": "tsx -r ./scripts/mock-env.js scripts/regression_checks.ts",
     "check:save": "tsx -r ./scripts/mock-env.js scripts/save_integrity_check.ts",
     "test:ci": "tsx -r ./scripts/mock-env.js scripts/ci_regression.ts",
-    "test:news": "tsx -r ./scripts/mock-env.js scripts/test_news_output.ts"
+    "test:news": "tsx -r ./scripts/mock-env.js scripts/test_news_output.ts",
+    "gate:release": "npx tsc --noEmit && npm run -s lint && npm run -s test:ci && npm run -s test:regression && npm run -s check:save"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

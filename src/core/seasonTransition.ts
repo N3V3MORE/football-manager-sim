@@ -1,15 +1,23 @@
-import { BoardObjective, Division, Fixture, Player, Team } from '../models/types';
+import { BoardObjective, CompetitionState, Division, Fixture, LeagueDivision, Player, Team } from '../models/types';
 import {
-  buildRoundRobinFixtures,
   DIVISION_ORDER,
   PROMOTION_COUNT,
   RELEGATION_COUNT,
-  sortTeamsByDivisionAndName,
   sortTeamsByTable,
 } from './leagueUtils';
 import { getRenewalOffer, shouldRenewContract } from './contractUtils';
-import { removePlayerFromTeamSelections } from './formationMapUtils';
-import { generateBoardObjectives } from '../utils/initGame';
+import { rebuildFormationMap, removePlayerFromTeamSelections } from './formationMapUtils';
+import { getSlotsForFormation } from '../constants/formations';
+import { buildSeasonCompetitionBundle, getSeasonEuropeQualifiedTeamIds } from './competitionEngine';
+import {
+  buildBoardObjectives,
+  buildBoardProfile,
+  clampBoardMetric,
+  runBoardReview,
+  shouldReplaceManagerAfterReview,
+} from './boardEngine';
+import { appointReplacementManager, refreshManagerForNewSeason } from './managerUtils';
+import { buildQuickSimLineup } from './lineupEngine';
 
 const resetTeamStats = (team: Team): Team => ({
   ...team,
@@ -24,11 +32,20 @@ const resetTeamStats = (team: Team): Team => ({
   transferSpend: 0,
 });
 
-const getDivisionTeams = (teams: Record<string, Team>, division: Division) => (
+const getDivisionTeams = (teams: Record<string, Team>, division: LeagueDivision) => (
   sortTeamsByTable(Object.values(teams).filter(team => team.division === division))
 );
 
 const formatTeamList = (teams: Team[]) => teams.map(team => team.name).join(', ');
+
+const getActiveCompetitionIdsForTeam = (
+  teamId: string,
+  competitions: Record<string, CompetitionState>
+) => (
+  Object.values(competitions)
+    .filter(competition => competition.entrantTeamIds.includes(teamId))
+    .map(competition => competition.id)
+);
 
 const resetPlayerSeasonStats = (player: Player): Player => ({
   ...player,
@@ -59,15 +76,47 @@ const findContractDestinationTeamId = (
     })[0]?.id || null;
 };
 
+const reseedTeamLineupForNewSeason = (
+  team: Team,
+  players: Record<string, Player>
+): { team: Team; players: Record<string, Player> } => {
+  const updatedPlayers = { ...players };
+  const lineupUpdates = buildQuickSimLineup(team.id, updatedPlayers, team.activeFormation);
+
+  Object.entries(lineupUpdates).forEach(([playerId, updates]) => {
+    const player = updatedPlayers[playerId];
+    if (!player) return;
+    updatedPlayers[playerId] = { ...player, ...updates };
+  });
+
+  const starters = Object.values(updatedPlayers).filter(player => player.teamId === team.id && player.isStarting);
+  const formationMap = rebuildFormationMap(
+    getSlotsForFormation(team.activeFormation),
+    starters,
+    team.formationMap || {}
+  );
+
+  return {
+    team: {
+      ...team,
+      formationMap,
+      lastStartingXI: starters.map(player => player.id).slice(0, 11),
+    },
+    players: updatedPlayers,
+  };
+};
+
 export const advanceSeason = (
   players: Record<string, Player>,
   teams: Record<string, Team>,
+  competitions: Record<string, CompetitionState>,
   userTeamId: string | null,
   news: string[]
 ): {
   players: Record<string, Player>;
   teams: Record<string, Team>;
   fixtures: Record<string, Fixture>;
+  competitions: Record<string, CompetitionState>;
   currentWeek: number;
   news: string[];
   generatedNews: string[];
@@ -137,7 +186,7 @@ export const advanceSeason = (
   );
   const divisionTables = Object.fromEntries(
     DIVISION_ORDER.map(division => [division, getDivisionTeams(contractAdjustedTeams, division)])
-  ) as Record<Division, Team[]>;
+  ) as Record<LeagueDivision, Team[]>;
   const nextDivisionByTeamId: Record<string, Division> = Object.fromEntries(
     Object.values(contractAdjustedTeams).map(team => [team.id, team.division])
   ) as Record<string, Division>;
@@ -166,39 +215,96 @@ export const advanceSeason = (
     }
   });
 
-  const resetTeams = Object.fromEntries(
+  const reviewedTeams = Object.fromEntries(
     Object.entries(contractAdjustedTeams).map(([teamId, team]) => {
+      const currentBoardProfile = team.boardProfile || buildBoardProfile(
+        team.clubClass || 'C',
+        team.division,
+        Boolean(team.isExternal)
+      );
+      const reviewObjectives = buildBoardObjectives(
+        team.clubClass || 'C',
+        team.division,
+        currentBoardProfile,
+        getActiveCompetitionIdsForTeam(teamId, competitions)
+      );
+      const review = runBoardReview(
+        { ...team, boardProfile: currentBoardProfile },
+        contractAdjustedTeams,
+        reviewObjectives,
+        { isSeasonComplete: true, competitions }
+      );
       const nextDivision = nextDivisionByTeamId[teamId] || team.division;
-      return [
-        teamId,
-        resetTeamStats({ ...team, division: nextDivision }),
-      ];
+      const nextBoardProfile = buildBoardProfile(team.clubClass || 'C', nextDivision, Boolean(team.isExternal));
+
+      let nextTeam: Team = {
+        ...team,
+        division: nextDivision,
+        boardProfile: nextBoardProfile,
+        boardApproval: review.nextApproval,
+        manager: refreshManagerForNewSeason(review.nextManager, nextBoardProfile, nextDivision),
+      };
+
+      if (teamId !== userTeamId) {
+        const replacementDecision = shouldReplaceManagerAfterReview(nextTeam, review);
+        if (replacementDecision.shouldReplace) {
+          const previousManagerName = team.manager.name;
+          const replacementManager = appointReplacementManager(nextTeam, nextDivision);
+          nextTeam = {
+            ...nextTeam,
+            manager: replacementManager,
+            boardApproval: clampBoardMetric(Math.max(review.nextApproval, 42) + 6),
+          };
+          seasonNews.push(
+            `${team.name} part ways with ${previousManagerName} after the board judged that ${replacementDecision.reason}. ${replacementManager.name} takes charge.`
+          );
+        }
+      }
+
+      return [teamId, resetTeamStats(nextTeam)];
     })
+  ) as Record<string, Team>;
+
+  let lineupSeededPlayers = nextPlayers;
+  const lineupSeededTeams = Object.fromEntries(
+    Object.entries(reviewedTeams).map(([teamId, team]) => {
+      const seeded = reseedTeamLineupForNewSeason(team, lineupSeededPlayers);
+      lineupSeededPlayers = seeded.players;
+      return [teamId, seeded.team];
+    })
+  ) as Record<string, Team>;
+
+  const europeQualifiedTeamIds = getSeasonEuropeQualifiedTeamIds(contractAdjustedTeams, competitions);
+  if (europeQualifiedTeamIds.length > 0) {
+    const qualifierNames = europeQualifiedTeamIds
+      .map(teamId => contractAdjustedTeams[teamId]?.name)
+      .filter((name): name is string => Boolean(name));
+    seasonNews.push(`European places secured: ${qualifierNames.join(', ')}.`);
+  }
+
+  const currentSeasonNumber = Object.values(competitions).reduce((max, competition) => (
+    Math.max(max, competition.season || 0)
+  ), 0);
+  const nextSeasonBundle = buildSeasonCompetitionBundle(
+    lineupSeededTeams,
+    currentSeasonNumber + 1,
+    europeQualifiedTeamIds
   );
 
-  const nextFixtures: Record<string, Fixture> = {};
-  let fixtureCounter = 1;
-  DIVISION_ORDER.forEach(division => {
-    const divisionTeamIds = sortTeamsByDivisionAndName(
-      Object.values(resetTeams).filter(team => team.division === division)
-    ).map(team => team.id);
-    const generated = buildRoundRobinFixtures(divisionTeamIds, division, fixtureCounter);
-    Object.assign(nextFixtures, generated.fixtures);
-    fixtureCounter = generated.nextCounter;
-  });
-
-  const boardObjectives = userTeamId && resetTeams[userTeamId]
-    ? generateBoardObjectives(
-        resetTeams[userTeamId].clubClass || 'C',
-        resetTeams[userTeamId].name,
-        resetTeams[userTeamId].division
+  const boardObjectives = userTeamId && lineupSeededTeams[userTeamId] && lineupSeededTeams[userTeamId].division !== 'Continental'
+    ? buildBoardObjectives(
+        lineupSeededTeams[userTeamId].clubClass || 'C',
+        lineupSeededTeams[userTeamId].division as LeagueDivision,
+        lineupSeededTeams[userTeamId].boardProfile,
+        getActiveCompetitionIdsForTeam(userTeamId, nextSeasonBundle.competitions)
       )
     : [];
 
   return {
-    players: nextPlayers,
-    teams: resetTeams,
-    fixtures: nextFixtures,
+    players: lineupSeededPlayers,
+    teams: lineupSeededTeams,
+    fixtures: nextSeasonBundle.fixtures,
+    competitions: nextSeasonBundle.competitions,
     currentWeek: 1,
     boardObjectives,
     generatedNews: [...seasonNews, 'A new season has begun.'],

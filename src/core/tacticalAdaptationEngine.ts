@@ -118,13 +118,15 @@ export const applyTacticalAdaptation = (
   const random = resolveRandom(rng);
   Object.values(updatedTeams).forEach(team => {
     if (excludedTeamIds.has(team.id)) return;
-    if (team.played < 6 || team.played % 3 !== 0) return;
+    if (team.played < 4 || team.played % 2 !== 0) return;
 
     const recentForm = (team.form || []).slice(-5);
     const wins = recentForm.filter(token => token === 'W').length;
+    const draws = recentForm.filter(token => token === 'D').length;
     const losses = recentForm.filter(token => token === 'L').length;
     const goalsForPerGame = team.played > 0 ? team.goalsFor / team.played : 0;
     const goalsAgainstPerGame = team.played > 0 ? team.goalsAgainst / team.played : 0;
+    const pressureScore = team.manager?.pressureScore || 40;
     const nextTactics = { ...team.tactics };
     let changed = false;
     let adaptationChance = 0;
@@ -142,27 +144,30 @@ export const applyTacticalAdaptation = (
       changed = true;
     };
 
-    if (losses >= 3 && goalsAgainstPerGame > 1.75) {
+    if ((losses >= 2 && goalsAgainstPerGame > 1.7) || goalsAgainstPerGame > 2.1) {
       if (goalsForPerGame < 1.2) {
         nudgeMentality('Balanced');
         if (nextTactics.defensiveLine === 'High') { nextTactics.defensiveLine = 'Standard'; changed = true; }
         if (nextTactics.pressing === 'High') { nextTactics.pressing = 'Medium'; changed = true; }
         if (nextTactics.tempo === 'Fast') { nextTactics.tempo = 'Normal'; changed = true; }
-        adaptationChance = 0.8;
+        adaptationChance = pressureScore >= 60 ? 0.86 : 0.78;
       } else {
         nudgeMentality('Defensive');
         if (nextTactics.defensiveLine !== 'Deep') { nextTactics.defensiveLine = 'Deep'; changed = true; }
         if (nextTactics.pressing === 'High') { nextTactics.pressing = 'Medium'; changed = true; }
         if (nextTactics.tempo === 'Fast') { nextTactics.tempo = 'Normal'; changed = true; }
-        adaptationChance = 0.72;
+        adaptationChance = pressureScore >= 60 ? 0.82 : 0.72;
       }
       formationMode = 'defense';
-    } else if (losses >= 3 && goalsForPerGame < 1.1) {
+    } else if (
+      (losses >= 2 && goalsForPerGame < 1.1) ||
+      (wins === 0 && losses + draws >= 4 && goalsForPerGame < 1.25)
+    ) {
       nudgeMentality('Attacking');
       if (nextTactics.tempo === 'Slow') { nextTactics.tempo = 'Normal'; changed = true; }
       if (nextTactics.passingStyle === 'Short') { nextTactics.passingStyle = 'Mixed'; changed = true; }
       if (nextTactics.pressing === 'None') { nextTactics.pressing = 'Medium'; changed = true; }
-      adaptationChance = 0.72;
+      adaptationChance = pressureScore >= 60 ? 0.8 : 0.7;
       formationMode = 'attack';
     } else if (wins >= 3 && losses <= 1 && goalsForPerGame > 1.6 && goalsAgainstPerGame < 1.3) {
       nudgeMentality('Balanced');
@@ -170,6 +175,18 @@ export const applyTacticalAdaptation = (
       if (nextTactics.pressing === 'None') { nextTactics.pressing = 'Medium'; changed = true; }
       adaptationChance = 0.5;
       formationMode = 'stable';
+    } else if (pressureScore >= 58 && losses >= 2) {
+      if (goalsAgainstPerGame >= goalsForPerGame) {
+        nudgeMentality('Balanced');
+        if (nextTactics.defensiveLine === 'High') { nextTactics.defensiveLine = 'Standard'; changed = true; }
+        if (nextTactics.tempo === 'Fast') { nextTactics.tempo = 'Normal'; changed = true; }
+        formationMode = 'defense';
+      } else {
+        nudgeMentality('Attacking');
+        if (nextTactics.tempo === 'Slow') { nextTactics.tempo = 'Normal'; changed = true; }
+        formationMode = 'attack';
+      }
+      adaptationChance = 0.6;
     }
 
     const canApplyTactics = changed && random() < adaptationChance;
@@ -183,12 +200,29 @@ export const applyTacticalAdaptation = (
 
     const shouldTryFormationChange = Boolean(
       formationMode &&
-      (formationMode === 'defense' ? team.played % 2 === 0 : team.played % 4 === 0)
+      (
+        formationMode === 'defense'
+          ? team.played % 2 === 0
+          : formationMode === 'attack'
+            ? team.played % 3 === 0
+            : team.played % 4 === 0
+      )
     );
     if (shouldTryFormationChange) {
       const teamPlayers = Object.values(updatedPlayers)
         .filter(player => player.teamId === team.id && player.matchesSuspended === 0);
       const candidate = pickAdaptiveFormation(nextTeam, teamPlayers, formationMode!, rng);
+      if (candidate && candidate !== nextTeam.activeFormation) {
+        nextTeam = { ...nextTeam, activeFormation: candidate };
+        teamChanged = true;
+      }
+    }
+
+    if (!teamChanged && pressureScore >= 68 && team.played % 4 === 0 && random() < 0.24) {
+      const teamPlayers = Object.values(updatedPlayers)
+        .filter(player => player.teamId === team.id && player.matchesSuspended === 0);
+      const pressureMode: 'attack' | 'defense' = goalsAgainstPerGame >= goalsForPerGame ? 'defense' : 'attack';
+      const candidate = pickAdaptiveFormation(nextTeam, teamPlayers, pressureMode, rng);
       if (candidate && candidate !== nextTeam.activeFormation) {
         nextTeam = { ...nextTeam, activeFormation: candidate };
         teamChanged = true;

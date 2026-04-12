@@ -1,11 +1,37 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CareerRecord, GameState, InboxMessage, Player, Formation, Team, TeamTactics } from '../models/types';
-import { initGameData, generateBoardObjectives } from '../utils/initGame';
+import {
+  BoardObjective,
+  CareerRecord,
+  CompetitionState,
+  Fixture,
+  Formation,
+  GameState,
+  InboxMessage,
+  LeagueDivision,
+  Manager,
+  Player,
+  Team,
+  TeamTactics,
+} from '../models/types';
+import { initGameData } from '../utils/initGame';
 import { getSlotsForFormation } from '../constants/formations';
 import { ENGINE_CONFIG } from '../config/engineConfig';
-import { getSeasonWeekLimit } from '../core/leagueUtils';
+import {
+  resolveCompetitionProgression,
+} from '../core/competitionEngine';
+import {
+  buildBoardObjectives,
+  buildBoardProfile,
+  clampBoardMetric,
+  runBoardReview,
+} from '../core/boardEngine';
+import {
+  DIVISION_ORDER,
+  LEAGUE_COMPETITION_BY_DIVISION,
+  getSeasonWeekLimit,
+} from '../core/leagueUtils';
 import {
   simulatePossession,
   quickSimMatch,
@@ -25,6 +51,7 @@ import {
   evaluateSackingRisk,
   generateJobOfferCandidates,
 } from '../core/careerEngine';
+import { buildGenericManager, deriveInitialBoardApproval, hydrateManagerContext } from '../core/managerUtils';
 import { rebuildFormationMap, removePlayerFromTeamSelections } from '../core/formationMapUtils';
 import { defaultRandomGenerator } from '../core/random';
 import { buildStarterMinuteMap } from '../core/minuteMapUtils';
@@ -39,7 +66,6 @@ import {
   removeLiveMatchFixture,
   updateTeamStats,
 } from './liveMatchHelpers';
-import { clampBoardMetric, evaluateBoardObjectives, getFormApprovalDelta } from './boardObjectiveHelpers';
 import {
   buildLegacyInboxMessages,
   generateAssistantWeekMessages,
@@ -117,6 +143,7 @@ const DEFAULT_GAME_STATE: GameState = {
   teams: {},
   players: {},
   fixtures: {},
+  competitions: {},
   news: [],
   inboxMessages: [],
   boardObjectives: [],
@@ -161,16 +188,78 @@ const clearContractWarningMessages = (messages: InboxMessage[], playerId: string
   ))
 );
 
+const buildLegacyLeagueCompetitions = (
+  teams: Record<string, Team>,
+  fixtures: Record<string, Fixture>,
+  season: number
+): Record<string, CompetitionState> => Object.fromEntries(
+  DIVISION_ORDER
+    .map((division): [string, CompetitionState] | null => {
+      const entrantTeamIds = Object.values(teams)
+        .filter(team => team.division === division)
+        .map(team => team.id);
+      if (entrantTeamIds.length === 0) return null;
+      const fixtureIds = Object.values(fixtures)
+        .filter(fixture => fixture.division === division)
+        .map(fixture => fixture.id);
+      const competitionId = LEAGUE_COMPETITION_BY_DIVISION[division];
+      return [
+        competitionId,
+        {
+          id: competitionId,
+          name: division,
+          shortName: division === 'Premier League' ? 'PL' : division,
+          type: 'league',
+          season,
+          leagueDivision: division,
+          entrantTeamIds,
+          rounds: [{
+            key: 'league',
+            label: 'League Season',
+            week: 1,
+            entrantTeamIds,
+            fixtureIds,
+            byeTeamIds: [],
+            winnerTeamIds: [],
+            completed: false,
+          }],
+          currentRound: 'league',
+          eliminatedTeamIds: [],
+        },
+      ];
+    })
+    .filter((entry): entry is [string, CompetitionState] => Boolean(entry))
+);
+
 const sanitizePersistedState = (state: Partial<GameStore>): Partial<GameStore> => {
   const teams = state.teams && typeof state.teams === 'object'
     ? Object.fromEntries(
       Object.entries(state.teams).map(([teamId, team]) => {
         const typedTeam = (team && typeof team === 'object' ? team : {}) as Partial<Team>;
+        const division = (typedTeam.division || 'Premier League') as Team['division'];
+        const boardProfile = typedTeam.boardProfile && typeof typedTeam.boardProfile === 'object'
+          ? typedTeam.boardProfile
+          : buildBoardProfile(typedTeam.clubClass || 'C', division, Boolean(typedTeam.isExternal));
+        const managerSource = typedTeam.manager && typeof typedTeam.manager === 'object'
+          ? typedTeam.manager as Manager
+          : buildGenericManager(
+              typedTeam.name || teamId,
+              teamId,
+              division,
+              60,
+              boardProfile
+            );
+        const manager = hydrateManagerContext(managerSource, boardProfile, division);
         return [
           teamId,
           {
             ...typedTeam,
+            boardProfile,
+            manager,
             transferSpend: Number.isFinite(typedTeam.transferSpend) ? typedTeam.transferSpend : 0,
+            boardApproval: Number.isFinite(typedTeam.boardApproval)
+              ? clampBoardMetric(typedTeam.boardApproval!)
+              : deriveInitialBoardApproval(manager, boardProfile),
           },
         ];
       })
@@ -207,13 +296,46 @@ const sanitizePersistedState = (state: Partial<GameStore>): Partial<GameStore> =
     seasonHistory: Array.isArray(rawCareer.seasonHistory) ? rawCareer.seasonHistory : [],
     consecutiveLowApprovalWeeks: Number.isFinite(rawCareer.consecutiveLowApprovalWeeks) ? rawCareer.consecutiveLowApprovalWeeks! : 0,
   };
+  const fixtures = state.fixtures && typeof state.fixtures === 'object'
+    ? Object.fromEntries(
+      Object.entries(state.fixtures).map(([fixtureId, fixture]) => {
+        const typedFixture = (fixture && typeof fixture === 'object' ? fixture : {}) as Partial<Fixture>;
+        const division = typedFixture.division as LeagueDivision | undefined;
+        return [
+          fixtureId,
+          {
+            ...typedFixture,
+            id: typedFixture.id || fixtureId,
+            competitionId: typedFixture.competitionId || (division ? LEAGUE_COMPETITION_BY_DIVISION[division] : 'premier-league'),
+            competitionType: typedFixture.competitionType || 'league',
+            round: typedFixture.round || 'league',
+            isKnockout: Boolean(typedFixture.isKnockout),
+            isPlayed: Boolean(typedFixture.isPlayed),
+            homeScore: typedFixture.homeScore ?? null,
+            awayScore: typedFixture.awayScore ?? null,
+          },
+        ];
+      })
+    ) as Record<string, Fixture>
+    : {};
+  const competitions = state.competitions && typeof state.competitions === 'object'
+    ? state.competitions as Record<string, CompetitionState>
+    : buildLegacyLeagueCompetitions(teams, fixtures, careerRecord.seasonsManaged + 1);
+  const userTeamId = typeof state.userTeamId === 'string' ? state.userTeamId : null;
+  const migratedBoardObjectives = userTeamId && teams[userTeamId]
+    ? reconcileBoardObjectives(
+        state.boardObjectives,
+        buildManagedTeamObjectives(teams[userTeamId], competitions)
+      )
+    : [];
 
   return {
   ...state,
   currentWeek: Number.isFinite(state.currentWeek) && (state.currentWeek || 0) > 0 ? state.currentWeek : 1,
   teams,
   players,
-  fixtures: state.fixtures && typeof state.fixtures === 'object' ? state.fixtures : {},
+  fixtures,
+  competitions,
   news: Array.isArray(state.news) ? state.news : [],
   inboxMessages: Array.isArray(state.inboxMessages)
     ? state.inboxMessages as InboxMessage[]
@@ -221,7 +343,7 @@ const sanitizePersistedState = (state: Partial<GameStore>): Partial<GameStore> =
       Array.isArray(state.news) ? state.news : [],
       Number.isFinite(state.currentWeek) && (state.currentWeek || 0) > 0 ? state.currentWeek || 1 : 1
     ),
-  boardObjectives: Array.isArray(state.boardObjectives) ? state.boardObjectives : [],
+  boardObjectives: migratedBoardObjectives,
   liveMatches: state.liveMatches && typeof state.liveMatches === 'object' ? state.liveMatches : {},
   careerRecord,
   };
@@ -241,6 +363,85 @@ const updateTransferListingState = (
   };
 };
 
+const getActiveCompetitionIdsForTeam = (
+  teamId: string,
+  competitions: Record<string, CompetitionState>
+) => (
+  Object.values(competitions)
+    .filter(competition => competition.entrantTeamIds.includes(teamId))
+    .map(competition => competition.id)
+);
+
+const buildManagedTeamObjectives = (
+  team: Team | undefined,
+  competitions: Record<string, CompetitionState> = {}
+) => {
+  if (!team || team.division === 'Continental') return [];
+  return buildBoardObjectives(
+    team.clubClass || 'C',
+    team.division as LeagueDivision,
+    team.boardProfile || buildBoardProfile(team.clubClass || 'C', team.division, Boolean(team.isExternal)),
+    getActiveCompetitionIdsForTeam(team.id, competitions)
+  );
+};
+
+const getSackingApprovalThreshold = (team: Team) => (
+  team.boardProfile.patience === 'low'
+    ? 28
+    : team.boardProfile.patience === 'high'
+      ? 18
+      : 22
+);
+
+const getBoardObjectiveMigrationKey = (
+  objective: Pick<BoardObjective, 'type' | 'target' | 'competitionId' | 'targetRound'>
+) => [
+  objective.type,
+  objective.target,
+  objective.competitionId || '',
+  objective.targetRound || '',
+].join('|');
+
+const reconcileBoardObjectives = (
+  persistedObjectives: unknown,
+  nextObjectives: BoardObjective[]
+): BoardObjective[] => {
+  if (!Array.isArray(persistedObjectives) || nextObjectives.length === 0) return nextObjectives;
+
+  const persistedByKey = new Map<string, Partial<BoardObjective>>();
+  persistedObjectives.forEach(objective => {
+    if (!objective || typeof objective !== 'object') return;
+    const typedObjective = objective as Partial<BoardObjective>;
+    const { target } = typedObjective;
+    if (typeof typedObjective.type !== 'string' || typeof target !== 'number' || !Number.isFinite(target)) return;
+
+    const key = getBoardObjectiveMigrationKey({
+      type: typedObjective.type as BoardObjective['type'],
+      target,
+      competitionId: typedObjective.competitionId,
+      targetRound: typedObjective.targetRound,
+    });
+    if (!persistedByKey.has(key)) {
+      persistedByKey.set(key, typedObjective);
+    }
+  });
+
+  return nextObjectives.map(objective => {
+    const persistedObjective = persistedByKey.get(getBoardObjectiveMigrationKey(objective));
+    if (!persistedObjective) return objective;
+
+    return {
+      ...objective,
+      id: typeof persistedObjective.id === 'string' && persistedObjective.id.length > 0
+        ? persistedObjective.id
+        : objective.id,
+      met: typeof persistedObjective.met === 'boolean'
+        ? persistedObjective.met
+        : objective.met,
+    };
+  });
+};
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -249,6 +450,7 @@ export const useGameStore = create<GameStore>()(
       teams: {},
       players: {},
       fixtures: {},
+      competitions: {},
       news: [],
       inboxMessages: [],
       boardObjectives: [],
@@ -270,8 +472,7 @@ export const useGameStore = create<GameStore>()(
         });
 
         const userTeam = data.teams[actualTeamId];
-        const teamClass = data.teamClasses[actualTeamId] || 'C';
-        const objectives = userTeam ? generateBoardObjectives(teamClass, userTeam.name, userTeam.division) : [];
+        const objectives = buildManagedTeamObjectives(userTeam, data.competitions);
         const initialNews = ['Season begins! The Premier League simulation is underway.'];
         const inboxMessages = mergeInboxMessages(
           [],
@@ -293,6 +494,7 @@ export const useGameStore = create<GameStore>()(
           teams: data.teams,
           players: data.players,
           fixtures: data.fixtures,
+          competitions: data.competitions,
           boardObjectives: objectives,
           news: initialNews,
           inboxMessages,
@@ -393,11 +595,7 @@ export const useGameStore = create<GameStore>()(
             const { teamId } = message.action.payload;
             const nextTeam = state.teams[teamId];
             if (!nextTeam) return state;
-            const boardObjectives = generateBoardObjectives(
-              nextTeam.clubClass || 'C',
-              nextTeam.name,
-              nextTeam.division
-            );
+            const boardObjectives = buildManagedTeamObjectives(nextTeam, state.competitions);
             const carriedMessages = pruneInboxMessagesForManagedTeam(
               state.inboxMessages.filter(item => item.category !== 'career_job_offer'),
               teamId
@@ -434,6 +632,8 @@ export const useGameStore = create<GameStore>()(
         set((state) => {
           const previousPlayers = state.players;
           const { players, teams, fixture } = quickSimMatch(fixtureId, state.players, state.teams, state.fixtures, state.userTeamId);
+          const nextFixtures = { ...state.fixtures, [fixtureId]: fixture };
+          const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, teams);
           const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);
           const postMatchReport = generatePostMatchReportMessage({
             currentWeek: state.currentWeek,
@@ -447,11 +647,19 @@ export const useGameStore = create<GameStore>()(
           return {
             players,
             teams,
-            fixtures: { ...state.fixtures, [fixtureId]: fixture },
+            fixtures: competitionProgression.fixtures,
+            competitions: competitionProgression.competitions,
+            news: competitionProgression.generatedNews.length > 0
+              ? [...competitionProgression.generatedNews, ...state.news].slice(0, 20)
+              : state.news,
             liveMatches,
-            inboxMessages: postMatchReport
-              ? mergeInboxMessages(state.inboxMessages, [postMatchReport])
-              : state.inboxMessages,
+            inboxMessages: mergeInboxMessages(
+              state.inboxMessages,
+              [
+                ...(postMatchReport ? [postMatchReport] : []),
+                ...generateSystemInboxMessages(state.currentWeek, competitionProgression.generatedNews),
+              ]
+            ),
           };
         });
       },
@@ -659,13 +867,42 @@ export const useGameStore = create<GameStore>()(
           applyMatchInjuries(homeParticipants, homeMinuteMap, updatedPlayers, rng);
           applyMatchInjuries(awayParticipants, awayMinuteMap, updatedPlayers, rng);
 
-          const updatedFixture = { ...fixture, isPlayed: true };
+          let winnerTeamId: string | undefined;
+          let resolution: Fixture['resolution'] | undefined;
+          if (fixture.isKnockout) {
+            if (hScore === aScore) {
+              const homePenaltyEdge = homeTeamStarters.reduce((sum, player) => sum + player.overallRating, 0) + 25;
+              const awayPenaltyEdge = awayTeamStarters.reduce((sum, player) => sum + player.overallRating, 0);
+              const totalEdge = Math.max(1, homePenaltyEdge + awayPenaltyEdge);
+              winnerTeamId = (rng.next() * totalEdge) < homePenaltyEdge ? homeTeam.id : awayTeam.id;
+              resolution = 'penalties';
+            } else {
+              winnerTeamId = hScore > aScore ? homeTeam.id : awayTeam.id;
+              resolution = 'regular';
+            }
+          }
+
+          const updatedFixture = {
+            ...fixture,
+            isPlayed: true,
+            winnerTeamId,
+            resolution,
+          };
+          const includeTableStats = fixture.competitionType === 'league';
 
           const updatedTeams = {
             ...state.teams,
-            [homeTeam.id]: { ...updateTeamStats(homeTeam, hScore, aScore), lastStartingXI: homeTeamStarters.map(p => p.id) },
-            [awayTeam.id]: { ...updateTeamStats(awayTeam, aScore, hScore), lastStartingXI: awayTeamStarters.map(p => p.id) },
+            [homeTeam.id]: {
+              ...updateTeamStats(homeTeam, hScore, aScore, includeTableStats),
+              lastStartingXI: homeTeamStarters.map(p => p.id),
+            },
+            [awayTeam.id]: {
+              ...updateTeamStats(awayTeam, aScore, hScore, includeTableStats),
+              lastStartingXI: awayTeamStarters.map(p => p.id),
+            },
           };
+          const nextFixtures = { ...state.fixtures, [fixtureId]: updatedFixture };
+          const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, updatedTeams);
           const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);
           const postMatchReport = generatePostMatchReportMessage({
             currentWeek: state.currentWeek,
@@ -677,13 +914,21 @@ export const useGameStore = create<GameStore>()(
           });
 
           return {
-            fixtures: { ...state.fixtures, [fixtureId]: updatedFixture },
+            fixtures: competitionProgression.fixtures,
+            competitions: competitionProgression.competitions,
             teams: updatedTeams,
             players: updatedPlayers,
+            news: competitionProgression.generatedNews.length > 0
+              ? [...competitionProgression.generatedNews, ...state.news].slice(0, 20)
+              : state.news,
             liveMatches,
-            inboxMessages: postMatchReport
-              ? mergeInboxMessages(state.inboxMessages, [postMatchReport])
-              : state.inboxMessages,
+            inboxMessages: mergeInboxMessages(
+              state.inboxMessages,
+              [
+                ...(postMatchReport ? [postMatchReport] : []),
+                ...generateSystemInboxMessages(state.currentWeek, competitionProgression.generatedNews),
+              ]
+            ),
           };
         });
       },
@@ -697,8 +942,10 @@ export const useGameStore = create<GameStore>()(
           let updatedPlayers = state.players;
           let updatedTeams = state.teams;
           let updatedFixtures = state.fixtures;
+          let updatedCompetitions = state.competitions;
           let updatedLiveMatches = state.liveMatches || {};
           let inboxMessages = state.inboxMessages;
+          let competitionNews: string[] = [];
 
           weekFixtures.forEach(fix => {
             const previousPlayers = updatedPlayers;
@@ -725,11 +972,25 @@ export const useGameStore = create<GameStore>()(
               inboxMessages = mergeInboxMessages(inboxMessages, [postMatchReport]);
             }
           });
+          const competitionProgression = resolveCompetitionProgression(updatedFixtures, updatedCompetitions, updatedTeams);
+          updatedFixtures = competitionProgression.fixtures;
+          updatedCompetitions = competitionProgression.competitions;
+          competitionNews = competitionProgression.generatedNews;
+          if (competitionNews.length > 0) {
+            inboxMessages = mergeInboxMessages(
+              inboxMessages,
+              generateSystemInboxMessages(state.currentWeek, competitionNews)
+            );
+          }
 
           return {
             players: updatedPlayers,
             teams: updatedTeams,
             fixtures: updatedFixtures,
+            competitions: updatedCompetitions,
+            news: competitionNews.length > 0
+              ? [...competitionNews, ...state.news].slice(0, 20)
+              : state.news,
             liveMatches: updatedLiveMatches,
             inboxMessages,
           };
@@ -778,9 +1039,21 @@ export const useGameStore = create<GameStore>()(
           const team = state.teams[state.userTeamId];
           if (!team) return state;
           const { newConsecutiveWeeks, shouldWarn, isSackingImminent } =
-            evaluateSackingRisk(team.boardApproval, state.careerRecord.consecutiveLowApprovalWeeks);
+            evaluateSackingRisk(team, state.careerRecord.consecutiveLowApprovalWeeks);
+          const lowApprovalThreshold = getSackingApprovalThreshold(team);
           if (shouldWarn || isSackingImminent) {
-            sackMessages.push(generateSackWarningMessage(initialWeek, newConsecutiveWeeks, state.userTeamId));
+            sackMessages.push(generateSackWarningMessage(
+              initialWeek,
+              newConsecutiveWeeks,
+              state.userTeamId,
+              isSackingImminent,
+              {
+                approval: team.boardApproval,
+                threshold: lowApprovalThreshold,
+                pressureScore: team.manager.pressureScore,
+                replacementRisk: team.manager.replacementRisk,
+              }
+            ));
           }
           return {
             careerRecord: {
@@ -797,16 +1070,23 @@ export const useGameStore = create<GameStore>()(
         ];
 
         const postUpdateState = get();
-        const seasonWeekLimit = getSeasonWeekLimit(postUpdateState.fixtures);
+        const seasonWeekLimit = getSeasonWeekLimit(postUpdateState.fixtures, postUpdateState.competitions);
         if (postUpdateState.currentWeek > seasonWeekLimit) {
           set(state => {
             if (!state.userTeamId) {
-              const nextSeason = advanceSeason(state.players, state.teams, state.userTeamId, state.news);
+              const nextSeason = advanceSeason(
+                state.players,
+                state.teams,
+                state.competitions,
+                state.userTeamId,
+                state.news
+              );
               return {
                 currentWeek: nextSeason.currentWeek,
                 teams: nextSeason.teams,
                 players: nextSeason.players,
                 fixtures: nextSeason.fixtures,
+                competitions: nextSeason.competitions,
                 boardObjectives: nextSeason.boardObjectives,
                 news: nextSeason.news,
                 liveMatches: {},
@@ -822,7 +1102,8 @@ export const useGameStore = create<GameStore>()(
             const seasonSummary = buildSeasonSummary(
               state.careerRecord.seasonsManaged + 1,
               userTeam,
-              state.teams
+              state.teams,
+              state.competitions
             );
             if (isSacked) seasonSummary.outcome = 'sacked';
 
@@ -839,10 +1120,25 @@ export const useGameStore = create<GameStore>()(
               careerRecord: updatedCareer,
               jobOfferTeams,
               isSacked,
+              sackingContext: isSacked
+                ? {
+                    consecutiveLowApprovalWeeks: state.careerRecord.consecutiveLowApprovalWeeks,
+                    approval: userTeam.boardApproval,
+                    threshold: getSackingApprovalThreshold(userTeam),
+                    pressureScore: userTeam.manager.pressureScore,
+                    replacementRisk: userTeam.manager.replacementRisk,
+                  }
+                : undefined,
             });
 
             const nextUserTeamId = isSacked ? null : state.userTeamId;
-            const nextSeason = advanceSeason(state.players, state.teams, nextUserTeamId, state.news);
+            const nextSeason = advanceSeason(
+              state.players,
+              state.teams,
+              state.competitions,
+              nextUserTeamId,
+              state.news
+            );
             const nextAssistantMessages = nextUserTeamId
               ? generateAssistantWeekMessages({
                   currentWeek: nextSeason.currentWeek,
@@ -857,6 +1153,7 @@ export const useGameStore = create<GameStore>()(
               teams: nextSeason.teams,
               players: nextSeason.players,
               fixtures: nextSeason.fixtures,
+              competitions: nextSeason.competitions,
               boardObjectives: nextSeason.boardObjectives,
               news: nextSeason.news,
               userTeamId: nextUserTeamId,
@@ -1043,7 +1340,7 @@ export const useGameStore = create<GameStore>()(
       },
 
       skipToEndOfSeason: () => {
-        const maxWeek = Object.values(get().fixtures).reduce((max, f) => Math.max(max, f.week), 0);
+        const maxWeek = getSeasonWeekLimit(get().fixtures, get().competitions);
         let guard = maxWeek + 2;
         while (get().currentWeek <= maxWeek && guard-- > 0) {
           get().advanceWeek();
@@ -1105,11 +1402,7 @@ export const useGameStore = create<GameStore>()(
           });
           return {
             userTeamId: teamId,
-            boardObjectives: generateBoardObjectives(
-              nextTeam.clubClass || 'C',
-              nextTeam.name,
-              nextTeam.division
-            ),
+            boardObjectives: buildManagedTeamObjectives(nextTeam, state.competitions),
             inboxMessages: mergeInboxMessages(
               pruneInboxMessagesForManagedTeam(state.inboxMessages, teamId),
               nextAssistantMessages
@@ -1197,28 +1490,23 @@ export const useGameStore = create<GameStore>()(
          set(state => {
             if (!state.userTeamId) return state;
             const myTeam = state.teams[state.userTeamId];
-            const manager = myTeam.manager;
-            const seasonWeekLimit = getSeasonWeekLimit(state.fixtures);
-            const objectiveResult = evaluateBoardObjectives(
-              state.boardObjectives,
+            const seasonWeekLimit = getSeasonWeekLimit(state.fixtures, state.competitions);
+            const review = runBoardReview(
               myTeam,
               state.teams,
-              { isSeasonComplete: state.currentWeek > seasonWeekLimit }
+              state.boardObjectives,
+              { isSeasonComplete: state.currentWeek > seasonWeekLimit, competitions: state.competitions }
             );
-            const approvalChange = objectiveResult.approvalChange + getFormApprovalDelta(myTeam.form || []);
-            const updatedObjectives = objectiveResult.updatedObjectives;
-
-            const newApproval = clampBoardMetric(myTeam.boardApproval + approvalChange);
-            const nextManager = {
-              ...manager,
-              boardTrust: clampBoardMetric(manager.boardTrust + approvalChange),
-              jobSecurity: clampBoardMetric(manager.jobSecurity + Math.round(approvalChange / 2)),
-            };
-
-            // Not fully causing game over yet, just tracking it!
             return {
-               teams: { ...state.teams, [myTeam.id]: { ...myTeam, boardApproval: newApproval, manager: nextManager } },
-               boardObjectives: updatedObjectives
+               teams: {
+                 ...state.teams,
+                 [myTeam.id]: {
+                   ...myTeam,
+                   boardApproval: review.nextApproval,
+                   manager: review.nextManager,
+                 },
+               },
+               boardObjectives: review.updatedObjectives
             };
          });
       },
@@ -1226,7 +1514,7 @@ export const useGameStore = create<GameStore>()(
     {
       name: 'football-manager-storage',
       storage: createJSONStorage(() => safeStorage),
-      version: 6,
+      version: 8,
       migrate: (persistedState, version) => {
         const rawState = (persistedState || {}) as Partial<GameStore>;
         const sanitized = sanitizePersistedState(rawState);

@@ -1,5 +1,6 @@
 export type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
-export type Division = 'Premier League' | 'Championship' | 'League One' | 'League Two';
+export type LeagueDivision = 'Premier League' | 'Championship' | 'League One' | 'League Two';
+export type Division = LeagueDivision | 'Continental';
 export type Formation = 
   | '4-3-3' 
   | '3-4-3' 
@@ -15,6 +16,31 @@ export type Formation =
   | '3-2-4-1';
 
 export type ManagerStatus = 'Permanent' | 'Interim' | 'Caretaker';
+export type BoardAmbition = 'elite' | 'europe' | 'promotion' | 'stability' | 'survival';
+export type BoardPatience = 'low' | 'medium' | 'high';
+export type TransferDiscipline = 'strict' | 'balanced' | 'aggressive';
+export type BoardReviewVerdict = 'thriving' | 'stable' | 'warning' | 'critical';
+export type CompetitionId =
+  | 'premier-league'
+  | 'championship'
+  | 'league-one'
+  | 'league-two'
+  | 'carabao-cup'
+  | 'fa-cup'
+  | 'europe';
+export type CompetitionType = 'league' | 'domestic_cup' | 'continental';
+export type CompetitionRoundKey =
+  | 'league'
+  | 'round_1'
+  | 'round_2'
+  | 'round_3'
+  | 'round_4'
+  | 'round_of_16'
+  | 'quarter_final'
+  | 'semi_final'
+  | 'final';
+export type CompetitionFinish = CompetitionRoundKey | 'winner' | 'runner_up' | 'not_qualified';
+export type BoardObjectiveType = 'position' | 'goalDiff' | 'spend' | 'max_spend' | 'wins' | 'cup_round';
 
 export interface ManagerRecord {
   played: number;
@@ -24,6 +50,14 @@ export interface ManagerRecord {
   goalsFor: number;
   goalsAgainst: number;
   position: number;
+}
+
+export interface BoardProfile {
+  ambition: BoardAmbition;
+  patience: BoardPatience;
+  transferDiscipline: TransferDiscipline;
+  targetCompetitions: CompetitionId[];
+  identity: string;
 }
 
 export interface Manager {
@@ -43,6 +77,9 @@ export interface Manager {
   transferIdentity: string;
   boardTrust: number;
   jobSecurity: number;
+  contractYearsRemaining: number;
+  pressureScore: number;
+  replacementRisk: number;
   seasonExpectations: string;
   clubFit: number;
   record: ManagerRecord;
@@ -113,7 +150,9 @@ export interface Team {
   name: string;
   countryId?: string;
   division: Division;
+  isExternal?: boolean;
   clubClass?: string;
+  boardProfile: BoardProfile;
   manager: Manager;
   points: number;
   goalsFor: number;
@@ -135,26 +174,35 @@ export interface Team {
 export interface BoardObjective {
   id: string;
   description: string;
-  type: 'position' | 'goalDiff' | 'spend' | 'wins';
+  type: BoardObjectiveType;
   target: number;
   met: boolean;
+  competitionId?: CompetitionId;
+  targetRound?: CompetitionRoundKey;
 }
 
 export interface Fixture {
   id: string;
   week: number;
-  division?: Division;
+  division?: LeagueDivision;
+  competitionId: CompetitionId;
+  competitionType: CompetitionType;
+  round: CompetitionRoundKey;
+  isKnockout: boolean;
   homeTeamId: string;
   awayTeamId: string;
   homeScore: number | null;
   awayScore: number | null;
   isPlayed: boolean;
+  winnerTeamId?: string;
+  resolution?: 'regular' | 'penalties';
 }
 
 export type InboxMessageSource = 'assistant' | 'system';
 
 export type InboxMessageCategory =
   | 'system_news'
+  | 'competition_update'
   | 'season_update'
   | 'board_update'
   | 'injury_update'
@@ -219,7 +267,41 @@ export interface InboxMessage {
 export interface TrophyEntry {
   season: number;
   division: Division;
-  type: 'champion' | 'promoted' | 'relegated';
+  type: 'champion' | 'promoted' | 'relegated' | 'cup_winner' | 'continental_winner';
+  competitionId?: CompetitionId;
+  label?: string;
+}
+
+export interface CompetitionRoundState {
+  key: CompetitionRoundKey;
+  label: string;
+  week: number;
+  entrantTeamIds: string[];
+  fixtureIds: string[];
+  byeTeamIds: string[];
+  winnerTeamIds: string[];
+  completed: boolean;
+}
+
+export interface CompetitionState {
+  id: CompetitionId;
+  name: string;
+  shortName: string;
+  type: CompetitionType;
+  season: number;
+  leagueDivision?: LeagueDivision;
+  entrantTeamIds: string[];
+  rounds: CompetitionRoundState[];
+  currentRound?: CompetitionRoundKey;
+  eliminatedTeamIds: string[];
+  championTeamId?: string;
+  runnerUpTeamId?: string;
+}
+
+export interface CompetitionResultSummary {
+  competitionId: CompetitionId;
+  name: string;
+  finish: CompetitionFinish;
 }
 
 export interface SeasonSummary {
@@ -234,6 +316,8 @@ export interface SeasonSummary {
   goalsAgainst: number;
   finalPosition: number;
   outcome: 'champion' | 'promoted' | 'stayed' | 'relegated' | 'sacked';
+  boardVerdict: BoardReviewVerdict;
+  competitionResults: CompetitionResultSummary[];
 }
 
 export interface CareerRecord {
@@ -255,6 +339,7 @@ export interface GameState {
   teams: Record<string, Team>;
   players: Record<string, Player>;
   fixtures: Record<string, Fixture>;
+  competitions: Record<string, CompetitionState>;
   news: string[];
   inboxMessages: InboxMessage[];
   boardObjectives: BoardObjective[];

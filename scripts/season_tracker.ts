@@ -379,7 +379,9 @@ const createMatchReport = (
   if (scorers.some(scorer => scorer.goals >= 4)) auditFlags.push('single_player_4_plus_goals');
   if (cards.some(card => card.yellowCards > 1)) auditFlags.push('multiple_yellows_same_player');
   const redCardCount = cards.reduce((sum, card) => sum + card.redCards, 0);
-  const redCardEventCount = eventMessages.filter(event => /red card|sent off/i.test(event)).length;
+  const redCardEventCount = eventMessages
+    .filter(event => /red card|sent off|straight red|reaches for red/i.test(event))
+    .length;
   if (redCardCount > 0 && redCardEventCount === 0) auditFlags.push('red_card_log_mismatch');
 
   return {

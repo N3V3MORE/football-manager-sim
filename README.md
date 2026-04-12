@@ -1,45 +1,56 @@
 # Football Manager Sim
 
-Custom football manager sim built with React Native, Expo, and Zustand.
+Custom football manager simulation built with React Native, Expo, and Zustand.
 
-The current focus is a fast, inspectable match engine that can run full-season and multi-season simulations for tuning team/player realism, with a full career meta-layer that persists across seasons.
+The project is England-first and backend-first. The current codebase already covers league simulation, career progression, inbox flows, and squad/tactics control, and is now moving into real competition state plus deeper board and manager systems.
 
-## Current Engine
+## Status
 
-- Slot-aware formations feed into possession phases, so shape affects build-up support, central shielding, width, final-third access, and box presence.
-- The English pyramid is bootstrapped from local JSON data in `src/data/english_league_players.json`, with Premier League, Championship, League One, and League Two each running their own fixture list and table.
-- The league screen now uses a country pager plus a vertical division reel, so future countries can be added without changing the screen structure again.
-- Every club now has a manager profile with reputation, trust, job security, preferred formations, tactical identity, and transfer style.
-- AI teams can adapt tactics and formations over the season, including back-3, back-4, and back-5 structures.
-- Expanded preset formations now include 3-4-2-1, 4-5-1, 4-2-2-2, and 3-2-4-1 alongside the existing shapes.
-- Quick sim and live sim share the same tactical-shape inputs to reduce behavior drift.
-- Card accounting tracks first yellows, second-yellow reds, straight reds, suspensions, and red-card event logs.
-- Clean sheets are awarded from player on-pitch windows against conceded goal minutes, with a 60-minute qualification to avoid short defensive cameos skewing player stats.
-- Player availability now tracks injuries and suspensions directly through weekly progression, squad selection, and season rollover.
-- The assistant coach inbox now carries pre-match advice, post-match reports, board/system updates, contract warnings, recovery notes, sack warnings, job offers, and career milestones.
-- Season tracker audits score-log consistency, red-card logs, multi-yellow matches, formation usage, tactical changes, and player/team stat leaders.
+- Current tagged release: `v4.0.1`
+- Current development line in this workspace: `v4.1` and `v4.2` foundation work
+- Changelog: [CHANGELOG.md](./CHANGELOG.md)
+- Roadmap: [ROADMAP.md](./ROADMAP.md)
 
-## Career Mode
+## Current State
 
-Manager reputation (0–100) is a live stat that changes with results: +8 for winning a division, +4 for promotion, −10 for relegation, −5 for being sacked, +2 for a winning-record season.
+- The English pyramid is playable across Premier League, Championship, League One, and League Two.
+- League, FA Cup, Carabao Cup, and Europe now exist as first-class competition state in the backend rather than hub-only placeholders.
+- Fixtures carry competition identity, round metadata, knockout flags, and winner resolution.
+- Quick sim and live sim share the same underlying tactical and shape inputs to reduce drift.
+- AI teams can adapt formations and tactics over time, including back-3, back-4, and back-5 structures.
+- Player availability tracks injuries, suspensions, contracts, morale, energy, and inbox-triggered squad issues.
+- The inbox handles assistant advice, board updates, system news, post-match reports, contract pressure, sack warnings, job offers, and career milestones.
 
-Board approval below 20% for 3 consecutive weeks triggers a formal inbox warning; at 4+ weeks the board signals they will not renew your contract. At season end, if approval is still critical, you are sacked and offered jobs at clubs in an appropriate division tier.
+## Career, Board, and Club Layer
 
-Strong seasons generate unsolicited job offers from higher-division clubs delivered through the inbox. Accepting a job offer hands over your current team to AI management and starts the next season at the new club with your reputation intact.
+- Career history persists across seasons with reputation, honours, season summaries, and a rolling record.
+- Clubs now carry persistent board context: ambition, patience, transfer discipline, and target competitions.
+- Managers now track trust, security, pressure, replacement risk, contract years remaining, and board-driven expectations.
+- Weekly board reviews now consider objectives, form, league position versus target, competition outcomes, and spending discipline together.
+- Season rollover can now replace failing AI managers instead of leaving every club static year after year.
+- The Board Room screen exposes board context, manager standing, approval, pressure, and career history directly from persisted state.
 
-The Board Room screen tracks your full career: seasons managed, W/D/L totals and bar, reputation, trophy cabinet (division titles and promotions), and a 10-season history with outcome pills.
+## Roadmap Direction
+
+The v4 path is now:
+
+1. `v4.0.x` stabilization and regressions only
+2. `v4.1.0` real competitions backend
+3. `v4.2.0` board, manager, and club-context depth
+4. `v4.3.0` transfers, contracts, and squad-planning depth
+5. `v4.4.0` matchday and live-sim depth
+6. `v4.5.0` world-ready architecture without full multi-country expansion
+
+The detailed progress tracker and exit criteria live in [ROADMAP.md](./ROADMAP.md).
 
 ## Gameplay
 
-- Pick a club and set a starting XI with the pitch grid.
+- Pick a club and manage the starting XI from the pitch grid.
 - Switch between Starting XI and Tactics inside the Squad tab.
-- Use the Settings tab for current-team controls and temporary dev tools.
-- Review contract pressure and unavailable players from Settings via Contract Watch and Availability Watch.
-- League and hub table views are filtered by the active division.
-- Use 7-player benches and formation maps for manual lineup continuity.
-- Run live match minutes or quick-sim fixtures.
-- Track league table, player stats, awards, budgets, transfers, morale, energy, injuries, suspensions, contracts, and inbox reports.
-- Build a multi-season career: manage board pressure, take job offers, accumulate trophies, and grow your reputation across divisions.
+- Use Settings for current-team controls, contract pressure, and squad availability.
+- Review competition state from the hub and deeper club/career state from the Board Room.
+- Play fixtures live or quick sim them.
+- Manage budgets, transfers, morale, energy, injuries, suspensions, contracts, inbox flows, and multi-season career progression.
 
 ## Scripts
 
@@ -53,16 +64,17 @@ npm run turbo
 npm run test:ci
 npm run test:regression
 npm run check:save
+npm run gate:release
 ```
 
 - `analyze` runs a detailed single-season simulation report.
-- `track:season` runs season integrity and tactical tracking; set `SEASON_TRACKER_SEASONS=10` for larger batches.
+- `track:season` runs season integrity and tactical tracking. Set `SEASON_TRACKER_SEASONS=10` for larger batches.
 - `qa` runs the autonomous store-level QA stress script.
-- `turbo` runs fast multi-season simulation; set `TURBO_SEASONS=50` to override the default.
-- `test:ci` runs the deterministic inbox, progression, and state-consistency regression suite.
+- `turbo` runs fast multi-season simulation. Set `TURBO_SEASONS=50` to override the default.
+- `test:ci` runs deterministic progression, career, competition, inbox, and state-consistency regression checks.
 - `test:regression` runs deterministic engine regression checks.
-- `check:save` audits save-shaped state after season skip and formation-map recovery.
-- `season_tracker`, `turbo`, and regression scripts now run against the full multi-division season length.
+- `check:save` audits persisted save shape after season skip and formation-map recovery.
+- `gate:release` runs the full release gate: `tsc`, `lint`, `test:ci`, `test:regression`, and `check:save`.
 
 ## Setup
 
@@ -78,8 +90,8 @@ npm install
 npm run start
 ```
 
-## Version
+## Versioning
 
-Current version: `v4.0.1`
-
-See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+- `package.json` and `app.json` should only move when a real release is cut.
+- In-progress work is tracked in `CHANGELOG.md` under `Unreleased`.
+- Roadmap status and implementation goals live in `ROADMAP.md`.

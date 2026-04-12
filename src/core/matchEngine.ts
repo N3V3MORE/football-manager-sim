@@ -577,10 +577,34 @@ export const quickSimMatch = (
   applyMatchInjuries(awayParticipants, awayMinutes, updatedPlayers, rng)
     .forEach(event => matchEvents.push(`${event.playerName} suffers a ${event.injuryType} and will miss ${event.weeks} week${event.weeks === 1 ? '' : 's'}.`));
 
-  const updatedFixture = { ...fixture, homeScore: hScore, awayScore: aScore, isPlayed: true };
+  let winnerTeamId: string | undefined;
+  let resolution: Fixture['resolution'] | undefined;
+  if (fixture.isKnockout) {
+    if (hScore === aScore) {
+      const homePenaltyEdge = currentHomeXI.reduce((sum, player) => sum + player.overallRating, 0) + (GLOBAL_HOME_ADVANTAGE * 50);
+      const awayPenaltyEdge = currentAwayXI.reduce((sum, player) => sum + player.overallRating, 0);
+      const totalEdge = Math.max(1, homePenaltyEdge + awayPenaltyEdge);
+      winnerTeamId = (random() * totalEdge) < homePenaltyEdge ? homeTeam.id : awayTeam.id;
+      resolution = 'penalties';
+      matchEvents.push(`${updatedTeams[winnerTeamId].name} keep their nerve and advance on penalties.`);
+    } else {
+      winnerTeamId = hScore > aScore ? homeTeam.id : awayTeam.id;
+      resolution = 'regular';
+    }
+  }
+
+  const updatedFixture = {
+    ...fixture,
+    homeScore: hScore,
+    awayScore: aScore,
+    isPlayed: true,
+    winnerTeamId,
+    resolution,
+  };
+  const includeTableStats = fixture.competitionType === 'league';
 
   const updateLog = (t: Team, gf: number, ga: number, matchStarters: Player[]) => ({
-    ...applyMatchResult(t, gf, ga),
+    ...applyMatchResult(t, gf, ga, includeTableStats),
     lastStartingXI: matchStarters.map(p => p.id),
   });
 

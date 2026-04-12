@@ -16,6 +16,7 @@ const SOURCE_LABELS: Record<InboxMessage['source'], string> = {
 
 const CATEGORY_LABELS: Record<InboxMessage['category'], string> = {
   system_news: 'League',
+  competition_update: 'Competition',
   season_update: 'Season',
   board_update: 'Board',
   injury_update: 'Fitness',

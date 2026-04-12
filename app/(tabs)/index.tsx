@@ -7,6 +7,7 @@ import { BoardRoomCard } from '@/components/hub/board-room-card';
 import { CareerStatsCard } from '@/components/hub/career-stats-card';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { getSeasonWeekLimit, sortTeamsByTable } from '@/src/core/leagueUtils';
+import { getCompetitionPanelForTeam, getCompetitionShortName } from '@/src/core/competitionEngine';
 import { Fixture, Player, Team } from '@/src/models/types';
 import { HubHeader } from '@/components/hub/hub-header';
 import { MiniTableCard } from '@/components/hub/mini-table-card';
@@ -53,91 +54,13 @@ const getTopPlayerByStat = (allPlayers: Player[], stat: 'goals' | 'assists' | 'c
     .sort((a, b) => getStatValue(b, stat) - getStatValue(a, stat))[0]
 );
 
-const formatOrdinal = (value: number) => {
-  const mod10 = value % 10;
-  const mod100 = value % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${value}st`;
-  if (mod10 === 2 && mod100 !== 12) return `${value}nd`;
-  if (mod10 === 3 && mod100 !== 13) return `${value}rd`;
-  return `${value}th`;
-};
-
-const getEuropePanel = (team: Team, position: number): CompetitionPanelItem => {
-  if (team.division !== 'Premier League') {
-    return {
-      title: 'Europe',
-      status: 'Not eligible',
-      note: 'Reach the top flight first',
-      accent: '#64748b',
-    };
-  }
-
-  if (position <= 4) {
-    return {
-      title: 'Europe',
-      status: 'UCL pace',
-      note: `Holding ${formatOrdinal(position)} place`,
-      accent: '#38bdf8',
-    };
-  }
-
-  if (position === 5) {
-    return {
-      title: 'Europe',
-      status: 'Europa pace',
-      note: 'European place in hand',
-      accent: '#22c55e',
-    };
-  }
-
-  if (position <= 7) {
-    return {
-      title: 'Europe',
-      status: 'Conference pace',
-      note: `League place ${formatOrdinal(position)}`,
-      accent: '#f59e0b',
-    };
-  }
-
-  if (position <= 10) {
-    return {
-      title: 'Europe',
-      status: 'Chasing',
-      note: `${formatOrdinal(position)} place, still in range`,
-      accent: '#facc15',
-    };
-  }
-
-  return {
-    title: 'Europe',
-    status: 'Outside spots',
-    note: `${formatOrdinal(position)} place in league`,
-    accent: '#64748b',
-  };
-};
-
-const buildCompetitionPanels = (team: Team, position: number, currentWeek: number): CompetitionPanelItem[] => ([
-  {
-    title: 'Carabao',
-    status: currentWeek < 3 ? 'Awaiting draw' : 'No data',
-    note: currentWeek < 3 ? 'Domestic cup opens early' : 'Cup progress backend not live',
-    accent: '#38bdf8',
-  },
-  {
-    title: 'FA Cup',
-    status: currentWeek < 19 ? 'Not started' : 'No data',
-    note: currentWeek < 19 ? 'Main rounds start later' : 'Cup progress backend not live',
-    accent: '#22c55e',
-  },
-  getEuropePanel(team, position),
-]);
-
 export default function HubScreen() {
   const router = useRouter();
   const currentWeek = useGameStore(state => state.currentWeek);
   const userTeamId = useGameStore(state => state.userTeamId);
   const teams = useGameStore(state => state.teams);
   const fixtures = useGameStore(state => state.fixtures);
+  const competitions = useGameStore(state => state.competitions);
   const advanceWeek = useGameStore(state => state.advanceWeek);
   const inboxMessages = useGameStore(state => state.inboxMessages);
   const players = useGameStore(state => state.players);
@@ -196,7 +119,7 @@ export default function HubScreen() {
     return { rows, myPosition: normalizedIndex + 1 };
   }, [teams, myDivision, userTeamId]);
 
-  const seasonWeekLimit = useMemo(() => getSeasonWeekLimit(fixtures), [fixtures]);
+  const seasonWeekLimit = useMemo(() => getSeasonWeekLimit(fixtures, competitions), [competitions, fixtures]);
   const upcomingFixtures = useMemo<UpcomingFixtureRow[]>(() => {
     const rows: UpcomingFixtureRow[] = [];
     for (let week = currentWeek; week <= Math.min(currentWeek + 4, seasonWeekLimit); week++) {
@@ -282,8 +205,12 @@ export default function HubScreen() {
 
   const myPosition = miniTableData.myPosition;
   const myRecord = `${myTeam.wins}W ${myTeam.draws}D ${myTeam.losses}L`;
-  const nextFixtureLabel = `${homeTheme?.stadium || 'TBD'} | ${weekToDate(currentWeek)}`;
-  const competitionPanels = buildCompetitionPanels(myTeam, myPosition, currentWeek);
+  const nextFixtureLabel = `${myNextMatch ? getCompetitionShortName(myNextMatch.competitionId) : 'Matchday'} | ${homeTheme?.stadium || 'TBD'} | ${weekToDate(currentWeek)}`;
+  const competitionPanels = [
+    getCompetitionPanelForTeam('carabao-cup', competitions, fixtures, teams, myTeam.id, currentWeek),
+    getCompetitionPanelForTeam('fa-cup', competitions, fixtures, teams, myTeam.id, currentWeek),
+    getCompetitionPanelForTeam('europe', competitions, fixtures, teams, myTeam.id, currentWeek),
+  ] as CompetitionPanelItem[];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+### v4.1 foundation - Real competitions backend
+
+What changed:
+- Added first-class competition state for league, FA Cup, Carabao Cup, and Europe instead of treating domestic cups and Europe as hub placeholders.
+- Extended fixtures with competition identity, round metadata, knockout flags, and winner resolution so non-league competitions can progress cleanly.
+- Added a dedicated competition engine to bootstrap season competitions, resolve knockout rounds, expose team-facing competition panels, and carry Europe qualification into the next season.
+- Updated season rollover, match resolution, inbox messaging, career history, and board logic to consume competition state from one source of truth.
+- Added deterministic regression coverage for competition bootstrap, knockout progression, Europe qualification, and no-overlap fixture scheduling.
+
+Notes:
+- This work is in the codebase but not released as a tagged version yet.
+
+### v4.2 foundation - Board, manager, and club-context depth
+
+What changed:
+- Added persistent `boardProfile` state to every club covering ambition, patience, transfer discipline, and target competitions.
+- Expanded manager state with contract years remaining, pressure score, and replacement risk so sack/job logic is not driven by approval alone.
+- Added a pure board engine to generate competition-aware board objectives, evaluate season reviews, calculate board pressure, and decide when AI clubs replace managers.
+- Reworked weekly board reviews so approval, trust, security, pressure, and replacement risk move together instead of using a flat objective-plus-form delta.
+- Updated season rollover so every club gets a board review, next-division board profile, and possible AI manager replacement before the new season is built.
+- Added seeded AI replacement-manager generation with varied identity, tactical profile, contract length, and initial pressure context.
+- Extended the Board Room screen and inbox/career messaging to show real club context, board expectations, and manager pressure.
+- Expanded career and board inbox explanations so sack warnings, season verdicts, and job offers include explicit pressure/replacement-risk context.
+- Hardened save migration and season rollover from mid-season states, including competition persistence and managed-team lineup reseeding.
+- Tightened tactical adaptation behavior under pressure and added tactical-spread guardrails in CI.
+- Added deterministic regression coverage for board-profile objective shape, elite-vs-survival pressure behavior, AI manager replacement, competition progression, migration integrity, tactical spread, and red-card event consistency.
+
+Notes:
+- This is active `v4.2` work. Package and app versions remain `v4.0.1` until a release is cut.
+
 ## v4.0.1 - Career flow fixes and presentation pass
 
 What changed:
@@ -16,8 +48,8 @@ Notes:
 ## v4.0.0 - Manager career mode
 
 What changed:
-- Added a persistent `CareerRecord` that survives `advanceSeason`: seasons managed, total W/D/L/GF/GA, reputation (0–100), trophy cabinet, and a rolling 10-season history.
-- Reputation now moves dynamically: +8 for winning a division, +4 for promotion, −10 for relegation, −5 for being sacked, +2 for a winning-record season. Previously `Manager.reputation` was a static initialisation value.
+- Added a persistent `CareerRecord` that survives `advanceSeason`: seasons managed, total W/D/L/GF/GA, reputation (0-100), trophy cabinet, and a rolling 10-season history.
+- Reputation now moves dynamically: +8 for winning a division, +4 for promotion, -10 for relegation, -5 for being sacked, +2 for a winning-record season. Previously `Manager.reputation` was a static initialisation value.
 - Added sacking-risk tracking: `consecutiveLowApprovalWeeks` increments each week board approval stays below 20%. At 3 consecutive weeks the board issues a formal warning in the inbox; at 4+ the board declares they will not renew the contract at season end.
 - At season end the career engine evaluates the final table position, writes a `SeasonSummary`, updates the career record, and generates up to 2 job offer inbox messages from candidate clubs in an appropriate division tier. Accepting a job offer changes the managed team immediately, dismisses all other pending offers, and resets the sacking counter.
 - Added `TrophyEntry`, `SeasonSummary`, and `CareerRecord` types to `src/models/types.ts`. Extended `GameState` with `careerRecord`. Added `career_sack_warning`, `career_job_offer`, and `career_milestone` inbox categories and an `accept_job_offer` inbox action.

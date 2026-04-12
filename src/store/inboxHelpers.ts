@@ -13,6 +13,7 @@ import {
   Team,
   TeamTactics,
 } from '../models/types';
+import { getCompetitionRoundLabel, getCompetitionShortName } from '../core/competitionEngine';
 
 export const MAX_INBOX_MESSAGES = 60;
 
@@ -130,6 +131,9 @@ const getSystemMessageCategory = (news: string): InboxMessageCategory => {
   if (/promoted|relegated|new season|season has concluded/i.test(news)) {
     return 'season_update';
   }
+  if (/carabao|fa cup|europe|quarter-final|semi-final|round of 16|round [1-4]|draw complete/i.test(news)) {
+    return 'competition_update';
+  }
   if (/board|objective|approval/i.test(news)) {
     return 'board_update';
   }
@@ -141,7 +145,15 @@ const getMessageTitleForNews = (news: string) => {
   if (/relegated/i.test(news)) return 'Relegation confirmed';
   if (/new season/i.test(news)) return 'Season reset';
   if (/season has concluded/i.test(news)) return 'Season review';
+  if (/carabao|fa cup|europe/i.test(news)) return 'Competition update';
   return 'League update';
+};
+
+const formatCompetitionFinish = (finish: SeasonSummary['competitionResults'][number]['finish']) => {
+  if (finish === 'winner') return 'won it';
+  if (finish === 'runner_up') return 'finished runner-up';
+  if (finish === 'not_qualified') return 'did not qualify';
+  return `reached the ${getCompetitionRoundLabel(finish)}`;
 };
 
 const formatNames = (names: string[]) => {
@@ -755,7 +767,7 @@ export const generatePostMatchReportMessage = ({
     week: currentWeek,
     source: 'assistant',
     category: 'post_match_report',
-    title: `${pickTemplate(`${reportSeed}-title`, ['Post-match', 'Match review', 'Analyst report'])}: ${team.name} ${myGoals}-${theirGoals} ${opponent.name}`,
+    title: `${pickTemplate(`${reportSeed}-title`, ['Post-match', 'Match review', 'Analyst report'])}: ${team.name} ${myGoals}-${theirGoals} ${opponent.name}${fixture.competitionType !== 'league' ? ` (${getCompetitionShortName(fixture.competitionId)})` : ''}`,
     body: `${resultPrefix} ${performerNote} ${poorNote} ${disciplineNote} ${injuryNote} ${tacticalNote}`.replace(/\s+/g, ' ').trim(),
     isRead: false,
     fixtureId: fixture.id,
@@ -770,6 +782,13 @@ type CareerInboxInput = {
   careerRecord: CareerRecord;
   jobOfferTeams: Team[];
   isSacked: boolean;
+  sackingContext?: {
+    consecutiveLowApprovalWeeks: number;
+    approval: number;
+    threshold: number;
+    pressureScore: number;
+    replacementRisk: number;
+  };
 };
 
 export const generateCareerInboxMessages = ({
@@ -779,6 +798,7 @@ export const generateCareerInboxMessages = ({
   careerRecord,
   jobOfferTeams,
   isSacked,
+  sackingContext,
 }: CareerInboxInput): InboxMessage[] => {
   const messages: InboxMessage[] = [];
 
@@ -795,13 +815,26 @@ export const generateCareerInboxMessages = ({
   const trophyLine = careerRecord.trophies.length > 0
     ? ` Career trophies: ${careerRecord.trophies.length}.`
     : '';
+  const competitionLine = summary.competitionResults
+    .filter(result => result.finish !== 'not_qualified')
+    .map(result => `${result.name}: ${formatCompetitionFinish(result.finish)}`)
+    .join(' ');
+  const boardLine = isSacked && sackingContext
+    ? `Board review: dismissal triggered after ${sackingContext.consecutiveLowApprovalWeeks} consecutive weeks below the danger threshold (${Math.round(sackingContext.approval)}% vs ${Math.round(sackingContext.threshold)}%). Pressure ${Math.round(sackingContext.pressureScore)} and replacement risk ${Math.round(sackingContext.replacementRisk)} left no route to renewal.`
+    : summary.boardVerdict === 'thriving'
+      ? `Board review: exceeded expectations with a #${summary.finalPosition} finish.`
+      : summary.boardVerdict === 'warning'
+        ? `Board review: results put you under pressure at #${summary.finalPosition}.`
+        : summary.boardVerdict === 'critical'
+          ? `Board review: the board judged the season a failure at #${summary.finalPosition}.`
+          : `Board review: expectations were broadly met with a #${summary.finalPosition} finish.`;
 
   messages.push(buildMessage({
     week,
     source: 'system',
     category: 'career_milestone',
     title: isSacked ? 'Contract terminated' : `Season ${careerRecord.seasonsManaged} complete`,
-    body: `${outcomeLabel} with ${summary.teamName} in ${summary.division}. ${repLine}${trophyLine} Record this season: ${summary.wins}W ${summary.draws}D ${summary.losses}L.`,
+    body: `${outcomeLabel} with ${summary.teamName} in ${summary.division}. ${repLine}${trophyLine}${competitionLine ? ` Competition record: ${competitionLine}.` : ''} ${boardLine} Record this season: ${summary.wins}W ${summary.draws}D ${summary.losses}L.`,
     isRead: false,
     teamId: summary.teamId,
   }));
@@ -812,17 +845,34 @@ export const generateCareerInboxMessages = ({
       type: 'accept_job_offer',
       payload: { teamId: team.id },
     };
-    const reason = isSacked
-      ? `Following your departure from ${summary.teamName}, ${team.name} are looking for new leadership.`
-      : summary.outcome === 'champion' || summary.outcome === 'promoted'
-        ? `Your results at ${summary.teamName} have caught attention. ${team.name} want you in charge.`
-        : `${team.name} believe you are the right person to take them forward.`;
+    const offerReasons: string[] = [];
+    if (isSacked) {
+      offerReasons.push(`After your departure from ${summary.teamName}, ${team.name} moved quickly to fill the vacancy.`);
+    } else if (summary.outcome === 'champion' || summary.outcome === 'promoted') {
+      offerReasons.push(`Your league outcome with ${summary.teamName} pushed your profile up the shortlist.`);
+    } else if (summary.competitionResults.some(result => (
+      result.finish === 'winner' || result.finish === 'runner_up' || result.finish === 'semi_final'
+    ))) {
+      offerReasons.push(`Your cup and continental work with ${summary.teamName} strengthened your case.`);
+    } else {
+      offerReasons.push(`${team.name} believe your profile fits their current rebuild.`);
+    }
+
+    if (team.manager.replacementRisk >= 70) {
+      offerReasons.push(`${team.name} enter this cycle under heavy pressure (${Math.round(team.manager.replacementRisk)}% replacement risk).`);
+    } else if (team.manager.jobSecurity <= 40) {
+      offerReasons.push(`${team.name} are acting early with low manager security (${Math.round(team.manager.jobSecurity)}%).`);
+    }
+
+    offerReasons.push(
+      `Board posture: ambition ${team.boardProfile.ambition}, patience ${team.boardProfile.patience}, transfer discipline ${team.boardProfile.transferDiscipline}.`
+    );
     messages.push(buildMessage({
       week,
       source: 'system',
       category: 'career_job_offer',
       title: `Job offer: ${team.name}`,
-      body: `${reason} Budget: GBP ${team.budget.toFixed(1)}m. Division: ${team.division}. Accept to take charge immediately next season.`,
+      body: `${offerReasons.join(' ')} Budget: GBP ${team.budget.toFixed(1)}m. Division: ${team.division}. Board brief: ${team.boardProfile.identity} Accept to take charge immediately next season.`,
       isRead: false,
       action,
       teamId: team.id,
@@ -832,15 +882,26 @@ export const generateCareerInboxMessages = ({
   return messages;
 };
 
-export const generateSackWarningMessage = (week: number, consecutiveWeeks: number, teamId: string): InboxMessage =>
+export const generateSackWarningMessage = (
+  week: number,
+  consecutiveWeeks: number,
+  teamId: string,
+  isTerminal = false,
+  context?: {
+    approval: number;
+    threshold: number;
+    pressureScore: number;
+    replacementRisk: number;
+  }
+): InboxMessage =>
   buildMessage({
     week,
     source: 'system',
     category: 'career_sack_warning',
-    title: consecutiveWeeks >= 4 ? 'Board has lost confidence' : 'Board warning issued',
-    body: consecutiveWeeks >= 4
-      ? `The board has formally lost confidence in your management after ${consecutiveWeeks} consecutive weeks of critical approval ratings. Your position will not be renewed at season end.`
-      : `Approval has been below 20% for ${consecutiveWeeks} consecutive weeks. The board is watching closely - results must improve immediately.`,
+    title: isTerminal ? 'Board has lost confidence' : 'Board warning issued',
+    body: isTerminal
+      ? `The board has formally lost confidence in your management after ${consecutiveWeeks} consecutive weeks in the critical pressure band.${context ? ` Approval is ${Math.round(context.approval)}% against a ${Math.round(context.threshold)}% threshold, with pressure ${Math.round(context.pressureScore)} and replacement risk ${Math.round(context.replacementRisk)}.` : ''} Your position will not be renewed at season end.`
+      : `Board pressure has remained in the danger zone for ${consecutiveWeeks} consecutive weeks.${context ? ` Approval is ${Math.round(context.approval)}% against a ${Math.round(context.threshold)}% threshold, with pressure ${Math.round(context.pressureScore)} and replacement risk ${Math.round(context.replacementRisk)}.` : ''} Results and confidence must improve immediately.`,
     isRead: false,
     teamId,
   });
@@ -865,6 +926,7 @@ export const generateBoardInboxMessages = ({
     const objectiveLine = newlyMetObjectives.length > 0
       ? `Objectives met: ${newlyMetObjectives.map(objective => objective.description).join('; ')}. `
       : '';
+    const pressureLine = `Pressure ${Math.round(teamAfter.manager.pressureScore)} | replacement risk ${Math.round(teamAfter.manager.replacementRisk)}.`;
     const approvalLine = approvalDelta === 0
       ? pickTemplate(`${boardSeed}-steady`, [
         `Board approval holds at ${Math.round(teamAfter.boardApproval)}% and the mood is ${bandAfter}.`,
@@ -885,7 +947,7 @@ export const generateBoardInboxMessages = ({
         'Board room note',
         'Executive review',
       ]),
-      body: `${objectiveLine}${approvalLine}`.trim(),
+      body: `${objectiveLine}${approvalLine} ${pressureLine}`.trim(),
       isRead: false,
       teamId: teamAfter.id,
     }));

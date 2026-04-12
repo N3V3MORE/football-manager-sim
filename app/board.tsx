@@ -27,12 +27,16 @@ const TROPHY_LABEL: Record<TrophyEntry['type'], string> = {
   champion: 'Division Champion',
   promoted: 'Promotion',
   relegated: 'Relegated',
+  cup_winner: 'Cup Winner',
+  continental_winner: 'Europe Winner',
 };
 
 const TROPHY_COLOR: Record<TrophyEntry['type'], string> = {
   champion: '#f59e0b',
   promoted: '#10B981',
   relegated: '#ef4444',
+  cup_winner: '#38bdf8',
+  continental_winner: '#f59e0b',
 };
 
 export default function BoardScreen() {
@@ -43,13 +47,31 @@ export default function BoardScreen() {
 
   const team = userTeamId ? teams[userTeamId] : null;
   const approval = team?.boardApproval ?? 50;
+  const pressure = team?.manager.pressureScore ?? 0;
+  const replacementRisk = team?.manager.replacementRisk ?? 0;
+  const ambitionLabel = team ? team.boardProfile.ambition.replace('_', ' ') : '';
+  const patienceLabel = team ? team.boardProfile.patience : '';
+  const spendingLabel = team ? team.boardProfile.transferDiscipline.replace('_', ' ') : '';
+  const targetCompetitions = team
+    ? team.boardProfile.targetCompetitions
+        .map(competitionId => {
+          if (competitionId === 'premier-league') return 'Premier League';
+          if (competitionId === 'championship') return 'Championship';
+          if (competitionId === 'league-one') return 'League One';
+          if (competitionId === 'league-two') return 'League Two';
+          if (competitionId === 'fa-cup') return 'FA Cup';
+          if (competitionId === 'carabao-cup') return 'Carabao Cup';
+          return 'Europe';
+        })
+        .join(' • ')
+    : '';
 
   let statusText = 'Stable';
   let statusColor = '#f59e0b';
-  if (approval < 15) {
-    statusText = 'Sacking Risk';
+  if (approval < 15 || replacementRisk >= 75) {
+    statusText = 'Critical Review';
     statusColor = '#7f1d1d';
-  } else if (approval < 30) {
+  } else if (approval < 30 || pressure >= 60) {
     statusText = 'Under Pressure';
     statusColor = '#ef4444';
   } else if (approval >= 80) {
@@ -77,6 +99,51 @@ export default function BoardScreen() {
               <View style={styles.barBg}>
                 <View style={[styles.barFill, { width: `${approval}%`, backgroundColor: statusColor }]} />
               </View>
+            </View>
+
+            <View style={styles.contextCard}>
+              <Text style={styles.sectionTitle}>Board Context</Text>
+              <Text style={styles.contextBody}>{team.boardProfile.identity}</Text>
+              <View style={styles.tagRow}>
+                <View style={styles.contextTag}>
+                  <Text style={styles.contextTagLabel}>Ambition</Text>
+                  <Text style={styles.contextTagValue}>{ambitionLabel}</Text>
+                </View>
+                <View style={styles.contextTag}>
+                  <Text style={styles.contextTagLabel}>Patience</Text>
+                  <Text style={styles.contextTagValue}>{patienceLabel}</Text>
+                </View>
+                <View style={styles.contextTag}>
+                  <Text style={styles.contextTagLabel}>Spending</Text>
+                  <Text style={styles.contextTagValue}>{spendingLabel}</Text>
+                </View>
+              </View>
+              <Text style={styles.contextLabel}>Target Competitions</Text>
+              <Text style={styles.contextBody}>{targetCompetitions || 'Domestic league focus'}</Text>
+            </View>
+
+            <View style={styles.contextCard}>
+              <Text style={styles.sectionTitle}>Manager Standing</Text>
+              <View style={styles.careerRow}>
+                <View style={styles.careerStat}>
+                  <Text style={styles.careerStatValue}>{Math.round(team.manager.boardTrust)}</Text>
+                  <Text style={styles.careerStatLabel}>Trust</Text>
+                </View>
+                <View style={styles.careerStat}>
+                  <Text style={styles.careerStatValue}>{Math.round(team.manager.jobSecurity)}</Text>
+                  <Text style={styles.careerStatLabel}>Security</Text>
+                </View>
+                <View style={styles.careerStat}>
+                  <Text style={styles.careerStatValue}>{Math.round(pressure)}</Text>
+                  <Text style={styles.careerStatLabel}>Pressure</Text>
+                </View>
+                <View style={styles.careerStat}>
+                  <Text style={styles.careerStatValue}>{Math.round(replacementRisk)}</Text>
+                  <Text style={styles.careerStatLabel}>Risk</Text>
+                </View>
+              </View>
+              <Text style={styles.contextLabel}>Expectation</Text>
+              <Text style={styles.contextBody}>{team.manager.seasonExpectations}</Text>
             </View>
 
             <Text style={styles.sectionTitle}>Season Objectives</Text>
@@ -150,11 +217,11 @@ export default function BoardScreen() {
               >
                 <View style={[styles.trophyBadge, { backgroundColor: TROPHY_COLOR[trophy.type] + '22' }]}>
                   <Text style={[styles.trophyBadgeText, { color: TROPHY_COLOR[trophy.type] }]}>
-                    {TROPHY_LABEL[trophy.type]}
+                    {trophy.label || TROPHY_LABEL[trophy.type]}
                   </Text>
                 </View>
                 <View style={styles.trophyInfo}>
-                  <Text style={styles.trophyDivision}>{trophy.division}</Text>
+                  <Text style={styles.trophyDivision}>{trophy.label || trophy.division}</Text>
                   <Text style={styles.trophySeason}>Season {trophy.season}</Text>
                 </View>
               </View>
@@ -216,6 +283,39 @@ const styles = StyleSheet.create({
   barBg: { height: 8, width: '100%', backgroundColor: '#0f172a', borderRadius: 0, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: 0 },
   sectionTitle: { color: '#f8fafc', fontSize: 18, fontWeight: '800', marginTop: 10 },
+  contextCard: {
+    backgroundColor: '#1e293b',
+    padding: 16,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#334155',
+    gap: 12,
+  },
+  contextBody: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
+  contextLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  tagRow: { flexDirection: 'row', gap: 10 },
+  contextTag: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#334155',
+    padding: 10,
+    gap: 4,
+  },
+  contextTagLabel: {
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  contextTagValue: { color: '#f8fafc', fontSize: 13, fontWeight: '800', textTransform: 'capitalize' },
   objCard: {
     backgroundColor: '#1e293b',
     padding: 16,

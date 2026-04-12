@@ -1,11 +1,11 @@
 import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
-import { Player, Team, Fixture, Position, BoardObjective, TeamTactics, Division } from '../models/types';
+import { Player, Team, Position, BoardObjective, TeamTactics, LeagueDivision } from '../models/types';
 import { computeMarketValue, getBudgetForClass } from './calendar';
 import englishLeaguePlayers from '../data/english_league_players.json';
 import { PREMIER_LEAGUE_MANAGERS } from '../data/premier_league_managers';
 import { buildManager, buildGenericManager, deriveInitialBoardApproval } from '../core/managerUtils';
-import { buildRoundRobinFixtures, getDivisionTeamCount } from '../core/leagueUtils';
+import { buildSeasonCompetitionBundle, getContinentalClubNames } from '../core/competitionEngine';
+import { buildBoardObjectives, buildBoardProfile } from '../core/boardEngine';
 
 const REAL_TEAMS = [
   { name: 'Arsenal',            class: 'A' },
@@ -77,7 +77,7 @@ type BasePlayerRow = {
 
 type LeaguePlayerRow = BasePlayerRow & {
   leagueId: number;
-  leagueName: Division;
+  leagueName: LeagueDivision;
   clubName: string;
   clubTeamId: number;
   playerTraits?: string;
@@ -101,77 +101,44 @@ const toLowerLeagueSourcePlayers = (rows: LowerLeaguePlayerRow[]) => rows.map(ro
   stats: row.stats,
 }));
 
-const deriveTeamClass = (division: Division, avgOverall: number) => {
+const deriveTeamClass = (division: LeagueDivision, avgOverall: number) => {
   if (division === 'Premier League') return avgOverall >= 84 ? 'A' : avgOverall >= 79 ? 'B' : avgOverall >= 75 ? 'C' : 'D';
   if (division === 'Championship') return avgOverall >= 74 ? 'B' : avgOverall >= 70 ? 'C' : avgOverall >= 66 ? 'D' : 'E';
   if (division === 'League One') return avgOverall >= 72 ? 'C' : avgOverall >= 68 ? 'D' : avgOverall >= 64 ? 'E' : 'F';
   return avgOverall >= 68 ? 'D' : avgOverall >= 64 ? 'E' : 'F';
 };
 
-const buildGenericTeamManager = (teamName: string, teamId: string, division: Division, avgOverall: number) => (
-  buildGenericManager(teamName, teamId, division, Math.max(35, Math.min(85, Math.round(avgOverall))))
-);
-
-const buildTeamObjectives = (teamClass: string, division: Division): BoardObjective[] => {
-  const teamCount = getDivisionTeamCount(division);
-  const seasonMatches = Math.max(1, (teamCount - 1) * 2);
-  const topHalf = Math.ceil(teamCount / 2);
-  const safeZone = Math.max(teamCount - 3, topHalf + 1);
-
-  const posTargets: Record<string, { desc: string; target: number }> = {
-    S: { desc: `Win the ${division} title`, target: 1 },
-    A: { desc: `Finish in the Top 4 in the ${division}`, target: 4 },
-    B: { desc: `Finish in the Top 8 in the ${division}`, target: 8 },
-    C: { desc: `Finish in the Top Half of the ${division}`, target: topHalf },
-    D: { desc: `Finish above the relegation zone in the ${division}`, target: safeZone },
-    E: { desc: `Stay clear of the drop in the ${division}`, target: safeZone },
-    F: { desc: `Secure survival in the ${division}`, target: safeZone },
-  };
-  const pos = posTargets[teamClass] || posTargets['C'];
-
-  const winTargetByClass: Record<string, number> = {
-    S: Math.max(22, Math.round(seasonMatches * 0.60)),
-    A: Math.max(18, Math.round(seasonMatches * 0.50)),
-    B: Math.max(13, Math.round(seasonMatches * 0.40)),
-    C: Math.max(10, Math.round(seasonMatches * 0.35)),
-    D: Math.max(8, Math.round(seasonMatches * 0.28)),
-    E: Math.max(6, Math.round(seasonMatches * 0.22)),
-    F: Math.max(5, Math.round(seasonMatches * 0.18)),
-  };
-
-  const spendTargets: Record<string, number> = {
-    S: 60,
-    A: 30,
-    B: 20,
-    C: 10,
-    D: 5,
-    E: 3,
-    F: 2,
-  };
-
-  return [
-    {
-      id: uuidv4(),
-      description: pos.desc,
-      type: 'position',
-      target: pos.target,
-      met: false,
-    },
-    {
-      id: uuidv4(),
-      description: `Win at least ${winTargetByClass[teamClass] || 10} league matches`,
-      type: 'wins',
-      target: winTargetByClass[teamClass] || 10,
-      met: false,
-    },
-    {
-      id: uuidv4(),
-      description: `Invest at least GBP ${spendTargets[teamClass] || 5}m in transfers`,
-      type: 'spend',
-      target: spendTargets[teamClass] || 5,
-      met: false,
-    },
+const buildGeneratedSquadRows = (
+  teamName: string,
+  baseOverall: number,
+  nationality: string
+): BasePlayerRow[] => {
+  const positions: [Position, string][] = [
+    ['GK', 'GK'], ['GK', 'GK'],
+    ['DEF', 'CB'], ['DEF', 'CB'], ['DEF', 'CB'], ['DEF', 'CB'],
+    ['DEF', 'RB'], ['DEF', 'LB'],
+    ['MID', 'CM'], ['MID', 'CM'], ['MID', 'CDM'], ['MID', 'CAM'],
+    ['MID', 'RM'], ['MID', 'LM'],
+    ['FWD', 'ST'], ['FWD', 'ST'], ['FWD', 'RW'], ['FWD', 'LW'],
   ];
+
+  return positions.map(([position, subPosition], index) => ({
+    name: `${teamName.split(' ')[0]} ${index + 1}`,
+    position,
+    subPosition,
+    altPositions: [subPosition],
+    overallRating: baseOverall + Math.floor(Math.random() * 6) - 2,
+    age: 20 + Math.floor(Math.random() * 11),
+    nationality,
+    stats: {
+      pace: 68 + Math.random() * 18,
+      shooting: position === 'FWD' ? 74 : 50,
+      passing: position === 'MID' ? 75 : 60,
+      dribbling: 68 + Math.random() * 12,
+      defending: position === 'DEF' ? 74 : 42,
+      physic: 68 + Math.random() * 14,
+    },
+  }));
 };
 
 const calculateImpactCoefficient = (overallRating: number) => {
@@ -244,7 +211,6 @@ const markBestStarters = (teamPlayers: Player[], players: Record<string, Player>
 export const initGameData = (userTeamName?: string) => {
   const teams: Record<string, Team> = {};
   const players: Record<string, Player> = {};
-  const fixtures: Record<string, Fixture> = {};
   const teamIds: string[] = [];
   const teamClasses: Record<string, string> = {}; // teamId -> class letter
 
@@ -267,11 +233,12 @@ export const initGameData = (userTeamName?: string) => {
     const teamId = `T${teamCounter++}`;
     teamIds.push(teamId);
     teamClasses[teamId] = teamData.class;
+    const boardProfile = buildBoardProfile(teamData.class, 'Premier League');
     const managerSource = PREMIER_LEAGUE_MANAGERS.find(item => item.teamName === teamData.name);
     if (!managerSource) {
       throw new Error(`Missing manager data for ${teamData.name}`);
     }
-    const manager = buildManager(managerSource, teamId);
+    const manager = buildManager(managerSource, teamId, boardProfile);
 
     teams[teamId] = {
       id: teamId,
@@ -279,6 +246,7 @@ export const initGameData = (userTeamName?: string) => {
       countryId: 'england',
       division: 'Premier League',
       clubClass: teamData.class,
+      boardProfile,
       manager,
       points: 0,
       goalsFor: 0,
@@ -294,7 +262,7 @@ export const initGameData = (userTeamName?: string) => {
         : getRandomTactics(),
       budget: getBudgetForClass(teamData.class),
       transferSpend: 0,
-      boardApproval: deriveInitialBoardApproval(manager),
+      boardApproval: deriveInitialBoardApproval(manager, boardProfile),
     };
 
     const teamPlayers: Player[] = [];
@@ -302,32 +270,8 @@ export const initGameData = (userTeamName?: string) => {
     
     // Generate generic squad if missing from JSON
     if (realPlayers.length < 15) {
-      const positions: [Position, string][] = [
-        ['GK', 'GK'], ['GK', 'GK'],
-        ['DEF', 'CB'], ['DEF', 'CB'], ['DEF', 'CB'], ['DEF', 'CB'],
-        ['DEF', 'RB'], ['DEF', 'LB'],
-        ['MID', 'CM'], ['MID', 'CM'], ['MID', 'CDM'], ['MID', 'CAM'],
-        ['MID', 'RM'], ['MID', 'LM'],
-        ['FWD', 'ST'], ['FWD', 'ST'], ['FWD', 'RW'], ['FWD', 'LW'],
-      ];
       const baseOvr = teamData.class === 'C' ? 76 : (teamData.class === 'D' ? 74 : 78);
-      realPlayers = positions.map(([pos, subPos], i) => ({
-        name: `${teamData.name.substring(0,3)} Player ${i+1}`,
-        position: pos,
-        subPosition: subPos,
-        altPositions: [subPos],
-        overallRating: baseOvr + Math.floor(Math.random() * 6) - 2,
-        age: 20 + Math.floor(Math.random() * 12),
-        nationality: 'England',
-        stats: { 
-          pace: 70 + Math.random() * 15, 
-          shooting: pos === 'FWD' ? 75 : 50, 
-          passing: pos === 'MID' ? 75 : 60, 
-          dribbling: 70, 
-          defending: pos === 'DEF' ? 75 : 40, 
-          physic: 70 
-        }
-      }));
+      realPlayers = buildGeneratedSquadRows(teamData.name, baseOvr, 'England');
     }
 
     realPlayers.sort((a, b) => b.overallRating - a.overallRating);
@@ -345,14 +289,14 @@ export const initGameData = (userTeamName?: string) => {
   });
 
   const lowerRows = lowerLeaguePlayers;
-  const lowerGroups = lowerRows.reduce<Record<Division, Record<string, LowerLeaguePlayerRow[]>>>((acc, row) => {
+  const lowerGroups = lowerRows.reduce<Record<LeagueDivision, Record<string, LowerLeaguePlayerRow[]>>>((acc, row) => {
     if (!acc[row.leagueName]) acc[row.leagueName] = {};
     if (!acc[row.leagueName][row.clubName]) acc[row.leagueName][row.clubName] = [];
     acc[row.leagueName][row.clubName].push(row);
     return acc;
-  }, { Championship: {}, 'League One': {}, 'League Two': {} } as Record<Division, Record<string, LowerLeaguePlayerRow[]>>);
+  }, { Championship: {}, 'League One': {}, 'League Two': {} } as Record<LeagueDivision, Record<string, LowerLeaguePlayerRow[]>>);
 
-  (['Championship', 'League One', 'League Two'] as Division[]).forEach((division) => {
+  (['Championship', 'League One', 'League Two'] as LeagueDivision[]).forEach((division) => {
     const clubs = Object.entries(lowerGroups[division] || {})
       .map(([clubName, rows]) => {
         const avgOverall = rows.reduce((sum, row) => sum + row.overallRating, 0) / Math.max(1, rows.length);
@@ -367,7 +311,8 @@ export const initGameData = (userTeamName?: string) => {
       const teamId = `T${teamCounter++}`;
       teamIds.push(teamId);
       teamClasses[teamId] = club.teamClass;
-      const manager = buildGenericTeamManager(club.clubName, teamId, division, club.avgOverall);
+      const boardProfile = buildBoardProfile(club.teamClass, division);
+      const manager = buildGenericManager(club.clubName, teamId, division, club.avgOverall, boardProfile);
       const teamPlayers: Player[] = [];
       const realPlayers = toLowerLeagueSourcePlayers(club.rows);
 
@@ -377,6 +322,7 @@ export const initGameData = (userTeamName?: string) => {
       countryId: 'england',
       division,
       clubClass: club.teamClass,
+      boardProfile,
       manager,
         points: 0,
         goalsFor: 0,
@@ -392,7 +338,7 @@ export const initGameData = (userTeamName?: string) => {
           : getRandomTactics(),
         budget: getBudgetForClass(club.teamClass),
         transferSpend: 0,
-        boardApproval: deriveInitialBoardApproval(manager),
+        boardApproval: deriveInitialBoardApproval(manager, boardProfile),
       };
 
       realPlayers.sort((a, b) => b.overallRating - a.overallRating);
@@ -408,21 +354,56 @@ export const initGameData = (userTeamName?: string) => {
     });
   });
 
-  // 2. Generate round-robin fixtures using proper circle method
-  // This naturally alternates home/away for each team each round
-  let fixtureCounter = 1;
-  (['Premier League', 'Championship', 'League One', 'League Two'] as Division[]).forEach(division => {
-    const divisionTeamIds = teamIds.filter(teamId => teams[teamId].division === division);
-    const generated = buildRoundRobinFixtures(divisionTeamIds, division, fixtureCounter);
-    Object.assign(fixtures, generated.fixtures);
-    fixtureCounter = generated.nextCounter;
+  getContinentalClubNames().forEach((clubName, index) => {
+    const teamId = `T${teamCounter++}`;
+    teamIds.push(teamId);
+    teamClasses[teamId] = index < 3 ? 'A' : 'B';
+    const boardProfile = buildBoardProfile(teamClasses[teamId], 'Continental', true);
+    const manager = buildGenericManager(clubName, teamId, 'Continental', index < 3 ? 80 : 74, boardProfile);
+    teams[teamId] = {
+      id: teamId,
+      name: clubName,
+      countryId: 'continental',
+      division: 'Continental',
+      isExternal: true,
+      clubClass: teamClasses[teamId],
+      boardProfile,
+      manager,
+      points: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      played: 0,
+      activeFormation: '4-2-3-1',
+      form: [],
+      tactics: getRandomTactics(),
+      budget: index < 3 ? 85 : 55,
+      transferSpend: 0,
+      boardApproval: deriveInitialBoardApproval(manager, boardProfile),
+    };
+
+    buildGeneratedSquadRows(clubName, index < 3 ? 81 : 77, index % 2 === 0 ? 'Spain' : 'Italy')
+      .forEach(playerRow => {
+        const player = buildPlayerRecord(playerRow, teamId, (playerCounter++).toString(), true);
+        players[player.id] = player;
+      });
+    const squad = Object.values(players).filter(player => player.teamId === teamId);
+    markBestStarters(squad, players);
   });
 
-  return { teams, players, fixtures, teamClasses };
+  const { fixtures, competitions } = buildSeasonCompetitionBundle(teams, 1);
+
+  return { teams, players, fixtures, competitions, teamClasses };
 };
 
 /** Generate board objectives for the user's team. */
-export const generateBoardObjectives = (teamClass: string, teamName: string, division: Division = 'Premier League'): BoardObjective[] =>
-  buildTeamObjectives(teamClass, division);
+export const generateBoardObjectives = (
+  teamClass: string,
+  _teamName: string,
+  division: LeagueDivision = 'Premier League'
+): BoardObjective[] =>
+  buildBoardObjectives(teamClass, division, buildBoardProfile(teamClass, division));
 
 

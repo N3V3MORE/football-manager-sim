@@ -5,6 +5,15 @@ import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
 import { createSeededRandomGenerator } from '../src/core/random';
 import {
+  getSeasonEuropeQualifiedTeamIds,
+  resolveCompetitionProgression,
+} from '../src/core/competitionEngine';
+import {
+  buildBoardObjectives,
+  buildBoardProfile,
+  runBoardReview,
+} from '../src/core/boardEngine';
+import {
   applySeasonEndToCareer,
   buildSeasonSummary,
   createDefaultCareerRecord,
@@ -19,7 +28,8 @@ import {
 } from '../src/core/postMatchAccounting';
 import { applySubstitutions } from '../src/core/substitutionEngine';
 import { advanceSeason } from '../src/core/seasonTransition';
-import { Player } from '../src/models/types';
+import { appointReplacementManager } from '../src/core/managerUtils';
+import { LeagueDivision, Player, Team } from '../src/models/types';
 import { isPlayerUnavailable } from '../src/core/playerStatusUtils';
 import { evaluateBoardObjectives } from '../src/store/boardObjectiveHelpers';
 import { useGameStore } from '../src/store/gameStore';
@@ -30,6 +40,18 @@ import {
   MAX_INBOX_MESSAGES,
   mergeInboxMessages,
 } from '../src/store/inboxHelpers';
+
+const RED_CARD_EVENT_PATTERN = /red card|sent off|straight red|reaches for red/i;
+const buildTacticalSetupKey = (team: Team) => (
+  [
+    team.activeFormation,
+    team.tactics.mentality,
+    team.tactics.passingStyle,
+    team.tactics.tempo,
+    team.tactics.defensiveLine,
+    team.tactics.pressing,
+  ].join('|')
+);
 
 const runInvariantChecks = () => {
   assert.equal(didConcedeInWindow([], 0, 90, 0), false);
@@ -194,7 +216,11 @@ const runInvariantChecks = () => {
       goalsAgainst: 60,
     },
   };
-  const syntheticObjectives = generateBoardObjectives('A', leadTeam.name, leadTeam.division);
+  const syntheticObjectives = generateBoardObjectives(
+    'A',
+    leadTeam.name,
+    (leadTeam.division === 'Continental' ? 'Premier League' : leadTeam.division) as LeagueDivision
+  );
   const inSeasonObjectiveResult = evaluateBoardObjectives(
     syntheticObjectives,
     syntheticTeams[leadTeam.id],
@@ -220,6 +246,163 @@ const runInvariantChecks = () => {
     { isSeasonComplete: true }
   );
   assert.equal(repeatedPositionCheck.approvalChange, 0);
+
+  const eliteProfile = buildBoardProfile('S', 'Premier League');
+  const survivalProfile = buildBoardProfile('F', 'League Two');
+  const eliteObjectives = buildBoardObjectives(
+    'S',
+    'Premier League',
+    eliteProfile,
+    ['fa-cup', 'carabao-cup', 'europe']
+  );
+  const survivalObjectives = buildBoardObjectives('F', 'League Two', survivalProfile);
+  assert.ok(eliteObjectives.some(objective => objective.competitionId === 'carabao-cup'));
+  assert.ok(eliteObjectives.some(objective => objective.competitionId === 'europe'));
+  assert.ok(survivalObjectives.some(objective => objective.type === 'max_spend'));
+  assert.equal(survivalObjectives.some(objective => objective.competitionId === 'carabao-cup'), false);
+
+  const reviewSeed = initGameData();
+  const premierTeams = Object.values(reviewSeed.teams).filter(team => team.division === 'Premier League');
+  const eliteTeam = premierTeams.find(team => team.clubClass === 'S');
+  const survivalTeam = premierTeams.find(team => team.clubClass === 'D');
+  assert.ok(eliteTeam && survivalTeam, 'Expected Premier League elite and survival clubs for board review regression');
+
+  const reviewedLeague = Object.fromEntries(
+    premierTeams.map((team, index) => [
+      team.id,
+      {
+        ...team,
+        boardProfile: buildBoardProfile(team.clubClass || 'C', 'Premier League'),
+        played: 38,
+        points: Math.max(22, 82 - (index * 3)),
+        wins: Math.max(6, 24 - index),
+        draws: 8,
+        losses: Math.min(24, 6 + index),
+        goalsFor: Math.max(28, 72 - index),
+        goalsAgainst: 34 + index,
+        transferSpend: 12,
+        form: ['W', 'D', 'L', 'W', 'D'],
+      },
+    ])
+  );
+
+  reviewedLeague[eliteTeam!.id] = {
+    ...reviewedLeague[eliteTeam!.id],
+    boardApproval: 38,
+    points: 36,
+    wins: 9,
+    draws: 9,
+    losses: 20,
+    goalsFor: 38,
+    goalsAgainst: 66,
+    transferSpend: 96,
+    form: ['L', 'L', 'D', 'L', 'L'],
+    manager: {
+      ...reviewedLeague[eliteTeam!.id].manager,
+      pressureScore: 62,
+      replacementRisk: 60,
+    },
+  };
+  reviewedLeague[survivalTeam!.id] = {
+    ...reviewedLeague[survivalTeam!.id],
+    boardApproval: 38,
+    points: 36,
+    wins: 9,
+    draws: 9,
+    losses: 20,
+    goalsFor: 38,
+    goalsAgainst: 66,
+    transferSpend: 4,
+    form: ['D', 'L', 'W', 'D', 'L'],
+    manager: {
+      ...reviewedLeague[survivalTeam!.id].manager,
+      pressureScore: 40,
+      replacementRisk: 35,
+    },
+  };
+
+  const eliteReview = runBoardReview(
+    reviewedLeague[eliteTeam!.id],
+    reviewedLeague,
+    buildBoardObjectives('S', 'Premier League', eliteProfile, ['fa-cup', 'carabao-cup', 'europe']),
+    { isSeasonComplete: true, competitions: reviewSeed.competitions }
+  );
+  const survivalReview = runBoardReview(
+    reviewedLeague[survivalTeam!.id],
+    reviewedLeague,
+    buildBoardObjectives('D', 'Premier League', buildBoardProfile('D', 'Premier League')),
+    { isSeasonComplete: true, competitions: reviewSeed.competitions }
+  );
+  assert.ok(
+    eliteReview.nextManager.replacementRisk > survivalReview.nextManager.replacementRisk,
+    'Elite underperformance should create higher replacement risk than survival-level underperformance'
+  );
+
+  const replacementSeed = initGameData();
+  const replacementTeam = Object.values(replacementSeed.teams)
+    .find(team => team.division === 'Premier League' && team.clubClass === 'A');
+  assert.ok(replacementTeam, 'Expected an upper-tier AI club for manager replacement regression');
+  const replacementTable = Object.fromEntries(
+    Object.values(replacementSeed.teams).map((team, index) => [
+      team.id,
+      team.division === 'Premier League'
+        ? {
+            ...team,
+            boardProfile: buildBoardProfile(team.clubClass || 'C', 'Premier League'),
+            played: 38,
+            points: Math.max(24, 84 - (index * 2)),
+            wins: Math.max(7, 25 - index),
+            draws: 7,
+            losses: Math.min(24, 6 + index),
+            goalsFor: Math.max(30, 70 - index),
+            goalsAgainst: 34 + index,
+            transferSpend: 15,
+            form: ['W', 'D', 'L', 'W', 'D'],
+          }
+        : team,
+    ])
+  );
+  replacementTable[replacementTeam!.id] = {
+    ...replacementTable[replacementTeam!.id],
+    boardApproval: 14,
+    points: 18,
+    wins: 4,
+    draws: 6,
+    losses: 28,
+    goalsFor: 28,
+    goalsAgainst: 82,
+    transferSpend: 98,
+    form: ['L', 'L', 'L', 'L', 'L'],
+    manager: {
+      ...replacementTable[replacementTeam!.id].manager,
+      pressureScore: 82,
+      replacementRisk: 88,
+    },
+  };
+  const advancedSeason = advanceSeason(
+    replacementSeed.players,
+    replacementTable,
+    replacementSeed.competitions,
+    null,
+    []
+  );
+  assert.notEqual(
+    advancedSeason.teams[replacementTeam!.id].manager.name,
+    replacementTeam!.manager.name,
+    'A badly failing AI club should appoint a replacement manager on season rollover'
+  );
+  const replacementSampleManagers = Object.values(replacementTable)
+    .filter(team => team.division === 'Premier League')
+    .slice(0, 8)
+    .map(team => appointReplacementManager(team, team.division));
+  assert.ok(
+    new Set(replacementSampleManagers.map(manager => manager.name)).size >= 4,
+    'Replacement manager selection should produce varied identities'
+  );
+  assert.ok(
+    new Set(replacementSampleManagers.map(manager => manager.contractYearsRemaining)).size >= 2,
+    'Replacement manager selection should produce varied contract lengths'
+  );
 
   useGameStore.getState().initializeGame('T1');
   const liveState = useGameStore.getState();
@@ -292,7 +475,14 @@ const runInvariantChecks = () => {
       },
     ])
   );
-  const nextSeason = advanceSeason(seededPlayers, initGameData().teams, null, []);
+  const seasonSeedData = initGameData();
+  const nextSeason = advanceSeason(
+    seededPlayers,
+    seasonSeedData.teams,
+    seasonSeedData.competitions,
+    null,
+    []
+  );
   Object.values(nextSeason.players).forEach(player => {
     assert.equal(player.matchesSuspended, 0);
     assert.equal(player.minutesPlayed, 0);
@@ -307,7 +497,7 @@ const runInvariantChecks = () => {
   const migrate = useGameStore.persist.getOptions().migrate as (
     persistedState: unknown,
     version: number
-  ) => { inboxMessages: { body: string }[] };
+  ) => any;
   const migratedState = migrate({
     currentWeek: 7,
     userTeamId: 'T1',
@@ -319,6 +509,210 @@ const runInvariantChecks = () => {
   }, 3);
   assert.equal(migratedState.inboxMessages.length, 1);
   assert.equal(migratedState.inboxMessages[0].body, 'Board approval update');
+
+  useGameStore.getState().initializeGame('T1');
+  const migrationSeedState = useGameStore.getState();
+  const persistedObjectives = migrationSeedState.boardObjectives.map((objective, index) => ({
+    ...objective,
+    id: `persisted-objective-${index}`,
+    met: index === 0,
+  }));
+  const migratedObjectiveState = migrate({
+    currentWeek: migrationSeedState.currentWeek,
+    userTeamId: migrationSeedState.userTeamId,
+    teams: migrationSeedState.teams,
+    players: migrationSeedState.players,
+    fixtures: migrationSeedState.fixtures,
+    competitions: migrationSeedState.competitions,
+    news: migrationSeedState.news,
+    inboxMessages: migrationSeedState.inboxMessages,
+    boardObjectives: persistedObjectives,
+    careerRecord: migrationSeedState.careerRecord,
+    liveMatches: migrationSeedState.liveMatches,
+  }, 7);
+  const objectiveKey = (objective: {
+    type: string;
+    target: number;
+    competitionId?: string;
+    targetRound?: string;
+  }) => [objective.type, objective.target, objective.competitionId || '', objective.targetRound || ''].join('|');
+  const migratedObjectives = (migratedObjectiveState.boardObjectives || []) as Array<{
+    id: string;
+    met: boolean;
+    type: string;
+    target: number;
+    competitionId?: string;
+    targetRound?: string;
+  }>;
+  const migratedObjectivesByKey = new Map(
+    migratedObjectives.map(objective => [objectiveKey(objective), objective])
+  );
+  persistedObjectives.forEach(objective => {
+    const migratedObjective = migratedObjectivesByKey.get(objectiveKey(objective));
+    assert.ok(migratedObjective, `Expected migrated objective for ${objective.description}`);
+    assert.equal(migratedObjective!.id, objective.id);
+    assert.equal(migratedObjective!.met, objective.met);
+  });
+
+  const migrationSeed = initGameData();
+  const migrationUserTeamId = Object.keys(migrationSeed.teams)[0];
+  const migrationRng = createSeededRandomGenerator(20260611);
+  let midSeasonState = {
+    players: migrationSeed.players,
+    teams: migrationSeed.teams,
+    fixtures: migrationSeed.fixtures,
+    competitions: migrationSeed.competitions,
+    currentWeek: 1,
+    news: [] as string[],
+  };
+  for (let week = 1; week <= 8; week += 1) {
+    const weekFixtures = Object.values(midSeasonState.fixtures).filter(fixture => fixture.week === week);
+    for (const fixture of weekFixtures) {
+      const result = quickSimMatch(
+        fixture.id,
+        midSeasonState.players,
+        midSeasonState.teams,
+        midSeasonState.fixtures,
+        migrationUserTeamId,
+        { rng: migrationRng }
+      );
+      midSeasonState.players = result.players;
+      midSeasonState.teams = result.teams;
+      midSeasonState.fixtures = { ...midSeasonState.fixtures, [fixture.id]: result.fixture };
+    }
+    const progression = computeWeeklyProgression(
+      midSeasonState.currentWeek,
+      midSeasonState.players,
+      midSeasonState.teams,
+      midSeasonState.fixtures,
+      midSeasonState.news,
+      migrationUserTeamId,
+      migrationRng
+    );
+    midSeasonState.players = progression.players;
+    midSeasonState.teams = progression.teams;
+    midSeasonState.currentWeek = progression.currentWeek;
+    midSeasonState.news = progression.news;
+    const transferResult = computeWeeklyTransfers(
+      midSeasonState.players,
+      midSeasonState.teams,
+      migrationUserTeamId,
+      migrationRng
+    );
+    midSeasonState.players = transferResult.players;
+    midSeasonState.teams = transferResult.teams;
+  }
+
+  const legacyTeams = Object.fromEntries(
+    Object.values(midSeasonState.teams).map(team => [
+      team.id,
+      {
+        id: team.id,
+        name: team.name,
+        division: team.division,
+        clubClass: team.clubClass,
+        isExternal: team.isExternal,
+        points: team.points,
+        goalsFor: team.goalsFor,
+        goalsAgainst: team.goalsAgainst,
+        wins: team.wins,
+        draws: team.draws,
+        losses: team.losses,
+        played: team.played,
+        activeFormation: team.activeFormation,
+        form: team.form,
+        tactics: team.tactics,
+        budget: team.budget,
+        lastStartingXI: team.lastStartingXI,
+        formationMap: team.formationMap,
+      },
+    ])
+  );
+  const migratedMidSeasonState = migrate({
+    currentWeek: midSeasonState.currentWeek,
+    userTeamId: migrationUserTeamId,
+    teams: legacyTeams,
+    players: midSeasonState.players,
+    fixtures: midSeasonState.fixtures,
+    competitions: midSeasonState.competitions,
+    news: midSeasonState.news,
+    inboxMessages: [],
+    boardObjectives: [],
+    careerRecord: {
+      seasonsManaged: 1,
+      totalWins: 0,
+      totalDraws: 0,
+      totalLosses: 0,
+      totalGoalsFor: 0,
+      totalGoalsAgainst: 0,
+      reputation: 48,
+      trophies: [],
+      seasonHistory: [],
+      consecutiveLowApprovalWeeks: 0,
+    },
+  }, 7) as any;
+
+  assert.equal(migratedMidSeasonState.currentWeek, midSeasonState.currentWeek);
+  assert.ok(migratedMidSeasonState.competitions['carabao-cup'], 'Mid-season migration should preserve Carabao Cup state');
+  assert.ok(migratedMidSeasonState.competitions['fa-cup'], 'Mid-season migration should preserve FA Cup state');
+  assert.ok(migratedMidSeasonState.competitions.europe, 'Mid-season migration should preserve Europe state');
+  assert.ok(migratedMidSeasonState.teams[migrationUserTeamId].boardProfile, 'Mid-season migration should hydrate board profile');
+  assert.ok(migratedMidSeasonState.teams[migrationUserTeamId].manager, 'Mid-season migration should hydrate manager context');
+  assert.ok(migratedMidSeasonState.boardObjectives.length > 0, 'Mid-season migration should rebuild managed-team board objectives');
+
+  useGameStore.setState({
+    currentWeek: migratedMidSeasonState.currentWeek,
+    userTeamId: migratedMidSeasonState.userTeamId,
+    teams: migratedMidSeasonState.teams,
+    players: migratedMidSeasonState.players,
+    fixtures: migratedMidSeasonState.fixtures,
+    competitions: migratedMidSeasonState.competitions,
+    news: migratedMidSeasonState.news,
+    inboxMessages: [],
+    boardObjectives: migratedMidSeasonState.boardObjectives,
+    liveMatches: {},
+  });
+  useGameStore.getState().setFormation(migrationUserTeamId, useGameStore.getState().teams[migrationUserTeamId].activeFormation);
+  const hydratedManagedStarters = Object.values(useGameStore.getState().players).filter(player => (
+    player.teamId === migrationUserTeamId &&
+    player.isStarting
+  ));
+  const hydratedMapCount = Object.keys(useGameStore.getState().teams[migrationUserTeamId].formationMap || {}).length;
+  assert.ok(
+    hydratedManagedStarters.length >= 8 && hydratedManagedStarters.length <= 11,
+    `Hydrated managed team should keep a realistic XI core (got ${hydratedManagedStarters.length})`
+  );
+  assert.equal(
+    hydratedMapCount,
+    hydratedManagedStarters.length,
+    'Hydrated managed team formation map should match starter count'
+  );
+
+  const rolloverFromMigratedState = advanceSeason(
+    useGameStore.getState().players,
+    useGameStore.getState().teams,
+    useGameStore.getState().competitions,
+    migrationUserTeamId,
+    useGameStore.getState().news
+  );
+  assert.equal(rolloverFromMigratedState.currentWeek, 1);
+  assert.ok(rolloverFromMigratedState.competitions['carabao-cup']);
+  assert.ok(rolloverFromMigratedState.competitions['fa-cup']);
+  assert.ok(rolloverFromMigratedState.competitions.europe);
+  assert.ok(rolloverFromMigratedState.teams[migrationUserTeamId].boardProfile);
+  assert.ok(rolloverFromMigratedState.teams[migrationUserTeamId].manager);
+  assert.equal(
+    Object.values(rolloverFromMigratedState.players)
+      .filter(player => player.teamId === migrationUserTeamId && player.isStarting)
+      .length,
+    11,
+    'Season rollover from a migrated mid-season save should keep a full managed XI'
+  );
+  assert.equal(
+    Object.keys(rolloverFromMigratedState.teams[migrationUserTeamId].formationMap || {}).length,
+    11,
+    'Season rollover from a migrated mid-season save should rebuild an 11-slot formation map'
+  );
 
   const duplicateMessages = generateSystemInboxMessages(3, ['Board approval duplicate']);
   const mergedMessages = mergeInboxMessages([], [...duplicateMessages, ...duplicateMessages]);
@@ -624,6 +1018,7 @@ const runInvariantChecks = () => {
       },
     },
     departureData.teams,
+    departureData.competitions,
     departureUserTeamId,
     []
   );
@@ -695,10 +1090,18 @@ const runSeason = (seed: number) => {
   let totalGoals = 0;
   let yellowCards = 0;
   let redCards = 0;
+  let redCardLogMismatches = 0;
+  let redCardEventsWithoutCard = 0;
+  const tacticalChangeCounts = Object.fromEntries(
+    Object.values(state.teams).map(team => [team.id, 0])
+  ) as Record<string, number>;
   const seasonWeekLimit = getSeasonWeekLimit(state.fixtures);
   const formationUsage = { back3: 0, back4: 0, back5: 0 };
 
   for (let week = 1; week <= seasonWeekLimit; week++) {
+    const weekStartSetups = Object.fromEntries(
+      Object.values(state.teams).map(team => [team.id, buildTacticalSetupKey(team)])
+    ) as Record<string, string>;
     const weekFixtures = Object.values(state.fixtures).filter(fixture => fixture.week === week);
     for (const fixture of weekFixtures) {
       const beforeCards = Object.values(state.players).reduce(
@@ -716,7 +1119,16 @@ const runSeason = (seed: number) => {
         { yellow: 0, red: 0 }
       );
       yellowCards += (afterCards.yellow - beforeCards.yellow);
-      redCards += (afterCards.red - beforeCards.red);
+      const redDelta = (afterCards.red - beforeCards.red);
+      redCards += redDelta;
+
+      const hasRedEvent = result.events.some(event => RED_CARD_EVENT_PATTERN.test(event));
+      if (redDelta > 0 && !hasRedEvent) {
+        redCardLogMismatches += 1;
+      }
+      if (hasRedEvent && redDelta === 0) {
+        redCardEventsWithoutCard += 1;
+      }
     }
 
     const progression = computeWeeklyProgression(
@@ -738,6 +1150,14 @@ const runSeason = (seed: number) => {
     state.teams = transfers.teams;
 
     Object.values(state.teams).forEach(team => {
+      const before = weekStartSetups[team.id];
+      const after = buildTacticalSetupKey(team);
+      if (before !== after) {
+        tacticalChangeCounts[team.id] = (tacticalChangeCounts[team.id] || 0) + 1;
+      }
+    });
+
+    Object.values(state.teams).forEach(team => {
       if (team.activeFormation.startsWith('3')) formationUsage.back3 += 1;
       else if (team.activeFormation.startsWith('5')) formationUsage.back5 += 1;
       else formationUsage.back4 += 1;
@@ -749,6 +1169,10 @@ const runSeason = (seed: number) => {
     avgGoalsPerMatch: totalGoals / Math.max(1, matches),
     yellowCards,
     redCards,
+    redCardLogMismatches,
+    redCardEventsWithoutCard,
+    totalTacticalChanges: Object.values(tacticalChangeCounts).reduce((sum, count) => sum + count, 0),
+    teamsWithNoTacticalChanges: Object.values(tacticalChangeCounts).filter(count => count === 0).length,
     formationUsage,
   };
 };
@@ -758,6 +1182,10 @@ const runThresholdChecks = () => {
   const avgGoals = seasons.reduce((sum, season) => sum + season.avgGoalsPerMatch, 0) / seasons.length;
   const totalYellow = seasons.reduce((sum, season) => sum + season.yellowCards, 0);
   const totalRed = seasons.reduce((sum, season) => sum + season.redCards, 0);
+  const redCardLogMismatches = seasons.reduce((sum, season) => sum + season.redCardLogMismatches, 0);
+  const redCardEventsWithoutCard = seasons.reduce((sum, season) => sum + season.redCardEventsWithoutCard, 0);
+  const avgTacticalChanges = seasons.reduce((sum, season) => sum + season.totalTacticalChanges, 0) / seasons.length;
+  const avgTeamsWithNoTacticalChanges = seasons.reduce((sum, season) => sum + season.teamsWithNoTacticalChanges, 0) / seasons.length;
   const formationUsage = seasons.reduce(
     (acc, season) => ({
       back3: acc.back3 + season.formationUsage.back3,
@@ -770,6 +1198,10 @@ const runThresholdChecks = () => {
   assert.ok(avgGoals >= 2.3 && avgGoals <= 4.8, `Expected avg goals between 2.3 and 4.8, got ${avgGoals.toFixed(2)}`);
   assert.ok(totalYellow > 0, 'Expected at least one yellow card across threshold runs');
   assert.ok(totalRed > 0, 'Expected at least one red card across threshold runs');
+  assert.equal(redCardLogMismatches, 0, 'Red cards should always produce an explicit red-card event message');
+  assert.equal(redCardEventsWithoutCard, 0, 'Red-card event messages should only appear when a red card is recorded');
+  assert.ok(avgTacticalChanges >= 110, `Expected average tactical changes >= 110, got ${avgTacticalChanges.toFixed(1)}`);
+  assert.ok(avgTeamsWithNoTacticalChanges <= 35, `Expected average teams with no tactical changes <= 35, got ${avgTeamsWithNoTacticalChanges.toFixed(1)}`);
   assert.ok(formationUsage.back3 > 0, 'Expected some back-3 usage');
   assert.ok(formationUsage.back5 > 0, 'Expected some back-5 usage');
 };
@@ -892,7 +1324,7 @@ const runCareerEngineChecks = () => {
   // buildSeasonSummary: champion outcome when finishing 1st in non-top-tier division
   const championTeam = { ...userTeam, wins: 30, draws: 4, losses: 4, goalsFor: 90, goalsAgainst: 30, points: 94 };
   const dominatedTables = { ...data.teams, [userTeamId]: championTeam };
-  const summary = buildSeasonSummary(1, championTeam, dominatedTables);
+  const summary = buildSeasonSummary(1, championTeam, dominatedTables, data.competitions);
   assert.equal(summary.season, 1);
   assert.equal(summary.teamId, userTeamId);
   assert.ok(['champion', 'promoted', 'stayed', 'relegated'].includes(summary.outcome));
@@ -915,7 +1347,7 @@ const runCareerEngineChecks = () => {
           : team,
       ])
     );
-    const premierSummary = buildSeasonSummary(1, premierTables[premierTeam.id], premierTables);
+    const premierSummary = buildSeasonSummary(1, premierTables[premierTeam.id], premierTables, data.competitions);
     assert.equal(premierSummary.outcome, 'champion');
   }
 
@@ -924,27 +1356,27 @@ const runCareerEngineChecks = () => {
   const bottomTables = Object.fromEntries(
     Object.entries(data.teams).map(([id, t]) => [id, { ...t, division: 'Championship' as const, points: id === userTeamId ? 9 : 60 }])
   );
-  const relegatedSummary = buildSeasonSummary(1, bottomTeam, bottomTables);
+  const relegatedSummary = buildSeasonSummary(1, bottomTeam, bottomTables, data.competitions);
   assert.ok(['relegated', 'stayed'].includes(relegatedSummary.outcome));
 
   // applySeasonEndToCareer: champion adds reputation, trophy, increments seasons
   const champRecord = createDefaultCareerRecord();
-  const champSummary = buildSeasonSummary(1, championTeam, dominatedTables);
+  const champSummary = buildSeasonSummary(1, championTeam, dominatedTables, data.competitions);
   if (champSummary.outcome === 'champion') {
     const { careerRecord: after, reputationDelta } = applySeasonEndToCareer(champRecord, champSummary);
     assert.equal(after.seasonsManaged, 1);
-    assert.equal(reputationDelta, 8);
-    assert.equal(after.reputation, 58);
+    assert.equal(reputationDelta, 9);
+    assert.equal(after.reputation, 59);
     assert.equal(after.trophies.length, 1);
     assert.equal(after.trophies[0].type, 'champion');
   }
 
   // applySeasonEndToCareer: relegated drops reputation, adds relegated trophy
-  const rel = { ...champSummary, outcome: 'relegated' as const };
+  const rel = { ...champSummary, outcome: 'relegated' as const, boardVerdict: 'critical' as const };
   const relRecord = createDefaultCareerRecord();
   const { careerRecord: relAfter, reputationDelta: relDelta } = applySeasonEndToCareer(relRecord, rel);
-  assert.equal(relDelta, -10);
-  assert.equal(relAfter.reputation, 40);
+  assert.equal(relDelta, -12);
+  assert.equal(relAfter.reputation, 38);
   assert.equal(relAfter.trophies[0]?.type, 'relegated');
 
   // applySeasonEndToCareer: reputation is clamped to [0, 100]
@@ -990,10 +1422,13 @@ const runCareerEngineChecks = () => {
   assert.ok(offerTeamId, 'Expected a different team for job offer action coverage');
   if (offerTeamId) {
     const offerTeam = useGameStore.getState().teams[offerTeamId];
-    const expectedObjectives = generateBoardObjectives(
+    const expectedObjectives = buildBoardObjectives(
       offerTeam.clubClass || 'C',
-      offerTeam.name,
-      offerTeam.division
+      (offerTeam.division === 'Continental' ? 'Premier League' : offerTeam.division) as LeagueDivision,
+      offerTeam.boardProfile,
+      Object.values(useGameStore.getState().competitions)
+        .filter(competition => competition.entrantTeamIds.includes(offerTeamId))
+        .map(competition => competition.id)
     );
     useGameStore.setState({
       inboxMessages: [
@@ -1046,6 +1481,79 @@ const runCareerEngineChecks = () => {
   }
 };
 
+const runCompetitionBackendChecks = () => {
+  const data = initGameData();
+  assert.ok(data.competitions['carabao-cup'], 'Expected Carabao Cup competition state');
+  assert.ok(data.competitions['fa-cup'], 'Expected FA Cup competition state');
+  assert.ok(data.competitions.europe, 'Expected Europe competition state');
+
+  const fixtureSlots = new Map<string, number>();
+  Object.values(data.fixtures).forEach(fixture => {
+    [fixture.homeTeamId, fixture.awayTeamId].forEach(teamId => {
+      const key = `${teamId}-${fixture.week}`;
+      fixtureSlots.set(key, (fixtureSlots.get(key) || 0) + 1);
+    });
+  });
+  const overlaps = Array.from(fixtureSlots.entries()).filter(([, count]) => count > 1);
+  assert.equal(overlaps.length, 0, 'No team should have overlapping fixtures in the same week');
+
+  const carabaoRoundOne = data.competitions['carabao-cup'].rounds[0];
+  let progressedFixtures = { ...data.fixtures };
+  let progressedTeams = data.teams;
+  let progressedPlayers = data.players;
+  carabaoRoundOne.fixtureIds.forEach((fixtureId, index) => {
+    const result = quickSimMatch(
+      fixtureId,
+      progressedPlayers,
+      progressedTeams,
+      progressedFixtures,
+      null,
+      { rng: createSeededRandomGenerator(20260420 + index) }
+    );
+    progressedPlayers = result.players;
+    progressedTeams = result.teams;
+    progressedFixtures = { ...progressedFixtures, [fixtureId]: result.fixture };
+  });
+  const carabaoProgression = resolveCompetitionProgression(
+    progressedFixtures,
+    data.competitions,
+    progressedTeams
+  );
+  const carabaoRoundTwo = carabaoProgression.competitions['carabao-cup'].rounds[1];
+  assert.ok(carabaoRoundTwo.fixtureIds.length > 0, 'Expected Carabao Cup round two to be scheduled');
+  assert.equal(carabaoRoundTwo.week, 11, 'Expected Carabao Cup round two on its configured slot');
+
+  const premierTeams = Object.values(data.teams)
+    .filter(team => team.division === 'Premier League')
+    .sort((left, right) => right.budget - left.budget || left.name.localeCompare(right.name));
+  const qualificationTeams = { ...data.teams };
+  premierTeams.forEach((team, index) => {
+    qualificationTeams[team.id] = {
+      ...team,
+      points: Math.max(0, 90 - (index * 3)),
+      goalsFor: Math.max(10, 80 - index),
+      goalsAgainst: 20 + index,
+    };
+  });
+  const faCupWinner = Object.values(data.teams).find(team => team.division === 'Championship');
+  assert.ok(faCupWinner, 'Expected a Championship side for Europe qualification coverage');
+  const qualificationCompetitions = {
+    ...data.competitions,
+    'fa-cup': {
+      ...data.competitions['fa-cup'],
+      championTeamId: faCupWinner!.id,
+    },
+    'carabao-cup': {
+      ...data.competitions['carabao-cup'],
+      championTeamId: premierTeams[6].id,
+    },
+  };
+  const europeQualifiedTeamIds = getSeasonEuropeQualifiedTeamIds(qualificationTeams, qualificationCompetitions);
+  assert.ok(europeQualifiedTeamIds.includes(faCupWinner!.id), 'FA Cup winner should qualify for Europe');
+  assert.ok(europeQualifiedTeamIds.includes(premierTeams[0].id), 'Top Premier League side should qualify for Europe');
+  assert.equal(europeQualifiedTeamIds.length, 8, 'Expected eight English clubs to fill the Europe slots');
+};
+
 const run = () => {
   console.log('--- CI REGRESSION CHECKS ---');
   runInvariantChecks();
@@ -1056,6 +1564,8 @@ const run = () => {
   console.log('[OK] State consistency stress checks passed');
   runCareerEngineChecks();
   console.log('[OK] Career engine checks passed');
+  runCompetitionBackendChecks();
+  console.log('[OK] Competition backend checks passed');
   console.log('--- CI REGRESSION COMPLETE ---');
 };
 

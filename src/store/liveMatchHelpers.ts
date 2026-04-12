@@ -77,6 +77,11 @@ export const removeLiveMatchFixture = (
   return nextLiveMatches;
 };
 
-export const updateTeamStats = (team: Team, goalsFor: number, goalsAgainst: number) => {
-  return applyMatchResult(team, goalsFor, goalsAgainst);
+export const updateTeamStats = (
+  team: Team,
+  goalsFor: number,
+  goalsAgainst: number,
+  includeTableStats = true
+) => {
+  return applyMatchResult(team, goalsFor, goalsAgainst, includeTableStats);
 };
