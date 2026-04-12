@@ -1495,7 +1495,11 @@ export const useGameStore = create<GameStore>()(
               myTeam,
               state.teams,
               state.boardObjectives,
-              { isSeasonComplete: state.currentWeek > seasonWeekLimit, competitions: state.competitions }
+              {
+                isSeasonComplete: state.currentWeek > seasonWeekLimit,
+                competitions: state.competitions,
+                players: state.players,
+              }
             );
             return {
                teams: {

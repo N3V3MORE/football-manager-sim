@@ -25,6 +25,8 @@ What changed:
 - Added seeded AI replacement-manager generation with varied identity, tactical profile, contract length, and initial pressure context.
 - Extended the Board Room screen and inbox/career messaging to show real club context, board expectations, and manager pressure.
 - Expanded career and board inbox explanations so sack warnings, season verdicts, and job offers include explicit pressure/replacement-risk context.
+- Added first-pass board-pressure context from squad age profile, wage posture, and registration depth so review outcomes are less flat.
+- Started trajectory-based job-market weighting so strong seasons skew toward ambitious openings and weak seasons skew toward survival/stability openings.
 - Hardened save migration and season rollover from mid-season states, including competition persistence and managed-team lineup reseeding.
 - Tightened tactical adaptation behavior under pressure and added tactical-spread guardrails in CI.
 - Added deterministic regression coverage for board-profile objective shape, elite-vs-survival pressure behavior, AI manager replacement, competition progression, migration integrity, tactical spread, and red-card event consistency.

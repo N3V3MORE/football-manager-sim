@@ -86,11 +86,13 @@ Progress already in workspace:
 - Season rollover can now replace failing AI managers.
 - AI replacement hiring now has seeded identity and contract variety instead of near-generic appointments.
 - Sack warnings, season reviews, and job offers now explain decisions using board pressure and replacement-risk context.
+- Board review now includes first-pass squad-age, wage-posture, and registration-depth pressure signals.
+- Job-offer candidate selection now applies trajectory weighting for strong-season vs weak-season outcomes.
 - The Board Room now shows board context and manager standing instead of only the approval bar.
 
 Still required before release:
 - Stronger differentiation between big-club, promotion-club, and survival-club job-market behavior over multiple seasons.
-- Board logic that reacts more directly to squad age, wage posture, and registration pressure.
+- Tune board signal weights and expose clearer board telemetry for squad age, wage posture, and registration pressure.
 - Final text/UI audit so all board and career surfaces use the pressure-first model consistently.
 
 Exit criteria:

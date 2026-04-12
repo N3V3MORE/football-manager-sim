@@ -325,17 +325,111 @@ const runInvariantChecks = () => {
     reviewedLeague[eliteTeam!.id],
     reviewedLeague,
     buildBoardObjectives('S', 'Premier League', eliteProfile, ['fa-cup', 'carabao-cup', 'europe']),
-    { isSeasonComplete: true, competitions: reviewSeed.competitions }
+    {
+      isSeasonComplete: true,
+      competitions: reviewSeed.competitions,
+      players: reviewSeed.players,
+    }
   );
   const survivalReview = runBoardReview(
     reviewedLeague[survivalTeam!.id],
     reviewedLeague,
     buildBoardObjectives('D', 'Premier League', buildBoardProfile('D', 'Premier League')),
-    { isSeasonComplete: true, competitions: reviewSeed.competitions }
+    {
+      isSeasonComplete: true,
+      competitions: reviewSeed.competitions,
+      players: reviewSeed.players,
+    }
   );
   assert.ok(
     eliteReview.nextManager.replacementRisk > survivalReview.nextManager.replacementRisk,
     'Elite underperformance should create higher replacement risk than survival-level underperformance'
+  );
+
+  const stressedPlayers = Object.fromEntries(
+    Object.values(reviewSeed.players).map(player => {
+      if (player.teamId !== eliteTeam!.id) return [player.id, player];
+      return [
+        player.id,
+        {
+          ...player,
+          age: player.position === 'GK' ? 35 : 33,
+          wage: player.wage + 85,
+          injuryWeeks: player.position === 'DEF' || player.position === 'MID' ? 2 : 0,
+          matchesSuspended: player.position === 'FWD' ? 1 : 0,
+        },
+      ];
+    })
+  );
+  const balancedPlayers = Object.fromEntries(
+    Object.values(reviewSeed.players).map(player => {
+      if (player.teamId !== eliteTeam!.id) return [player.id, player];
+      return [
+        player.id,
+        {
+          ...player,
+          age: 26,
+          wage: Math.max(8, Math.round(player.wage * 0.62)),
+          injuryWeeks: 0,
+          matchesSuspended: 0,
+        },
+      ];
+    })
+  );
+  const contextTeam = {
+    ...reviewedLeague[eliteTeam!.id],
+    boardApproval: 56,
+    points: 68,
+    wins: 20,
+    draws: 8,
+    losses: 10,
+    goalsFor: 62,
+    goalsAgainst: 44,
+    transferSpend: 24,
+    form: ['W', 'D', 'W', 'D', 'W'],
+    manager: {
+      ...reviewedLeague[eliteTeam!.id].manager,
+      boardTrust: 70,
+      jobSecurity: 66,
+      pressureScore: 39,
+      replacementRisk: 32,
+    },
+  };
+  const contextLeague = {
+    ...reviewedLeague,
+    [eliteTeam!.id]: contextTeam,
+  };
+
+  const stressedContextReview = runBoardReview(
+    contextTeam,
+    contextLeague,
+    buildBoardObjectives('S', 'Premier League', eliteProfile, ['fa-cup', 'carabao-cup', 'europe']),
+    {
+      isSeasonComplete: true,
+      competitions: reviewSeed.competitions,
+      players: stressedPlayers,
+    }
+  );
+  const balancedContextReview = runBoardReview(
+    contextTeam,
+    contextLeague,
+    buildBoardObjectives('S', 'Premier League', eliteProfile, ['fa-cup', 'carabao-cup', 'europe']),
+    {
+      isSeasonComplete: true,
+      competitions: reviewSeed.competitions,
+      players: balancedPlayers,
+    }
+  );
+  const stressedReasonText = stressedContextReview.reasons.join(' ').toLowerCase();
+  assert.ok(
+    stressedReasonText.includes('squad age profile') ||
+      stressedReasonText.includes('wage posture') ||
+      stressedReasonText.includes('registration depth'),
+    'Board review reasons should surface squad-context risk signals when they are present'
+  );
+  assert.ok(
+    stressedContextReview.nextApproval <= balancedContextReview.nextApproval,
+    'Stressed squad context should not produce a better board-approval outcome than a balanced squad context'
   );
 
   const replacementSeed = initGameData();
@@ -1416,6 +1510,86 @@ const runCareerEngineChecks = () => {
   const candidates = generateJobOfferCandidates(data.teams, userTeamId, champSummary);
   assert.ok(candidates.length <= 2);
   assert.ok(candidates.every(t => t.id !== userTeamId));
+
+  const configuredOfferPool = Object.fromEntries(
+    Object.values(data.teams).map(team => [team.id, { ...team }])
+  );
+  const premierOfferTargets = Object.values(configuredOfferPool)
+    .filter(team => team.division === 'Premier League' && team.id !== userTeamId)
+    .slice(0, 4);
+  const championshipOfferTargets = Object.values(configuredOfferPool)
+    .filter(team => team.division === 'Championship')
+    .slice(0, 3);
+  assert.ok(premierOfferTargets.length >= 3, 'Expected enough Premier League teams for offer-trajectory coverage');
+  assert.ok(championshipOfferTargets.length >= 2, 'Expected enough Championship teams for offer-trajectory coverage');
+  if (premierOfferTargets.length >= 3 && championshipOfferTargets.length >= 2) {
+    configuredOfferPool[premierOfferTargets[0].id] = {
+      ...configuredOfferPool[premierOfferTargets[0].id],
+      boardProfile: { ...configuredOfferPool[premierOfferTargets[0].id].boardProfile, ambition: 'elite' },
+      manager: {
+        ...configuredOfferPool[premierOfferTargets[0].id].manager,
+        replacementRisk: 88,
+        jobSecurity: 24,
+      },
+    };
+    configuredOfferPool[premierOfferTargets[1].id] = {
+      ...configuredOfferPool[premierOfferTargets[1].id],
+      boardProfile: { ...configuredOfferPool[premierOfferTargets[1].id].boardProfile, ambition: 'europe' },
+      manager: {
+        ...configuredOfferPool[premierOfferTargets[1].id].manager,
+        replacementRisk: 83,
+        jobSecurity: 30,
+      },
+    };
+    configuredOfferPool[premierOfferTargets[2].id] = {
+      ...configuredOfferPool[premierOfferTargets[2].id],
+      boardProfile: { ...configuredOfferPool[premierOfferTargets[2].id].boardProfile, ambition: 'survival' },
+      manager: {
+        ...configuredOfferPool[premierOfferTargets[2].id].manager,
+        replacementRisk: 90,
+        jobSecurity: 18,
+      },
+    };
+    configuredOfferPool[championshipOfferTargets[0].id] = {
+      ...configuredOfferPool[championshipOfferTargets[0].id],
+      boardProfile: { ...configuredOfferPool[championshipOfferTargets[0].id].boardProfile, ambition: 'stability' },
+      manager: {
+        ...configuredOfferPool[championshipOfferTargets[0].id].manager,
+        replacementRisk: 86,
+        jobSecurity: 22,
+      },
+    };
+    configuredOfferPool[championshipOfferTargets[1].id] = {
+      ...configuredOfferPool[championshipOfferTargets[1].id],
+      boardProfile: { ...configuredOfferPool[championshipOfferTargets[1].id].boardProfile, ambition: 'survival' },
+      manager: {
+        ...configuredOfferPool[championshipOfferTargets[1].id].manager,
+        replacementRisk: 82,
+        jobSecurity: 26,
+      },
+    };
+
+    const strongSeasonOffers = generateJobOfferCandidates(configuredOfferPool, userTeamId, {
+      ...champSummary,
+      outcome: 'champion',
+      boardVerdict: 'thriving',
+    });
+    const weakSeasonOffers = generateJobOfferCandidates(configuredOfferPool, userTeamId, {
+      ...champSummary,
+      outcome: 'sacked',
+      boardVerdict: 'critical',
+    });
+    assert.ok(
+      strongSeasonOffers.some(team => (
+        team.boardProfile.ambition === 'elite' || team.boardProfile.ambition === 'europe'
+      )),
+      'Strong seasons should surface ambitious board opportunities'
+    );
+    assert.ok(
+      weakSeasonOffers.every(team => team.boardProfile.ambition !== 'elite'),
+      'Weak seasons should not prioritize elite-board offers'
+    );
+  }
 
   useGameStore.getState().initializeGame(userTeamId);
   const offerTeamId = Object.keys(useGameStore.getState().teams).find(id => id !== userTeamId);

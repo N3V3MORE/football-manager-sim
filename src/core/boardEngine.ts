@@ -10,10 +10,12 @@ import {
   Division,
   LeagueDivision,
   Manager,
+  Player,
   Team,
 } from '../models/types';
 import { getDivisionTeamCount, sortTeamsByTable } from './leagueUtils';
 import { getCompetitionResultForTeam, hasReachedCompetitionRound } from './competitionEngine';
+import { isPlayerUnavailable } from './playerStatusUtils';
 
 type ObjectiveResult = {
   objective: BoardObjective;
@@ -23,6 +25,7 @@ type ObjectiveResult = {
 type BoardObjectiveContext = {
   isSeasonComplete?: boolean;
   competitions?: Record<string, CompetitionState>;
+  players?: Record<string, Player>;
 };
 
 export type BoardReview = {
@@ -36,6 +39,12 @@ export type BoardReview = {
   positionDelta: number | null;
   metObjectives: number;
   totalObjectives: number;
+};
+
+type SquadContextSignal = {
+  approvalAdjustment: number;
+  pressureAdjustment: number;
+  reasons: string[];
 };
 
 const getNormalizedDivision = (division: Division): LeagueDivision => (
@@ -64,6 +73,116 @@ const getAmbitionWeight = (profile: BoardProfile) => {
     default:
       return 1;
   }
+};
+
+const getWagePressureThresholds = (discipline: BoardProfile['transferDiscipline']) => {
+  if (discipline === 'strict') {
+    return { low: 0.46, high: 0.9, spendHigh: 0.72 };
+  }
+  if (discipline === 'aggressive') {
+    return { low: 0.35, high: 1.35, spendHigh: 0.95 };
+  }
+  return { low: 0.4, high: 1.1, spendHigh: 0.84 };
+};
+
+const getAvailableSquadFloor = (division: Division) => {
+  if (division === 'Premier League') return 21;
+  if (division === 'Championship') return 20;
+  if (division === 'League One') return 19;
+  if (division === 'League Two') return 18;
+  return 20;
+};
+
+const buildSquadContextSignal = (
+  team: Team,
+  players?: Record<string, Player>
+): SquadContextSignal => {
+  if (!players) {
+    return { approvalAdjustment: 0, pressureAdjustment: 0, reasons: [] };
+  }
+
+  const squad = Object.values(players).filter(player => player.teamId === team.id);
+  if (squad.length === 0) {
+    return { approvalAdjustment: 0, pressureAdjustment: 0, reasons: [] };
+  }
+
+  let approvalAdjustment = 0;
+  let pressureAdjustment = 0;
+  const reasons: string[] = [];
+
+  const avgAge = squad.reduce((sum, player) => sum + player.age, 0) / squad.length;
+  const youthShare = squad.filter(player => player.age <= 21).length / squad.length;
+  const veteranShare = squad.filter(player => player.age >= 31).length / squad.length;
+
+  if (
+    (team.boardProfile.ambition === 'elite' || team.boardProfile.ambition === 'europe') &&
+    veteranShare >= 0.38
+  ) {
+    approvalAdjustment -= 2;
+    pressureAdjustment += 7;
+    reasons.push('squad age profile looks too veteran-heavy for board ambition');
+  } else if (team.boardProfile.ambition === 'survival' && avgAge < 24.5 && youthShare >= 0.42) {
+    approvalAdjustment -= 1;
+    pressureAdjustment += 4;
+    reasons.push('squad age profile is too inexperienced for a survival fight');
+  } else if (avgAge >= 24 && avgAge <= 28 && youthShare >= 0.18 && veteranShare <= 0.34) {
+    approvalAdjustment += 1;
+    pressureAdjustment -= 2;
+  }
+
+  const wageBill = squad.reduce((sum, player) => sum + (Number.isFinite(player.wage) ? player.wage : 0), 0);
+  const spendRatio = (team.transferSpend || 0) / Math.max(1, team.budget + (team.transferSpend || 0));
+  const wagePressureRatio = wageBill / Math.max(450, team.budget * 100);
+  const wageThresholds = getWagePressureThresholds(team.boardProfile.transferDiscipline);
+
+  if (wagePressureRatio > wageThresholds.high || spendRatio > wageThresholds.spendHigh) {
+    approvalAdjustment -= 2;
+    pressureAdjustment += 6;
+    reasons.push('wage posture and spend profile are outside board comfort');
+  } else if (
+    team.boardProfile.transferDiscipline === 'strict' &&
+    wagePressureRatio <= wageThresholds.low &&
+    spendRatio <= 0.58
+  ) {
+    approvalAdjustment += 1;
+    pressureAdjustment -= 2;
+  }
+
+  const availablePlayers = squad.filter(player => !isPlayerUnavailable(player));
+  const availableByPosition = availablePlayers.reduce<Record<'GK' | 'DEF' | 'MID' | 'FWD', number>>(
+    (acc, player) => {
+      acc[player.position] += 1;
+      return acc;
+    },
+    { GK: 0, DEF: 0, MID: 0, FWD: 0 }
+  );
+  const positionShortages = [
+    Math.max(0, 2 - availableByPosition.GK),
+    Math.max(0, 5 - availableByPosition.DEF),
+    Math.max(0, 5 - availableByPosition.MID),
+    Math.max(0, 3 - availableByPosition.FWD),
+  ].reduce((sum, missing) => sum + missing, 0);
+  const availableFloor = getAvailableSquadFloor(team.division);
+  const missingDepth = Math.max(0, availableFloor - availablePlayers.length);
+
+  if (missingDepth >= 3 || positionShortages >= 3) {
+    approvalAdjustment -= 3;
+    pressureAdjustment += 9;
+    reasons.push('registration depth is stretched by availability and role shortages');
+  } else if (missingDepth > 0 || positionShortages > 0) {
+    approvalAdjustment -= 1;
+    pressureAdjustment += 3;
+    reasons.push('registration depth is trending thin');
+  } else if (availablePlayers.length >= availableFloor + 2 && positionShortages === 0) {
+    approvalAdjustment += 1;
+    pressureAdjustment -= 2;
+  }
+
+  return {
+    approvalAdjustment,
+    pressureAdjustment,
+    reasons,
+  };
 };
 
 const getTeamPosition = (team: Team, teams: Record<string, Team>) => {
@@ -484,7 +603,8 @@ export const runBoardReview = (
   const updatedObjectives = objectiveResult.updatedObjectives;
   const reasons: string[] = [];
   const patienceModifier = getPatienceModifier(team.boardProfile);
-  let approvalChange = objectiveResult.approvalChange + getFormApprovalDelta(team.form || []);
+  const squadContext = buildSquadContextSignal(team, context?.players);
+  let approvalChange = objectiveResult.approvalChange + getFormApprovalDelta(team.form || []) + squadContext.approvalAdjustment;
 
   const positionObjective = updatedObjectives.find(objective => objective.type === 'position');
   const position = positionObjective ? getTeamPosition(team, teams) : null;
@@ -533,6 +653,10 @@ export const runBoardReview = (
     reasons.push(financialObjective.description.toLowerCase());
   }
 
+  if (squadContext.reasons.length > 0) {
+    reasons.push(...squadContext.reasons);
+  }
+
   team.boardProfile.targetCompetitions.forEach(competitionId => {
     const result = context?.competitions?.[competitionId]
       ? getCompetitionResultForTeam(context.competitions[competitionId], team.id)
@@ -556,14 +680,16 @@ export const runBoardReview = (
   const jobSecurity = clampBoardMetric(
     team.manager.jobSecurity +
     Math.round(approvalChange / 2) -
-    Math.max(0, positionDelta || 0) * ambitionWeight
+    (Math.max(0, positionDelta || 0) * ambitionWeight) -
+    Math.max(0, Math.round(squadContext.pressureAdjustment / 3))
   );
   const pressureScore = clampBoardMetric(Math.round(
     ((100 - nextApproval) * 0.45) +
     ((100 - jobSecurity) * 0.20) +
     (Math.max(0, positionDelta || 0) * 6) +
     (missedObjectives * 5) +
-    getPatienceRiskModifier(team.boardProfile)
+    getPatienceRiskModifier(team.boardProfile) +
+    squadContext.pressureAdjustment
   ));
   const replacementRisk = clampBoardMetric(Math.round(
     (pressureScore * 0.65) +

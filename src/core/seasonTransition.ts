@@ -232,7 +232,11 @@ export const advanceSeason = (
         { ...team, boardProfile: currentBoardProfile },
         contractAdjustedTeams,
         reviewObjectives,
-        { isSeasonComplete: true, competitions }
+        {
+          isSeasonComplete: true,
+          competitions,
+          players: nextPlayers,
+        }
       );
       const nextDivision = nextDivisionByTeamId[teamId] || team.division;
       const nextBoardProfile = buildBoardProfile(team.clubClass || 'C', nextDivision, Boolean(team.isExternal));

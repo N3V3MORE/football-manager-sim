@@ -15,7 +15,42 @@ const getBoardVerdict = (team: Team): SeasonSummary['boardVerdict'] => {
   return 'stable';
 };
 
-const getJobOfferCandidateScore = (team: Team) => {
+type CareerTrajectory = 'upward' | 'steady' | 'downward';
+
+const getDivisionIndex = (division: Team['division']) => (
+  division === 'Continental' ? 0 : DIVISION_ORDER.indexOf(division)
+);
+
+const getTrajectoryAmbitionScore = (
+  ambition: Team['boardProfile']['ambition'],
+  trajectory: CareerTrajectory
+) => {
+  if (trajectory === 'upward') {
+    if (ambition === 'elite') return 18;
+    if (ambition === 'europe') return 12;
+    if (ambition === 'promotion') return 6;
+    if (ambition === 'survival') return -8;
+    return 2;
+  }
+
+  if (trajectory === 'downward') {
+    if (ambition === 'survival') return 14;
+    if (ambition === 'stability') return 10;
+    if (ambition === 'promotion') return 4;
+    if (ambition === 'elite') return -12;
+    return -3;
+  }
+
+  if (ambition === 'stability' || ambition === 'promotion') return 6;
+  if (ambition === 'elite') return 2;
+  return 0;
+};
+
+const getJobOfferCandidateScore = (
+  team: Team,
+  currentDivisionIndex: number,
+  trajectory: CareerTrajectory
+) => {
   const ambitionWeight = {
     elite: 35,
     europe: 26,
@@ -23,11 +58,25 @@ const getJobOfferCandidateScore = (team: Team) => {
     stability: 10,
     survival: 4,
   }[team.boardProfile.ambition];
+  const teamDivisionIndex = getDivisionIndex(team.division);
+  const divisionDelta = currentDivisionIndex - teamDivisionIndex;
+  const divisionTrajectoryScore = trajectory === 'upward'
+    ? divisionDelta * 14
+    : trajectory === 'downward'
+      ? (-divisionDelta) * 8
+      : -Math.abs(divisionDelta) * 4;
+  const urgencyScore =
+    team.manager.replacementRisk +
+    ((100 - team.manager.jobSecurity) * 0.55) +
+    (team.boardProfile.patience === 'low' ? 8 : 0);
+  const ambitionFit = getTrajectoryAmbitionScore(team.boardProfile.ambition, trajectory);
+
   return (
     (team.budget * 2) +
     ambitionWeight +
-    (team.manager.replacementRisk * 0.8) +
-    ((100 - team.manager.jobSecurity) * 0.3)
+    urgencyScore +
+    ambitionFit +
+    divisionTrajectoryScore
   );
 };
 
@@ -180,30 +229,57 @@ export const generateJobOfferCandidates = (
 ): Team[] => {
   const leagueDivision = summary.division === 'Continental' ? 'Premier League' : summary.division;
   const divIndex = DIVISION_ORDER.indexOf(leagueDivision);
-  const targetDivisions: string[] = [];
+  const normalizedDivIndex = divIndex < 0 ? 0 : divIndex;
+  const targetDivisions: Team['division'][] = [];
   const cupBoost = summary.competitionResults.some(result => (
     result.finish === 'winner' ||
     result.finish === 'runner_up' ||
     result.finish === 'semi_final'
   ));
-  const strongBoardStanding = summary.boardVerdict === 'thriving';
 
-  if (summary.outcome === 'champion' || summary.outcome === 'promoted' || cupBoost || strongBoardStanding) {
-    if (divIndex > 0) targetDivisions.push(DIVISION_ORDER[divIndex - 1]);
-    targetDivisions.push(summary.division);
-  } else if (summary.outcome === 'relegated' || summary.outcome === 'sacked') {
-    targetDivisions.push(summary.division);
-    if (divIndex < DIVISION_ORDER.length - 1) targetDivisions.push(DIVISION_ORDER[divIndex + 1]);
+  const trajectory: CareerTrajectory =
+    summary.outcome === 'champion' ||
+    summary.outcome === 'promoted' ||
+    cupBoost ||
+    summary.boardVerdict === 'thriving'
+      ? 'upward'
+      : summary.outcome === 'relegated' ||
+          summary.outcome === 'sacked' ||
+          summary.boardVerdict === 'critical'
+        ? 'downward'
+        : 'steady';
+
+  if (trajectory === 'upward') {
+    if (normalizedDivIndex > 0) targetDivisions.push(DIVISION_ORDER[normalizedDivIndex - 1]);
+    targetDivisions.push(leagueDivision);
+  } else if (trajectory === 'downward') {
+    targetDivisions.push(leagueDivision);
+    if (normalizedDivIndex < DIVISION_ORDER.length - 1) targetDivisions.push(DIVISION_ORDER[normalizedDivIndex + 1]);
   } else {
-    targetDivisions.push(summary.division);
+    targetDivisions.push(leagueDivision);
+    if (summary.boardVerdict === 'warning' && normalizedDivIndex < DIVISION_ORDER.length - 1) {
+      targetDivisions.push(DIVISION_ORDER[normalizedDivIndex + 1]);
+    }
   }
 
-  return Object.values(allTeams)
+  const divisionCandidates = Object.values(allTeams)
     .filter(t => (
       t.id !== userTeamId &&
       targetDivisions.includes(t.division) &&
       t.division !== 'Continental'
-    ))
-    .sort((a, b) => getJobOfferCandidateScore(b) - getJobOfferCandidateScore(a))
+    ));
+
+  const ambitionFilteredCandidates = divisionCandidates.filter(team => {
+    if (trajectory === 'upward') return team.boardProfile.ambition !== 'survival';
+    if (trajectory === 'downward') return team.boardProfile.ambition !== 'elite';
+    return true;
+  });
+
+  const candidatePool = ambitionFilteredCandidates.length > 0
+    ? ambitionFilteredCandidates
+    : divisionCandidates;
+
+  return candidatePool
+    .sort((a, b) => getJobOfferCandidateScore(b, normalizedDivIndex, trajectory) - getJobOfferCandidateScore(a, normalizedDivIndex, trajectory))
     .slice(0, 2);
 };

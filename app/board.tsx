@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { PageHeader } from '@/components/ui/page-header';
 import { useGameStore } from '@/src/store/gameStore';
 import { SeasonSummary, TrophyEntry } from '@/src/models/types';
+import { getCompetitionName } from '@/src/core/competitionEngine';
 
 const OUTCOME_LABEL: Record<SeasonSummary['outcome'], string> = {
   champion: 'Champion',
@@ -54,16 +55,8 @@ export default function BoardScreen() {
   const spendingLabel = team ? team.boardProfile.transferDiscipline.replace('_', ' ') : '';
   const targetCompetitions = team
     ? team.boardProfile.targetCompetitions
-        .map(competitionId => {
-          if (competitionId === 'premier-league') return 'Premier League';
-          if (competitionId === 'championship') return 'Championship';
-          if (competitionId === 'league-one') return 'League One';
-          if (competitionId === 'league-two') return 'League Two';
-          if (competitionId === 'fa-cup') return 'FA Cup';
-          if (competitionId === 'carabao-cup') return 'Carabao Cup';
-          return 'Europe';
-        })
-        .join(' • ')
+        .map(competitionId => getCompetitionName(competitionId))
+        .join(' | ')
     : '';
 
   let statusText = 'Stable';
@@ -382,3 +375,4 @@ const styles = StyleSheet.create({
   outcomePill: { paddingHorizontal: 8, paddingVertical: 4 },
   outcomePillText: { fontSize: 11, fontWeight: '900' },
 });
+
