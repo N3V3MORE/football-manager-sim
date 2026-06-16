@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### v4.3 foundation - Board telemetry and squad planning
+
+What changed:
+- Added structured `BoardSignalBreakdown` telemetry for squad age profile, wage posture, and registration depth while preserving existing board-review approval/pressure behavior.
+- Added a pure `squadPlanningEngine` that evaluates positional needs and contract decisions from squad depth, availability, age, wage load, board ambition, and contract risk.
+- Updated assistant contract warnings and recruitment notes to use squad-planning decisions instead of ad hoc weak-position checks.
+- Updated AI transfers to respect transfer windows when weekly progression runs, and to buy/list from squad needs and contract decisions rather than only weak-starter heuristics.
+- Added deterministic regression coverage for board signal breakdowns, squad-planning severity, contract renewal decisions, and transfer-window no-op/open-window need-led purchases.
+
 ### Recent fixes — Comprehensive audit pass
 
 What changed:

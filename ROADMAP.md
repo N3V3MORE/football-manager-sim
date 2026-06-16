@@ -21,7 +21,7 @@ Primary source files for roadmap work:
 | `v4.0.x` stabilization | Active patch lane | Released `v4.0.1` |
 | `v4.1.0` competitions backend | Release-ready | Backend complete; UI, persistence, and inbox audit done |
 | `v4.2.0` board / manager / club depth | Release-ready | Backend complete; audit pass done across all three layers |
-| `v4.3.0` transfers / contracts / squad planning | Not started | Depends on v4.1/v4.2 release |
+| `v4.3.0` transfers / contracts / squad planning | Started | Pure planning engine and first AI/assistant wiring in place |
 | `v4.4.0` matchday and live sim depth | Not started | Depends on clearer event/state model |
 | `v4.5.0` world-ready architecture | Not started | Depends on stable competition and board layers |
 
@@ -83,16 +83,18 @@ Progress already in workspace:
 - AI replacement hiring now has seeded identity and contract variety instead of near-generic appointments.
 - Sack warnings, season reviews, and job offers now explain decisions using board pressure and replacement-risk context.
 - Board review now includes first-pass squad-age, wage-posture, and registration-depth pressure signals.
+- Board review now exposes structured signal telemetry for squad age profile, wage posture, and registration depth.
 - Job-offer candidate selection now applies trajectory weighting for strong-season vs weak-season outcomes.
 - The Board Room now shows board context and manager standing instead of only the approval bar.
 
 Completed (June 2026):
 - Comprehensive engine and store audit including board-review idempotency, form approval deltas, squad-context NaN guards, and `getReviewVerdict` deduplication.
 - Persistence and UI audit covering board/career surfaces.
+- Structured board signal telemetry added for squad age, wage posture, and registration pressure.
 
 Still required before release:
 - Stronger differentiation between big-club, promotion-club, and survival-club job-market behavior over multiple seasons.
-- Tune board signal weights and expose clearer board telemetry for squad age, wage posture, and registration pressure.
+- Tune board signal weights now that squad age, wage posture, and registration pressure are inspectable.
 
 Exit criteria:
 - Different clubs produce meaningfully different objective sets and pressure curves.
@@ -111,6 +113,11 @@ Planned scope:
 - Contract renewal and expiry logic tied to role, value, and club ambition.
 - Transfer-window behavior that respects squad size, wage budget, and role redundancy.
 - Assistant and board messaging that points to concrete transfer or contract actions.
+
+Progress already in workspace:
+- Added a pure squad-planning engine with `SquadNeed`, `ContractDecision`, and `SquadPlan` outputs.
+- Assistant contract warnings and recruitment notes now trace back to squad-planning output.
+- AI weekly transfer movement now respects transfer windows and uses squad needs/contract decisions for first-pass listing and buying.
 
 Dependencies:
 - `v4.2` board and club context must be stable first.

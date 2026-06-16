@@ -169,7 +169,7 @@ async function runDetailedSim() {
     state.currentWeek = prog.currentWeek;
     state.news = prog.news;
 
-    const trans = computeWeeklyTransfers(state.players, state.teams, null);
+    const trans = computeWeeklyTransfers(state.players, state.teams, null, undefined, state.currentWeek);
     state.players = trans.players;
     state.teams = trans.teams;
   }

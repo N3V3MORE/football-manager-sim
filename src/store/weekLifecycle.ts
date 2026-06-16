@@ -326,7 +326,13 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
   };
 
   // Match the analysis scripts: update week state before transfer decisions.
-  const transferState = computeWeeklyTransfers(nextState.players, nextState.teams, nextState.userTeamId);
+  const transferState = computeWeeklyTransfers(
+    nextState.players,
+    nextState.teams,
+    nextState.userTeamId,
+    undefined,
+    nextState.currentWeek
+  );
   nextState = {
     ...nextState,
     players: transferState.players,

@@ -3,7 +3,7 @@ import { removePlayerFromTeamSelections } from '../core/formationMapUtils';
 import { computeWeeklyTransfers } from '../core/progressionEngine';
 import { StoreActionResult } from './contractActions';
 
-type TransferActionState = Pick<GameState, 'players' | 'teams' | 'userTeamId'>;
+type TransferActionState = Pick<GameState, 'currentWeek' | 'players' | 'teams' | 'userTeamId'>;
 type TransferActionPatch = Partial<Pick<GameState, 'players' | 'teams'>> | TransferActionState;
 
 const updateTransferListingState = (
@@ -128,5 +128,5 @@ export const unlistPlayerState = (
 };
 
 export const processWeeklyTransfersState = (state: TransferActionState): TransferActionPatch => (
-  computeWeeklyTransfers(state.players, state.teams, state.userTeamId)
+  computeWeeklyTransfers(state.players, state.teams, state.userTeamId, undefined, state.currentWeek)
 );

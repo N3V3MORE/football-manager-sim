@@ -13,6 +13,7 @@ import {
   buildBoardProfile,
   runBoardReview,
 } from '../src/core/boardEngine';
+import { buildSquadPlan } from '../src/core/squadPlanningEngine';
 import {
   applySeasonEndToCareer,
   buildSeasonSummary,
@@ -431,6 +432,60 @@ const runInvariantChecks = () => {
     stressedContextReview.nextApproval <= balancedContextReview.nextApproval,
     'Stressed squad context should not produce a better board-approval outcome than a balanced squad context'
   );
+  const stressedSignalScore =
+    stressedContextReview.signalBreakdown.ageProfile.score +
+    stressedContextReview.signalBreakdown.wagePosture.score +
+    stressedContextReview.signalBreakdown.registrationDepth.score;
+  const balancedSignalScore =
+    balancedContextReview.signalBreakdown.ageProfile.score +
+    balancedContextReview.signalBreakdown.wagePosture.score +
+    balancedContextReview.signalBreakdown.registrationDepth.score;
+  assert.ok(
+    stressedSignalScore < balancedSignalScore,
+    'Structured board signals should score stressed squad context worse than balanced squad context'
+  );
+  assert.ok(
+    stressedContextReview.signalBreakdown.wagePosture.wageBill > balancedContextReview.signalBreakdown.wagePosture.wageBill,
+    'Structured wage posture should expose a higher stressed wage bill'
+  );
+  assert.ok(
+    stressedContextReview.signalBreakdown.registrationDepth.positionShortages > balancedContextReview.signalBreakdown.registrationDepth.positionShortages,
+    'Structured registration depth should expose stressed position shortages'
+  );
+
+  const planSeverityValue = { none: 0, watch: 1, need: 2, urgent: 3 } as const;
+  const stressedPlan = buildSquadPlan(contextTeam, stressedPlayers);
+  const balancedPlan = buildSquadPlan(contextTeam, balancedPlayers);
+  const stressedNeedScore = stressedPlan.needs.reduce((sum, need) => sum + planSeverityValue[need.severity], 0);
+  const balancedNeedScore = balancedPlan.needs.reduce((sum, need) => sum + planSeverityValue[need.severity], 0);
+  assert.ok(
+    stressedNeedScore > balancedNeedScore,
+    'Squad planning should produce stronger positional needs for stressed squads than balanced squads'
+  );
+  const strongestNeed = [...stressedPlan.needs]
+    .sort((a, b) => planSeverityValue[b.severity] - planSeverityValue[a.severity])[0];
+  assert.ok(strongestNeed && strongestNeed.severity !== 'none', 'Expected stressed squad planning to identify at least one positional need');
+  const renewalCandidate = Object.values(stressedPlayers).find(player => (
+    player.teamId === contextTeam.id && player.position === strongestNeed.position
+  ));
+  assert.ok(renewalCandidate, 'Expected a renewal candidate in the strongest need position');
+  const expiringNeededPlayers = {
+    ...stressedPlayers,
+    [renewalCandidate.id]: {
+      ...renewalCandidate,
+      age: 25,
+      overallRating: Math.max(82, renewalCandidate.overallRating),
+      contractLeft: 1,
+      isStarting: true,
+    },
+  };
+  const contractPlan = buildSquadPlan(contextTeam, expiringNeededPlayers);
+  const renewalDecision = contractPlan.contractDecisions.find(decision => decision.playerId === renewalCandidate.id);
+  assert.equal(
+    renewalDecision?.decision,
+    'renew',
+    'Squad planning should recommend renewal for a core expiring player in a need position'
+  );
 
   const replacementSeed = initGameData();
   const replacementTeam = Object.values(replacementSeed.teams)
@@ -691,11 +746,51 @@ const runInvariantChecks = () => {
       midSeasonState.players,
       midSeasonState.teams,
       migrationUserTeamId,
-      migrationRng
+      migrationRng,
+      midSeasonState.currentWeek
     );
     midSeasonState.players = transferResult.players;
     midSeasonState.teams = transferResult.teams;
   }
+
+  const transferSeed = initGameData();
+  const transferBuyer = Object.values(transferSeed.teams)[0];
+  const transferSeller = Object.values(transferSeed.teams).find(team => (
+    team.id !== transferBuyer.id && Object.values(transferSeed.players).some(player => player.teamId === team.id && player.position === 'FWD')
+  ));
+  assert.ok(transferSeller, 'Expected a seller with a forward for transfer planning regression');
+  const transferTarget = Object.values(transferSeed.players).find(player => (
+    player.teamId === transferSeller!.id && player.position === 'FWD'
+  ));
+  assert.ok(transferTarget, 'Expected a listed forward target for transfer planning regression');
+  const transferPlayers = Object.fromEntries(
+    Object.entries(transferSeed.players).map(([id, player]) => {
+      if (player.teamId === transferBuyer.id && player.position === 'FWD') {
+        return [id, { ...player, injuryWeeks: 6 }];
+      }
+      if (id === transferTarget.id) {
+        return [id, { ...player, isTransferListed: true, askingPrice: 1 }];
+      }
+      return [id, player];
+    })
+  );
+  const transferTeams = {
+    ...transferSeed.teams,
+    [transferBuyer.id]: {
+      ...transferBuyer,
+      budget: Math.max(50, transferBuyer.budget),
+    },
+  };
+  const alwaysTransferRng = { next: () => 0 };
+  const closedWindowTransfers = computeWeeklyTransfers(transferPlayers, transferTeams, null, alwaysTransferRng, 10);
+  assert.equal(closedWindowTransfers.players, transferPlayers, 'AI transfers should not change players outside transfer windows');
+  assert.equal(closedWindowTransfers.teams, transferTeams, 'AI transfers should not change teams outside transfer windows');
+  const openWindowTransfers = computeWeeklyTransfers(transferPlayers, transferTeams, null, alwaysTransferRng, 2);
+  assert.equal(
+    openWindowTransfers.players[transferTarget.id].teamId,
+    transferBuyer.id,
+    'AI transfers should use squad needs to buy listed targets during open transfer windows'
+  );
 
   const legacyTeams = Object.fromEntries(
     Object.values(midSeasonState.teams).map(team => [
@@ -1239,7 +1334,7 @@ const runSeason = (seed: number) => {
     state.currentWeek = progression.currentWeek;
     state.news = progression.news;
 
-    const transfers = computeWeeklyTransfers(state.players, state.teams, null, rng);
+    const transfers = computeWeeklyTransfers(state.players, state.teams, null, rng, state.currentWeek);
     state.players = transfers.players;
     state.teams = transfers.teams;
 
@@ -1356,7 +1451,7 @@ const runStateConsistencyStress = () => {
         generateSystemInboxMessages(week, progression.generatedNews)
       );
 
-      const transfers = computeWeeklyTransfers(state.players, state.teams, state.userTeamId, rng);
+      const transfers = computeWeeklyTransfers(state.players, state.teams, state.userTeamId, rng, state.currentWeek);
       state.players = transfers.players;
       state.teams = transfers.teams;
       state.inboxMessages = mergeInboxMessages(

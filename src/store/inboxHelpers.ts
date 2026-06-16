@@ -1,9 +1,11 @@
 import { getSlotsForFormation } from '../constants/formations';
-import { getRenewalOffer, getContractAdviceLabel, shouldRenewContract } from '../core/contractUtils';
+import { getRenewalOffer } from '../core/contractUtils';
 import { getSlotFitScore, rebuildFormationMap, rebuildFormationSlotPlayers } from '../core/formationMapUtils';
 import { formatContractLength, isContractExpiringSoon, isPlayerUnavailable } from '../core/playerStatusUtils';
+import { buildSquadPlan } from '../core/squadPlanningEngine';
 import {
   CareerRecord,
+  ContractDecision,
   Fixture,
   InboxAction,
   InboxMessage,
@@ -397,8 +399,14 @@ const generateContractMessages = (
   currentWeek: number,
   team: Team,
   players: Record<string, Player>,
+  contractDecisions: ContractDecision[],
   previousPlayers?: Record<string, Player>
 ) => {
+  const decisionByPlayerId = contractDecisions.reduce<Record<string, ContractDecision>>((acc, decision) => {
+    acc[decision.playerId] = decision;
+    return acc;
+  }, {});
+
   return getTeamSquad(players, team.id)
     .filter(player => isContractExpiringSoon(player))
     .filter(player => {
@@ -409,17 +417,19 @@ const generateContractMessages = (
     .slice(0, 3)
     .map(player => {
       const renewal = getRenewalOffer(player);
-      const advice = getContractAdviceLabel(player, team);
+      const decision = decisionByPlayerId[player.id];
+      const decisionType = decision?.decision || 'hold';
+      const decisionReason = decision?.reason || `${player.name} needs a contract decision before the deal runs down.`;
       return buildMessage({
         week: currentWeek,
         source: 'assistant',
         category: 'contract_warning',
         title: `Contract running down: ${player.name}`,
-        body: advice === 'renew'
-          ? `${player.name} has ${formatContractLength(player)}. I would renew now at GBP ${renewal.wage}k/w for ${renewal.years} year${renewal.years === 1 ? '' : 's'}.`
-          : `${player.name} has ${formatContractLength(player)}. I would ${advice} rather than let the situation drift.`,
+        body: decisionType === 'renew'
+          ? `${player.name} has ${formatContractLength(player)}. ${decisionReason} I would renew now at GBP ${renewal.wage}k/w for ${renewal.years} year${renewal.years === 1 ? '' : 's'}.`
+          : `${player.name} has ${formatContractLength(player)}. ${decisionReason}`,
         isRead: false,
-        action: shouldRenewContract(player, team)
+        action: decisionType === 'renew'
           ? {
             type: 'renew_contract',
             payload: {
@@ -447,10 +457,11 @@ export const generateAssistantWeekMessages = ({
 
   const team = teams[userTeamId];
   if (!team) return [];
+  const squadPlan = buildSquadPlan(team, players);
 
   const messages: InboxMessage[] = [
     ...generateRecoveryMessages(currentWeek, userTeamId, players, previousPlayers),
-    ...generateContractMessages(currentWeek, team, players, previousPlayers),
+    ...generateContractMessages(currentWeek, team, players, squadPlan.contractDecisions, previousPlayers),
   ];
 
   const fixture = getUserFixtureForWeek(fixtures, currentWeek, userTeamId);
@@ -593,48 +604,35 @@ export const generateAssistantWeekMessages = ({
     }));
   }
 
-  const userXI = starters.length > 0 ? starters : getLikelyBestXI(team.id, players);
-  const groupedStarters = userXI.reduce<Record<Player['position'], Player[]>>(
-    (acc, player) => {
-      acc[player.position].push(player);
-      return acc;
-    },
-    { GK: [], DEF: [], MID: [], FWD: [] }
-  );
-  const weakestPosition = (Object.keys(groupedStarters) as Player['position'][])
-    .map(position => ({
-      position,
-      starter: [...groupedStarters[position]].sort((a, b) => a.overallRating - b.overallRating)[0],
-      depth: groupedStarters[position].length,
-    }))
-    .filter(item => Boolean(item.starter))
+  const needSeverityValue = { none: 0, watch: 1, need: 2, urgent: 3 } as const;
+  const priorityNeed = [...squadPlan.needs]
+    .filter(need => need.severity !== 'none')
     .sort((a, b) => {
-      if (a.depth !== b.depth) return a.depth - b.depth;
-      return (a.starter?.overallRating || 0) - (b.starter?.overallRating || 0);
+      const severityDelta = needSeverityValue[b.severity] - needSeverityValue[a.severity];
+      if (severityDelta !== 0) return severityDelta;
+      return (b.targetDepth - b.currentDepth) - (a.targetDepth - a.currentDepth);
     })[0];
 
-  if (weakestPosition?.starter) {
+  if (priorityNeed) {
     const listedTargets = Object.values(players)
-      .filter(player => player.teamId !== team.id && player.isTransferListed && player.position === weakestPosition.position)
+      .filter(player => player.teamId !== team.id && player.isTransferListed && player.position === priorityNeed.position)
       .filter(player => player.askingPrice <= Math.max(2, team.budget * 0.6))
       .sort((a, b) => {
-        const gainA = a.overallRating - weakestPosition.starter!.overallRating;
-        const gainB = b.overallRating - weakestPosition.starter!.overallRating;
-        if (gainB !== gainA) return gainB - gainA;
+        if (b.overallRating !== a.overallRating) return b.overallRating - a.overallRating;
         return a.askingPrice - b.askingPrice;
       });
     const target = listedTargets[0];
-    const marketSeed = `${currentWeek}-${team.id}-${weakestPosition.position}-${target?.id || 'none'}`;
+    const marketSeed = `${currentWeek}-${team.id}-${priorityNeed.position}-${priorityNeed.severity}-${target?.id || 'none'}`;
     const body = target
       ? pickTemplate(`${marketSeed}-target`, [
-        `${weakestPosition.position} still looks like the soft spot. ${target.name} at ${teams[target.teamId]?.name} would improve the squad and is listed at GBP ${target.askingPrice}m.`,
-        `I would keep pushing for a ${weakestPosition.position}. ${target.name} from ${teams[target.teamId]?.name} is listed at GBP ${target.askingPrice}m and would raise the floor.`,
-        `The squad still needs help at ${weakestPosition.position}. ${target.name} at ${teams[target.teamId]?.name} is available for GBP ${target.askingPrice}m and fits the gap.`,
+        `${priorityNeed.reason} ${target.name} at ${teams[target.teamId]?.name || 'their club'} is listed at GBP ${target.askingPrice}m and fits the ${priorityNeed.position} gap.`,
+        `The planning model flags ${priorityNeed.position} as ${priorityNeed.severity}. ${target.name} from ${teams[target.teamId]?.name || 'their club'} is available for GBP ${target.askingPrice}m.`,
+        `${priorityNeed.position} needs attention: ${priorityNeed.reason} ${target.name} is listed at GBP ${target.askingPrice}m and would raise the floor.`,
       ])
       : pickTemplate(`${marketSeed}-generic`, [
-        `${weakestPosition.position} looks like our thinnest position right now. Keep an eye on the market before the run gets harder.`,
-        `We are lightest at ${weakestPosition.position}. I would stay alert for value there before the next stretch.`,
-        `${weakestPosition.position} remains the weak point in the squad. We should keep scanning the market for help.`,
+        `${priorityNeed.reason} Keep an eye on the ${priorityNeed.position} market before the run gets harder.`,
+        `The squad plan has ${priorityNeed.position} at ${priorityNeed.severity}. We should stay alert for value before the next stretch.`,
+        `${priorityNeed.position} remains the clearest planning gap. We should keep scanning the market for help.`,
       ]);
     messages.push(buildMessage({
       week: currentWeek,

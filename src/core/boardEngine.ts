@@ -4,6 +4,7 @@ import {
   BoardObjective,
   BoardProfile,
   BoardReviewVerdict,
+  BoardSignalBreakdown,
   CompetitionId,
   CompetitionRoundKey,
   CompetitionState,
@@ -39,12 +40,30 @@ export type BoardReview = {
   positionDelta: number | null;
   metObjectives: number;
   totalObjectives: number;
+  signalBreakdown: BoardSignalBreakdown;
 };
 
 type SquadContextSignal = {
   approvalAdjustment: number;
   pressureAdjustment: number;
   reasons: string[];
+  breakdown: BoardSignalBreakdown;
+};
+
+const EMPTY_SIGNAL_BREAKDOWN: BoardSignalBreakdown = {
+  ageProfile: { score: 0 },
+  wagePosture: {
+    score: 0,
+    wageBill: 0,
+    wagePressureRatio: 0,
+    spendRatio: 0,
+  },
+  registrationDepth: {
+    score: 0,
+    availablePlayers: 0,
+    positionShortages: 0,
+    missingDepth: 0,
+  },
 };
 
 const getNormalizedDivision = (division: Division): LeagueDivision => (
@@ -93,59 +112,64 @@ const getAvailableSquadFloor = (division: Division) => {
   return 20;
 };
 
-const buildSquadContextSignal = (
+export const buildBoardSignalBreakdown = (
   team: Team,
   players?: Record<string, Player>
-): SquadContextSignal => {
+): BoardSignalBreakdown => {
   if (!players) {
-    return { approvalAdjustment: 0, pressureAdjustment: 0, reasons: [] };
+    return EMPTY_SIGNAL_BREAKDOWN;
   }
 
   const squad = Object.values(players).filter(player => player.teamId === team.id);
   if (squad.length === 0) {
-    return { approvalAdjustment: 0, pressureAdjustment: 0, reasons: [] };
+    return EMPTY_SIGNAL_BREAKDOWN;
   }
-
-  let approvalAdjustment = 0;
-  let pressureAdjustment = 0;
-  const reasons: string[] = [];
 
   const avgAge = squad.reduce((sum, player) => sum + player.age, 0) / squad.length;
   const youthShare = squad.filter(player => player.age <= 21).length / squad.length;
   const veteranShare = squad.filter(player => player.age >= 31).length / squad.length;
+  let ageProfile: BoardSignalBreakdown['ageProfile'] = { score: 0 };
 
   if (
     (team.boardProfile.ambition === 'elite' || team.boardProfile.ambition === 'europe') &&
     veteranShare >= 0.38
   ) {
-    approvalAdjustment -= 2;
-    pressureAdjustment += 7;
-    reasons.push('squad age profile looks too veteran-heavy for board ambition');
+    ageProfile = {
+      score: -2,
+      reason: 'squad age profile looks too veteran-heavy for board ambition',
+    };
   } else if (team.boardProfile.ambition === 'survival' && avgAge < 24.5 && youthShare >= 0.42) {
-    approvalAdjustment -= 1;
-    pressureAdjustment += 4;
-    reasons.push('squad age profile is too inexperienced for a survival fight');
+    ageProfile = {
+      score: -1,
+      reason: 'squad age profile is too inexperienced for a survival fight',
+    };
   } else if (avgAge >= 24 && avgAge <= 28 && youthShare >= 0.18 && veteranShare <= 0.34) {
-    approvalAdjustment += 1;
-    pressureAdjustment -= 2;
+    ageProfile = { score: 1 };
   }
 
   const wageBill = squad.reduce((sum, player) => sum + (Number.isFinite(player.wage) ? player.wage : 0), 0);
   const spendRatio = (team.transferSpend || 0) / Math.max(1, team.budget + (team.transferSpend || 0));
   const wagePressureRatio = wageBill / Math.max(450, team.budget * 100);
   const wageThresholds = getWagePressureThresholds(team.boardProfile.transferDiscipline);
+  let wagePosture: BoardSignalBreakdown['wagePosture'] = {
+    score: 0,
+    wageBill,
+    wagePressureRatio,
+    spendRatio,
+  };
 
   if (wagePressureRatio > wageThresholds.high || spendRatio > wageThresholds.spendHigh) {
-    approvalAdjustment -= 2;
-    pressureAdjustment += 6;
-    reasons.push('wage posture and spend profile are outside board comfort');
+    wagePosture = {
+      ...wagePosture,
+      score: -2,
+      reason: 'wage posture and spend profile are outside board comfort',
+    };
   } else if (
     team.boardProfile.transferDiscipline === 'strict' &&
     wagePressureRatio <= wageThresholds.low &&
     spendRatio <= 0.58
   ) {
-    approvalAdjustment += 1;
-    pressureAdjustment -= 2;
+    wagePosture = { ...wagePosture, score: 1 };
   }
 
   const availablePlayers = squad.filter(player => !isPlayerUnavailable(player));
@@ -164,24 +188,74 @@ const buildSquadContextSignal = (
   ].reduce((sum, missing) => sum + missing, 0);
   const availableFloor = getAvailableSquadFloor(team.division);
   const missingDepth = Math.max(0, availableFloor - availablePlayers.length);
+  let registrationDepth: BoardSignalBreakdown['registrationDepth'] = {
+    score: 0,
+    availablePlayers: availablePlayers.length,
+    positionShortages,
+    missingDepth,
+  };
 
   if (missingDepth >= 3 || positionShortages >= 3) {
-    approvalAdjustment -= 3;
-    pressureAdjustment += 9;
-    reasons.push('registration depth is stretched by availability and role shortages');
+    registrationDepth = {
+      ...registrationDepth,
+      score: -3,
+      reason: 'registration depth is stretched by availability and role shortages',
+    };
   } else if (missingDepth > 0 || positionShortages > 0) {
-    approvalAdjustment -= 1;
-    pressureAdjustment += 3;
-    reasons.push('registration depth is trending thin');
+    registrationDepth = {
+      ...registrationDepth,
+      score: -1,
+      reason: 'registration depth is trending thin',
+    };
   } else if (availablePlayers.length >= availableFloor + 2 && positionShortages === 0) {
-    approvalAdjustment += 1;
-    pressureAdjustment -= 2;
+    registrationDepth = { ...registrationDepth, score: 1 };
   }
+
+  return {
+    ageProfile,
+    wagePosture,
+    registrationDepth,
+  };
+};
+
+const getPressureAdjustmentForSignal = (
+  signal: keyof BoardSignalBreakdown,
+  score: number
+) => {
+  if (score > 0) return -2;
+  if (score === 0) return 0;
+
+  if (signal === 'ageProfile') return score <= -2 ? 7 : 4;
+  if (signal === 'wagePosture') return 6;
+  return score <= -3 ? 9 : 3;
+};
+
+const buildSquadContextSignal = (
+  team: Team,
+  players?: Record<string, Player>
+): SquadContextSignal => {
+  const breakdown = buildBoardSignalBreakdown(team, players);
+  const signalScores = [
+    breakdown.ageProfile.score,
+    breakdown.wagePosture.score,
+    breakdown.registrationDepth.score,
+  ];
+  const approvalAdjustment = signalScores.reduce((sum, score) => sum + score, 0);
+  const pressureAdjustment =
+    getPressureAdjustmentForSignal('ageProfile', breakdown.ageProfile.score) +
+    getPressureAdjustmentForSignal('wagePosture', breakdown.wagePosture.score) +
+    getPressureAdjustmentForSignal('registrationDepth', breakdown.registrationDepth.score);
+  const reasons = [
+    breakdown.ageProfile.reason,
+    breakdown.wagePosture.reason,
+    breakdown.registrationDepth.reason,
+  ].filter((reason): reason is string => Boolean(reason));
 
   return {
     approvalAdjustment,
     pressureAdjustment,
     reasons,
+    breakdown,
   };
 };
 
@@ -718,6 +792,7 @@ export const runBoardReview = (
     positionDelta,
     metObjectives,
     totalObjectives,
+    signalBreakdown: squadContext.breakdown,
   };
 };
 

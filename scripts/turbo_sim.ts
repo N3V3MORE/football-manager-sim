@@ -44,7 +44,7 @@ async function runTurboSim(seasons = 500) {
       state.currentWeek = progression.currentWeek;
       state.news = progression.news;
 
-      const transfers = computeWeeklyTransfers(state.players, state.teams, null);
+      const transfers = computeWeeklyTransfers(state.players, state.teams, null, undefined, state.currentWeek);
       state.players = transfers.players;
       state.teams = transfers.teams;
     }

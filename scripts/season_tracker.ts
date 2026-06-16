@@ -468,7 +468,7 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
     state.news = progression.news;
 
     const transferBefore = snapshotTransfers(state.players, state.teams);
-    const transfers = computeWeeklyTransfers(state.players, state.teams, null);
+    const transfers = computeWeeklyTransfers(state.players, state.teams, null, undefined, state.currentWeek);
     state.players = transfers.players;
     state.teams = transfers.teams;
     const weekEndSetups = snapshotTeamSetups(state.teams);

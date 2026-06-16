@@ -20,6 +20,8 @@ export type BoardAmbition = 'elite' | 'europe' | 'promotion' | 'stability' | 'su
 export type BoardPatience = 'low' | 'medium' | 'high';
 export type TransferDiscipline = 'strict' | 'balanced' | 'aggressive';
 export type BoardReviewVerdict = 'thriving' | 'stable' | 'warning' | 'critical';
+export type SquadNeedSeverity = 'none' | 'watch' | 'need' | 'urgent';
+export type ContractDecisionType = 'renew' | 'sell' | 'release' | 'hold';
 export type CompetitionId =
   | 'premier-league'
   | 'championship'
@@ -182,6 +184,51 @@ export interface BoardObjective {
   competitionId?: CompetitionId;
   targetRound?: CompetitionRoundKey;
 }
+
+export type BoardSignalBreakdown = {
+  ageProfile: {
+    score: number;
+    reason?: string;
+  };
+  wagePosture: {
+    score: number;
+    wageBill: number;
+    wagePressureRatio: number;
+    spendRatio: number;
+    reason?: string;
+  };
+  registrationDepth: {
+    score: number;
+    availablePlayers: number;
+    positionShortages: number;
+    missingDepth: number;
+    reason?: string;
+  };
+};
+
+export type SquadNeed = {
+  teamId: string;
+  position: Position;
+  severity: SquadNeedSeverity;
+  reason: string;
+  currentDepth: number;
+  targetDepth: number;
+  averageAge: number;
+  wageLoad: number;
+};
+
+export type ContractDecision = {
+  playerId: string;
+  decision: ContractDecisionType;
+  priority: number;
+  reason: string;
+};
+
+export type SquadPlan = {
+  teamId: string;
+  needs: SquadNeed[];
+  contractDecisions: ContractDecision[];
+};
 
 export interface Fixture {
   id: string;
