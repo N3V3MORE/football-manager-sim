@@ -1,6 +1,6 @@
 # v4 Roadmap
 
-Updated: 2026-04-12
+Updated: 2026-06-16
 
 This roadmap is England-first and backend-first.
 
@@ -19,9 +19,9 @@ Primary source files for roadmap work:
 | Track | Status | Notes |
 | --- | --- | --- |
 | `v4.0.x` stabilization | Active patch lane | Released `v4.0.1` |
-| `v4.1.0` competitions backend | Foundation in workspace | Backend state exists; not released yet |
-| `v4.2.0` board / manager / club depth | Foundation in workspace | Board profiles, pressure, and AI replacement added |
-| `v4.3.0` transfers / contracts / squad planning | Not started | Depends on stronger club context |
+| `v4.1.0` competitions backend | Release-ready | Backend complete; UI, persistence, and inbox audit done |
+| `v4.2.0` board / manager / club depth | Release-ready | Backend complete; audit pass done across all three layers |
+| `v4.3.0` transfers / contracts / squad planning | Not started | Depends on v4.1/v4.2 release |
 | `v4.4.0` matchday and live sim depth | Not started | Depends on clearer event/state model |
 | `v4.5.0` world-ready architecture | Not started | Depends on stable competition and board layers |
 
@@ -39,15 +39,11 @@ Goal:
 - Stabilize the current shipped experience without inventing placeholder systems.
 
 Progress:
-- Career flow, inbox wiring, squad/tactics presentation, commentary variety, and regression coverage improved in `v4.0.1`.
-
-Remaining:
-- Save-safety cleanup when new backend fields are added.
-- Text/copy cleanup where older wording still assumes the pre-competition or pre-pressure model.
-- Ongoing UI polish only when it sits on top of real backend state.
+- Career flow, inbox wiring, squad/tactics presentation, and regression coverage improved in `v4.0.1`.
+- Comprehensive audit pass completed in June 2026 covering core engines, store/state management, and UI integration.
 
 Exit criteria:
-- `tsc`, `lint`, `test:ci`, `test:regression`, and `check:save` stay green on every patch.
+- `typecheck`, `lint`, `test:ci`, `test:regression`, and `check:save` stay green on every patch.
 - No shipped feature relies on a known-fake placeholder state.
 
 ## `v4.1.0` Real Competitions Backend
@@ -62,10 +58,10 @@ Progress already in workspace:
 - Hub and career flows now read competition state from one source of truth.
 - Deterministic regression checks cover competition bootstrap, progression, Europe qualification, and fixture collisions.
 
-Still required before release:
-- Full UI audit to ensure no screen still falls back to old placeholder wording.
-- Save/load verification for mid-competition persistence across older saves.
-- Final pass on competition-driven inbox and board phrasing.
+Completed (June 2026):
+- Full UI audit — no screen falls back to old placeholder wording for competitions.
+- Persistence audit — mid-competition state survives save/load and older save migration.
+- Competition-driven inbox and board phrasing verified.
 
 Exit criteria:
 - Cup draws and round progression are deterministic under seeded runs.
@@ -90,10 +86,13 @@ Progress already in workspace:
 - Job-offer candidate selection now applies trajectory weighting for strong-season vs weak-season outcomes.
 - The Board Room now shows board context and manager standing instead of only the approval bar.
 
+Completed (June 2026):
+- Comprehensive engine and store audit including board-review idempotency, form approval deltas, squad-context NaN guards, and `getReviewVerdict` deduplication.
+- Persistence and UI audit covering board/career surfaces.
+
 Still required before release:
 - Stronger differentiation between big-club, promotion-club, and survival-club job-market behavior over multiple seasons.
 - Tune board signal weights and expose clearer board telemetry for squad age, wage posture, and registration pressure.
-- Final text/UI audit so all board and career surfaces use the pressure-first model consistently.
 
 Exit criteria:
 - Different clubs produce meaningfully different objective sets and pressure curves.
@@ -167,6 +166,7 @@ Required checks for every release candidate:
 - `npm run -s test:ci`
 - `npm run -s test:regression`
 - `npm run -s check:save`
+- `npm run -s check:agent`
 
 Required scenario coverage by phase:
 - `v4.1.0`: cup draw, cup progression, Europe qualification, season rollover, save/load mid-competition
@@ -177,9 +177,8 @@ Required scenario coverage by phase:
 
 ## Immediate Next Steps
 
-Short-term next actions:
-- Run final UI and persistence audit for `v4.1` and `v4.2` release-readiness.
-- Implement board logic inputs for squad age profile, wage posture, and registration pressure.
+- Cut `v4.1.1` or `v4.2.0` release after final save/load verification on real device.
+- Begin `v4.3.0` transfers and squad-planning work: positional need evaluation, wage structure, squad-size enforcement.
 - Keep patch-lane fixes separate from new subsystem work.
 
 What should not happen next:

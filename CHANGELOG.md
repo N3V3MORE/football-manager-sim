@@ -2,6 +2,56 @@
 
 ## Unreleased
 
+### Recent fixes — Comprehensive audit pass
+
+What changed:
+- Fixed live-match idempotency: processed minutes are tracked so replaying a minute does not double-drain energy or replay possessions.
+- Fixed live-match score safety: `finishLiveMatchState` now explicitly writes `homeScore` and `awayScore` on the fixture so post-match reports and persistence never see null scores.
+- Fixed formation-map preservation: `setFormationState` now uses `split('-')` instead of `split(' ')` so switching between formations with the same defender count preserves player assignments.
+- Fixed board-review idempotency: `boardReviewAppliedWeek` guard prevents double-evaluation from manual `checkBoardObjectives` after the weekly lifecycle already ran.
+- Fixed injury/suspension off-by-one: `suspensionAppliedWeek` and `injuryAppliedWeek` track the week of application so durations are not decremented in the same week the card/injury was handed out.
+- Fixed transfer-sale gap: AI teams can now buy user-listed players, and `buyPlayerState` validates that the player is transfer-listed, the player is not on the user's team, and the asking price is finite.
+- Fixed `advanceWeek` live-match guard: fixtures with an active live-match state are skipped during weekly quick-sim to prevent double-processing.
+- Fixed `initializeGame` mutation: player objects from `initGameData` are now spread-copied instead of mutated in place.
+- Fixed transfer double-run: `transfersAppliedWeek` guard prevents `processWeeklyTransfers` from running twice when called both manually and inside `advanceWeek`.
+- Fixed `accept_job_offer` error handling: accepting a job for a nonexistent team now marks the triggering message as read instead of silently failing.
+- Fixed date-format mismatch: `calculateAgeFromDob` now handles both `DD/MM/YYYY` and `YYYY-MM-DD` formats, fixing NaN age calculations for generic and replacement managers.
+- Fixed `impactCoefficient` NaN propagation: defaulted to `1.0` with null-coalescing so missing values don't produce NaN match ratings.
+- Fixed `overallRating` bounds: player ratings are clamped to `[1, 99]` during end-of-season progression.
+- Fixed `clampBoardMetric` rounding: now uses `Math.round` consistently with `clampMetric` in `managerUtils`.
+- Fixed `getReviewVerdict` duplication: exported from `boardEngine` and reused in `careerEngine` instead of being defined twice.
+- Fixed form approval delta: `getFormApprovalDelta` now considers the last 3 results instead of only the most recent match.
+- Fixed competition penalty for non-entrants: teams not entered in a competition are no longer penalized for missing cup-round objectives.
+- Fixed Continental division normalization: `buildBoardObjectives` early-return for Continental teams no longer blocked in `seasonTransition`.
+- Fixed shape-engine GK/outfield assignment: fallback slot assignment now prevents goalkeepers from filling outfield roles and vice versa.
+- Fixed third-pass formation-map rebuild: positional compatibility checked before assigning leftover starters to slots.
+- Fixed transfer depth accounting: `depthByPosition` now counts all squad players, not just non-transfer-listed ones, preventing overselling a position.
+- Fixed injury chance calculation: `getTeamInjuryChance` now filters to healthy players before computing high-load percentages.
+- Fixed match-screen memory leak: `minuteRef` resets on fixture change and a mounted guard prevents state updates after unmount.
+- Fixed squad formation loop: `rebuildLockRef` prevents recursive `setFormation` calls from the auto-rebuild effect.
+- Fixed hardcoded season dates: Hub and Calendar now import `SEASON_START` and `getWindowStatus` from `calendar.ts`.
+- Fixed transfer-window guard: `handleSubmitDialog` re-checks window status at submit time, not just on tap.
+- Fixed `skipToEndOfSeason` guard: increased iteration margin from `+2` to `+20` and wrapped in try/catch.
+- Fixed `renew_contract` inbox action: triggering message is now marked as read and its action cleared, consistent with other action branches.
+- Fixed persistence migration: `suspensionAppliedWeek`, `injuryAppliedWeek`, `tactics`, `matchRatingHistory`, `contractLeft`, and stat fields now receive safe defaults during sanitization.
+- Fixed `safeStorage`: save/remove errors now logged via `console.warn` instead of silently swallowed.
+- Fixed LiveMatchState persistence: entries missing required `homeStarterIds` or `awayStarterIds` are dropped on rehydration.
+- Fixed `getLeagueCountry` and `getLeagueCountryIndex`: defensive fallback for empty `LEAGUE_COUNTRIES` array, and unknown country IDs return `-1` instead of silently mapping to `0`.
+- Fixed `weightedPick` caller safety: `||` replaced with `??` in `resolveRandom`, and `minutesShare` clamped to `[0, 1]` in transfer engine.
+- Fixed `player.position` NaN guard in `buildSquadContextSignal`: only increments known position keys.
+- Fixed `shouldReplaceManagerAfterReview` fallback: uses `reasons.find()` instead of brittle `reasons[0] ||` pattern.
+- Fixed `getGenericManagerIdentity` missing League Two case: added explicit identity config.
+- Fixed `getCompetitionResultForTeam`: teams still active in a competition no longer receive premature round-finish credit.
+- Fixed `getCompetitionPanelForTeam`: empty rounds array is guarded before access.
+- Fixed `buildRoundRobinFixtures`: throws `RangeError` on insufficient `weekSlots` length instead of producing week-number collisions.
+- Fixed `clampToMatchMinutes` duplication: exported from `minuteMapUtils`, imported in `postMatchAccounting`.
+- Updated `shouldRenewContract`: players aged 33+ with `overallRating < 80` are now excluded from renewal recommendations.
+- Updated `getFormApprovalDelta`: considers last 3 form tokens (W/D/L), returning `wins - losses` instead of a single-match delta.
+
+Notes:
+- All changes verified with `typecheck`, `lint`, `test:ci`, `test:regression`, `check:save`, and `check:agent`.
+- Package and app versions remain `v4.0.1` until a release is cut.
+
 ### v4.1 foundation - Real competitions backend
 
 What changed:
@@ -10,9 +60,6 @@ What changed:
 - Added a dedicated competition engine to bootstrap season competitions, resolve knockout rounds, expose team-facing competition panels, and carry Europe qualification into the next season.
 - Updated season rollover, match resolution, inbox messaging, career history, and board logic to consume competition state from one source of truth.
 - Added deterministic regression coverage for competition bootstrap, knockout progression, Europe qualification, and no-overlap fixture scheduling.
-
-Notes:
-- This work is in the codebase but not released as a tagged version yet.
 
 ### v4.2 foundation - Board, manager, and club-context depth
 
@@ -31,9 +78,6 @@ What changed:
 - Tightened tactical adaptation behavior under pressure and added tactical-spread guardrails in CI.
 - Added deterministic regression coverage for board-profile objective shape, elite-vs-survival pressure behavior, AI manager replacement, competition progression, migration integrity, tactical spread, and red-card event consistency.
 
-Notes:
-- This is active `v4.2` work. Package and app versions remain `v4.0.1` until a release is cut.
-
 ## v4.0.1 - Career flow fixes and presentation pass
 
 What changed:
@@ -44,26 +88,20 @@ What changed:
 - Expanded live match commentary plus assistant and board inbox phrasing so match flow and weekly communication feel less repetitive.
 - Added regression coverage for title handling, job-offer objective wiring, and the wider v4 state-transition path.
 
-Notes:
-- Re-ran `tsc`, `lint`, `test:ci`, and `test:regression` before release.
-
 ## v4.0.0 - Manager career mode
 
 What changed:
 - Added a persistent `CareerRecord` that survives `advanceSeason`: seasons managed, total W/D/L/GF/GA, reputation (0-100), trophy cabinet, and a rolling 10-season history.
-- Reputation now moves dynamically: +8 for winning a division, +4 for promotion, -10 for relegation, -5 for being sacked, +2 for a winning-record season. Previously `Manager.reputation` was a static initialisation value.
-- Added sacking-risk tracking: `consecutiveLowApprovalWeeks` increments each week board approval stays below 20%. At 3 consecutive weeks the board issues a formal warning in the inbox; at 4+ the board declares they will not renew the contract at season end.
-- At season end the career engine evaluates the final table position, writes a `SeasonSummary`, updates the career record, and generates up to 2 job offer inbox messages from candidate clubs in an appropriate division tier. Accepting a job offer changes the managed team immediately, dismisses all other pending offers, and resets the sacking counter.
-- Added `TrophyEntry`, `SeasonSummary`, and `CareerRecord` types to `src/models/types.ts`. Extended `GameState` with `careerRecord`. Added `career_sack_warning`, `career_job_offer`, and `career_milestone` inbox categories and an `accept_job_offer` inbox action.
+- Reputation now moves dynamically: +8 for winning a division, +4 for promotion, -10 for relegation, -5 for being sacked, +2 for a winning-record season.
+- Added sacking-risk tracking: `consecutiveLowApprovalWeeks` increments each week board approval stays below threshold. At 3 consecutive weeks a formal warning is issued; at 4+ the board declares non-renewal at season end.
+- At season end the career engine evaluates the final table position, writes a `SeasonSummary`, updates the career record, and generates up to 2 job offer inbox messages from candidate clubs in an appropriate division tier. Accepting a job offer changes the managed team immediately.
+- Added `TrophyEntry`, `SeasonSummary`, and `CareerRecord` types. Extended `GameState` with `careerRecord`. Added `career_sack_warning`, `career_job_offer`, and `career_milestone` inbox categories and an `accept_job_offer` inbox action.
 - Added `src/core/careerEngine.ts` with `createDefaultCareerRecord`, `buildSeasonSummary`, `applySeasonEndToCareer`, `evaluateSackingRisk`, and `generateJobOfferCandidates`.
-- Added `generateCareerInboxMessages` and `generateSackWarningMessage` to `src/store/inboxHelpers.ts`.
-- Expanded the Board Room screen with a Career Summary panel (W/D/L bar, reputation, honours count), a Trophy Cabinet section, and a Season History list with outcome pills.
-- Added `components/hub/career-stats-card.tsx`: a compact Hub card showing seasons managed, honours, win rate, and titles. Appears on the Hub after the first season completes.
+- Added `generateCareerInboxMessages` and `generateSackWarningMessage` to inbox helpers.
+- Expanded the Board Room screen with a Career Summary panel, a Trophy Cabinet section, and a Season History list with outcome pills.
+- Added `components/hub/career-stats-card.tsx`: a compact Hub card showing seasons managed, honours, win rate, and titles.
 - Bumped Zustand persist version to 6; existing saves migrate cleanly through `sanitizePersistedState`.
-- Added `runCareerEngineChecks` to `scripts/ci_regression.ts` covering default state shape, season summary derivation, reputation delta math, reputation clamping, season history cap, and sacking-risk thresholds.
-
-Notes:
-- Re-ran `test:ci` after all changes; all four check groups pass.
+- Added `runCareerEngineChecks` to CI regression covering default state, season summary derivation, reputation deltas, clamping, and sacking-risk thresholds.
 
 ## v3.4.0 - Add player availability and contract pressure
 
@@ -72,21 +110,15 @@ What changed:
 - Added contract-expiry handling, one-tap renewals, and season-rollover departures for user players whose deals are allowed to expire.
 - Extended the assistant coach inbox with recovery updates, contract warnings, renewal recommendations, and post-match injury notes.
 - Added a contract-management surface in Settings with Contract Watch and Availability Watch cards so squad issues are visible outside the inbox.
-- Kept direct renewals and inbox renewal actions on the same store path so stale contract warnings are cleared instead of lingering as bad actions.
 - Expanded deterministic regression coverage for injury recovery, availability enforcement, contract renewal, and season-end departures.
-
-Notes:
-- Re-ran `lint`, `tsc`, `test:ci`, `test:regression`, and `qa` after the v3.4 work.
 
 ## v3.3.0 - Add the assistant coach inbox
 
 What changed:
 - Replaced the old latest-news feed with a structured inbox and a Hub inbox preview.
 - Added mixed inbox messages for assistant coach advice, system news, board updates, and post-match reports.
-- Added actionable assistant items for lineup and tactic suggestions, with transfer notes staying advice-only.
+- Added actionable assistant items for lineup and tactic suggestions.
 - Added save-safe inbox persistence, legacy `news` migration, message dedupe, and inbox size capping.
-- Added a dedicated Inbox screen and reusable inbox message cards without changing the main tab structure.
-- Expanded CI regression coverage for inbox migration, dedupe, action application, post-match reporting, and seeded stress runs with inbox generation enabled.
 
 ## v3.2.3 - Fix backend accounting and modularize the frontend
 
@@ -94,93 +126,57 @@ What changed:
 - Fixed live-match post-processing so starters do not lose energy twice compared with quick sim.
 - Corrected substitute minute tracking so players only get credit for the interval they actually played.
 - Fixed board-objective progression so generated `position` and `spend` objectives are evaluated properly.
-- Stopped `position` objectives from completing permanently off early tied-table ordering before the season meaningfully settles.
 - Split the Hub, Squad, Transfers, Calendar, Stats, and Settings screens into smaller feature components without changing the existing design.
-- Centralized repeated team-colour fallback handling and trimmed duplicated screen-level render code.
-- Added extra CI stress checks for live-match energy, board-objective repeat-award guards, full-season state consistency, and clamped weekly budgets so they cannot fall below zero.
-
-Notes:
-- Re-ran `lint`, `tsc`, `test:ci`, and regression/QA checks after the cleanup passes to keep the refactor honest.
+- Added extra CI stress checks for live-match energy, board-objective repeat-award guards, full-season state consistency, and clamped weekly budgets.
 
 ## v3.2.2 - Polish the league navigation
 
 What changed:
-- Added a reusable page header with an explicit `Hub` back action so the root pages no longer rely on the default navigator label.
-- Tightened the board, calendar, stats, and league headers so the top of each screen uses less empty space.
+- Added a reusable page header with an explicit Hub back action.
 - Reworked the league screen into a proper two-axis layout: horizontal country paging and vertical division reels inside each country.
-- Added a return-to-top button for each country section to make long tables easier to navigate.
-- Cleaned the remaining label encoding issue in the page headers by switching them to plain ASCII text.
 
 ## v3.2.1 - Merge squad and tactics
 
 What changed:
 - Combined Starting XI and Tactics into one Squad tab with a top switcher.
-- Added a Settings tab for current-team controls and temporary dev tools.
+- Added a Settings tab for current-team controls and dev tools.
 - Moved change-team and season-skip dev controls out of the Hub.
-- Hid the old Tactics tab route from the tab bar while keeping the route available.
-- Added missing tab icon mappings so the new Settings tab and existing tab icons render correctly.
 
 ## v3.2.0 - Fix lineup views and player ordering
 
 What changed:
-- Added shared formation-map cleanup so stale maps cannot put players in impossible slots like a striker at GK or a keeper at LW.
-- Reworked the last-starting-XI modal into a compact pitch view, with substitutes listed underneath.
-- Standardized player list ordering to GK, DEF, MID, FWD across squad, match, league lineup, and transfer screens.
-- Mirrored the away side of the next-fixture card so its team colours and AWAY tag sit on the away side.
-- Added regression coverage for wrong-position formation maps.
+- Added shared formation-map cleanup so stale maps cannot put players in impossible slots.
+- Reworked the last-starting-XI modal into a compact pitch view.
+- Standardized player list ordering to GK, DEF, MID, FWD across all screens.
 
 ## v3.1.0 - Clean up the squad screen
 
 What changed:
-- Fixed squad pitch drag-and-drop so players snap to the nearest slot instead of hitting overlapping drop boxes on narrow phones.
-- Improved Android drag layering by lifting the active player with state-driven `zIndex` and `elevation`.
-- Stopped the swapped player from flying back across the screen after a successful drag swap.
-- Spread formation rows more evenly over the pitch and tightened the dot/name/rating alignment.
-- Added recovery for stale formation maps so starters do not disappear from the pitch and reserves after a season skip.
+- Fixed squad pitch drag-and-drop so players snap to the nearest slot.
+- Improved Android drag layering with state-driven zIndex and elevation.
+- Added recovery for stale formation maps so starters do not disappear after a season skip.
 - Kept AI tactical/formation adaptation away from the user team during weekly progression.
-- Replaced native transfer prompts with in-app bid/listing modals and cleaned up a few rough UI labels.
 
 ## v3.0.2 - Stabilize the sim and tidy the code
 
 What changed:
 - Added regression checks for clean-sheet windows, live red-card minutes, second-yellow accounting, quick/live shape parity, and formation diversity.
-- Added a 60-minute clean-sheet qualification so short substitute appearances do not inflate defender/keeper leaderboards.
 - Added package scripts for `qa`, `turbo`, and `test:regression`.
-- Updated the README with the current repo name, setup steps, version, and engine notes.
 - Split large match-engine code into smaller files for lineup selection, shape profiling, substitutions, match utilities, and post-match accounting.
-- Split weekly progression code so transfers and tactical adaptation live in their own modules.
-- Cleaned broken/garbled console output in the QA and turbo scripts.
-- Made turbo sim season count configurable with `TURBO_SEASONS`.
-- Updated detailed sim report wording so the goal-volume reference range matches current calibration.
 
 ## v3.0.1 - Fix match accounting and tactical behaviour
 
 What changed:
 - Formation slots now feed into possession simulation, so shape affects width, central cover, build-up support, final-third pressure, and box presence.
 - Quick-sim substitutions now react to match state instead of swapping players at random.
-- Added season tracking output for score/log integrity, red-card logs, tactical changes, and formation usage.
 - AI teams can now adapt formations over a season instead of staying locked to back-four setups.
-
-Fixes:
-- Fixed second-yellow reds so the second booking is counted as a yellow before the red.
-- Fixed live-match red-card minutes so sent-off players no longer get automatic 90-minute appearances.
-- Fixed clean-sheet attribution so it checks whether a player was on the pitch when goals were conceded.
-- Kept quick sim and live sim on the same tactical-shape inputs.
-
-Notes:
-- Added `tsx` for the simulation scripts.
-- Ignored generated simulation reports.
-- Rebalanced engine constants after the shape/tactics changes so goal volume stayed reasonable.
 
 ## v3.0.0 - Move the match engine out of the store
 
 What changed:
 - Moved match simulation into a pure engine path so it can run without the Zustand store.
-- Added fast long-run simulation tooling with `turbo_sim.ts`.
-- Added detailed season analysis tooling with `detailed_season_sim.ts`.
+- Added fast long-run simulation tooling with `turbo_sim.ts` and `detailed_season_sim.ts`.
 - Tuned scoring toward a realistic league-wide goals-per-match range.
-- Reworked midfield/build-up/chance creation logic so lower-rated teams are not locked out of matches by rating gaps alone.
-- Tuned foul and card volume closer to professional match levels.
 
 ## v2.0.0 - Improve the basic game loop
 
@@ -188,25 +184,8 @@ What changed:
 - Reworked the match engine so top players can have a bigger impact without one player dominating every stat.
 - Fixed missing-team data issues so the league has the expected 20 teams.
 - Added fallback squad generation when source data is thin.
-- Updated awards naming and filtered Golden Glove candidates to goalkeepers.
-- Reworked pitch-grid layout and player labels.
-
-Fixes:
-- Reduced assist hoarding from individual creators.
-- Fixed league-table wrapping when goal difference was very large.
-- Simplified player IDs.
 
 ## v1.0.0 - First playable version
 
 What changed:
-- Added manual squad selection.
-- Added a 7-player bench.
-- Added basic match tuning for more reasonable season totals.
-- Added AI lineup auto-fill so simulated teams can field an XI.
-- Cleaned position labels.
-- Added simple tactical controls.
-
-Fixes:
-- Stopped matches from running against empty AI lineups.
-- Reduced goalkeeper card frequency.
-- Fixed left/right wide-position mapping on the pitch.
+- Added manual squad selection, 7-player bench, basic match tuning, AI lineup auto-fill, and simple tactical controls.
