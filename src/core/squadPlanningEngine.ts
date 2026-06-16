@@ -55,12 +55,25 @@ const getRetainRatingFloor = (team: Team) => {
   return 60;
 };
 
+const getPositionWageShareWatchThreshold = (team: Team) => {
+  if (team.boardProfile.transferDiscipline === 'strict') return 0.30;
+  if (team.boardProfile.transferDiscipline === 'aggressive') return 0.38;
+  return 0.34;
+};
+
+const getHighWageBackupThreshold = (team: Team) => {
+  if (team.boardProfile.transferDiscipline === 'strict') return 1.25;
+  if (team.boardProfile.transferDiscipline === 'aggressive') return 1.65;
+  return 1.45;
+};
+
 const buildDepthReason = (
   position: Position,
   currentDepth: number,
   targetDepth: number,
   averageAge: number,
   wageShare: number,
+  wageShareWatchThreshold: number,
   severity: SquadNeedSeverity
 ) => {
   const deficit = targetDepth - currentDepth;
@@ -73,7 +86,7 @@ const buildDepthReason = (
   if (averageAge >= 30.5 && severity !== 'none') {
     return `${position} depth is ageing and should be monitored.`;
   }
-  if (wageShare >= 0.34) {
+  if (wageShare >= wageShareWatchThreshold) {
     return `${position} carries a heavy share of the wage bill.`;
   }
   return `${position} depth is aligned with the current squad plan.`;
@@ -94,6 +107,7 @@ export const evaluateSquadNeeds = (
     const averageAge = average(positionPlayers.map(player => player.age));
     const wageLoad = positionPlayers.reduce((sum, player) => sum + (Number.isFinite(player.wage) ? player.wage : 0), 0);
     const wageShare = totalWageBill > 0 ? wageLoad / totalWageBill : 0;
+    const wageShareWatchThreshold = getPositionWageShareWatchThreshold(team);
     const deficit = targetDepth - currentDepth;
     let severity: SquadNeedSeverity = 'none';
 
@@ -113,7 +127,7 @@ export const evaluateSquadNeeds = (
       severity = getMoreSevere(severity, averageAge >= 32 ? 'need' : 'watch');
     }
 
-    if (severity === 'none' && currentDepth >= targetDepth + 2 && wageShare >= 0.34) {
+    if (severity === 'none' && currentDepth >= targetDepth + 2 && wageShare >= wageShareWatchThreshold) {
       severity = 'watch';
     }
 
@@ -121,7 +135,7 @@ export const evaluateSquadNeeds = (
       teamId: team.id,
       position,
       severity,
-      reason: buildDepthReason(position, currentDepth, targetDepth, averageAge, wageShare, severity),
+      reason: buildDepthReason(position, currentDepth, targetDepth, averageAge, wageShare, wageShareWatchThreshold, severity),
       currentDepth,
       targetDepth,
       averageAge,
@@ -138,6 +152,7 @@ export const evaluateContractDecisions = (
   const squad = getTeamSquad(players, team.id);
   const averageWage = average(squad.map(player => player.wage));
   const retainRatingFloor = getRetainRatingFloor(team);
+  const highWageBackupThreshold = getHighWageBackupThreshold(team);
   const needByPosition = needs.reduce<Record<Position, SquadNeed>>((acc, need) => {
     acc[need.position] = need;
     return acc;
@@ -149,7 +164,7 @@ export const evaluateContractDecisions = (
       const expiring = isContractExpiringSoon(player);
       const isCore = player.isStarting || player.overallRating >= retainRatingFloor + 3;
       const isNeededPosition = need && SEVERITY_VALUE[need.severity] >= SEVERITY_VALUE.need;
-      const highWageBackup = averageWage > 0 && player.wage >= averageWage * 1.45 && !player.isStarting;
+      const highWageBackup = averageWage > 0 && player.wage >= averageWage * highWageBackupThreshold && !player.isStarting;
       const ageingBackup = player.age >= 31 && !player.isStarting && player.overallRating < retainRatingFloor;
       const lowFitExpiring = expiring && !isCore && !isNeededPosition;
 
@@ -197,9 +212,9 @@ export const evaluateContractDecisions = (
         return {
           playerId: player.id,
           decision: 'sell' as const,
-          priority: clampPriority(highWageBackup ? 56 : 48),
+          priority: clampPriority(highWageBackup ? 56 + (team.boardProfile.transferDiscipline === 'strict' ? 8 : 0) : 48),
           reason: highWageBackup
-            ? `${player.name} is a backup carrying too much wage load.`
+            ? `${player.name} is a backup carrying too much wage load for a ${team.boardProfile.transferDiscipline} board.`
             : `${player.name} is an ageing backup who can be moved before value drops further.`,
         };
       }

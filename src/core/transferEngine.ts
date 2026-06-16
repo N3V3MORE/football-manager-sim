@@ -8,11 +8,111 @@ import { isTransferWindowOpen } from '../utils/calendar';
 type PositionKey = Player['position'];
 type PlanningSeverity = 'none' | 'watch' | 'need' | 'urgent';
 
+export type AITransferDecision = {
+  week?: number;
+  action: 'listed' | 'bought';
+  teamId: string;
+  playerId: string;
+  position: PositionKey;
+  reason: string;
+  fee?: number;
+  fromTeamId?: string;
+  squadNeed?: {
+    position: PositionKey;
+    severity: PlanningSeverity;
+    currentDepth: number;
+    targetDepth: number;
+    reason: string;
+  };
+  contractDecision?: {
+    decision: 'renew' | 'sell' | 'release' | 'hold';
+    priority: number;
+    reason: string;
+  };
+  boardContext: {
+    ambition: Team['boardProfile']['ambition'];
+    transferDiscipline: Team['boardProfile']['transferDiscipline'];
+    managerTransferIdentity: string;
+  };
+};
+
+export type WeeklyTransferResult = {
+  players: Record<string, Player>;
+  teams: Record<string, Team>;
+  decisions: AITransferDecision[];
+};
+
 const NEED_SEVERITY_VALUE: Record<PlanningSeverity, number> = {
   none: 0,
   watch: 1,
   need: 2,
   urgent: 3,
+};
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const getBoardContext = (team: Team): AITransferDecision['boardContext'] => ({
+  ambition: team.boardProfile.ambition,
+  transferDiscipline: team.boardProfile.transferDiscipline,
+  managerTransferIdentity: team.manager.transferIdentity,
+});
+
+const summarizeNeed = (need: ReturnType<typeof buildSquadPlan>['needs'][number]): AITransferDecision['squadNeed'] => ({
+  position: need.position,
+  severity: need.severity,
+  currentDepth: need.currentDepth,
+  targetDepth: need.targetDepth,
+  reason: need.reason,
+});
+
+const getListingChanceMultiplier = (team: Team) => {
+  const disciplineMultiplier = team.boardProfile.transferDiscipline === 'strict'
+    ? 1.25
+    : team.boardProfile.transferDiscipline === 'aggressive'
+      ? 0.85
+      : 1;
+  const ambitionMultiplier = team.boardProfile.ambition === 'elite'
+    ? 1.15
+    : team.boardProfile.ambition === 'survival'
+      ? 1.05
+      : 1;
+  return disciplineMultiplier * ambitionMultiplier;
+};
+
+const getBudgetLimitShare = (team: Team, severity: PlanningSeverity) => {
+  const urgent = severity === 'urgent';
+  const disciplineShare = team.boardProfile.transferDiscipline === 'strict'
+    ? urgent ? 0.40 : 0.30
+    : team.boardProfile.transferDiscipline === 'aggressive'
+      ? urgent ? 0.70 : 0.60
+      : urgent ? 0.58 : 0.45;
+  const ambitionAdjustment =
+    team.boardProfile.ambition === 'elite' || team.boardProfile.ambition === 'europe'
+      ? 0.05
+      : team.boardProfile.ambition === 'promotion'
+        ? 0.03
+        : team.boardProfile.ambition === 'survival'
+          ? -0.05
+          : 0;
+  return clamp(disciplineShare + ambitionAdjustment, 0.22, 0.75);
+};
+
+const getBuyChance = (team: Team, severity: PlanningSeverity, baseChance: number) => {
+  const disciplineAdjustment = team.boardProfile.transferDiscipline === 'strict'
+    ? -0.08
+    : team.boardProfile.transferDiscipline === 'aggressive'
+      ? 0.08
+      : 0;
+  const ambitionAdjustment =
+    team.boardProfile.ambition === 'elite' || team.boardProfile.ambition === 'europe'
+      ? 0.04
+      : team.boardProfile.ambition === 'promotion'
+        ? 0.03
+        : team.boardProfile.ambition === 'survival'
+          ? -0.03
+          : 0;
+  const severityAdjustment = severity === 'urgent' ? 0.12 : 0;
+  return clamp(baseChance + disciplineAdjustment + ambitionAdjustment + severityAdjustment, 0.02, 0.9);
 };
 
 const getEffectiveRating = (player: Player) => {
@@ -29,14 +129,15 @@ export const computeWeeklyTransfers = (
   userTeamId: string | null,
   rng?: RandomGenerator,
   currentWeek?: number
-): { players: Record<string, Player>, teams: Record<string, Team> } => {
+): WeeklyTransferResult => {
   if (currentWeek !== undefined && !isTransferWindowOpen(currentWeek)) {
-    return { players, teams };
+    return { players, teams, decisions: [] };
   }
 
   const random = resolveRandom(rng);
   const updatedPlayers = { ...players };
   const updatedTeams = { ...teams };
+  const decisions: AITransferDecision[] = [];
 
   const aiTeams = Object.values(updatedTeams).filter(t => t.id !== userTeamId);
 
@@ -67,24 +168,51 @@ export const computeWeeklyTransfers = (
       if (positionNeed && NEED_SEVERITY_VALUE[positionNeed.severity] >= NEED_SEVERITY_VALUE.need) return;
 
       let shouldList = false;
+      let listReason = '';
       const minutesShare = Math.min(1, (p.minutesPlayed || 0) / (Math.max(1, team.played) * 90));
       const effectiveRating = getEffectiveRating(p);
       const contractDecision = squadPlan.contractDecisions.find(decision => decision.playerId === p.id);
+      const listingChanceMultiplier = getListingChanceMultiplier(team);
 
       if (contractDecision?.decision === 'sell' || contractDecision?.decision === 'release') {
         shouldList = true;
-      } else if (minutesShare > ENGINE_CONFIG.TRANSFER_LIST_MIN_MINUTES_SHARE && effectiveRating < 6.4 && random() < ENGINE_CONFIG.TRANSFER_LIST_POOR_FORM_CHANCE) {
+        listReason = contractDecision.reason;
+      } else if (
+        minutesShare > ENGINE_CONFIG.TRANSFER_LIST_MIN_MINUTES_SHARE &&
+        effectiveRating < 6.4 &&
+        random() < clamp(ENGINE_CONFIG.TRANSFER_LIST_POOR_FORM_CHANCE * listingChanceMultiplier, 0, 0.9)
+      ) {
         shouldList = true;
-      } else if (p.age >= 30 && minutesShare < 0.15 && random() < ENGINE_CONFIG.TRANSFER_LIST_VETERAN_CHANCE) {
+        listReason = `${p.name} has poor recent form and does not justify a protected squad role.`;
+      } else if (p.age >= 30 && minutesShare < 0.15 && random() < clamp(ENGINE_CONFIG.TRANSFER_LIST_VETERAN_CHANCE * listingChanceMultiplier, 0, 0.9)) {
         shouldList = true;
-      } else if (!p.isStarting && random() < ENGINE_CONFIG.TRANSFER_LIST_BACKUP_CHANCE) {
+        listReason = `${p.name} is an older low-minute player and can be moved without creating a depth need.`;
+      } else if (!p.isStarting && random() < clamp(ENGINE_CONFIG.TRANSFER_LIST_BACKUP_CHANCE * listingChanceMultiplier, 0, 0.9)) {
         shouldList = true;
+        listReason = `${p.name} is a backup outside the protected core and the board will listen to offers.`;
       }
 
       const minimumDepth = Math.max(positionNeed?.targetDepth || 0, minDepth[p.position] || 2);
       if (shouldList && (depthByPosition[p.position] || 0) > minimumDepth) {
         updatedPlayers[p.id] = { ...updatedPlayers[p.id], isTransferListed: true, askingPrice: p.marketValue };
         depthByPosition[p.position] = Math.max(0, (depthByPosition[p.position] || 0) - 1);
+        decisions.push({
+          week: currentWeek,
+          action: 'listed',
+          teamId: team.id,
+          playerId: p.id,
+          position: p.position,
+          reason: listReason,
+          squadNeed: positionNeed ? summarizeNeed(positionNeed) : undefined,
+          contractDecision: contractDecision
+            ? {
+              decision: contractDecision.decision,
+              priority: contractDecision.priority,
+              reason: contractDecision.reason,
+            }
+            : undefined,
+          boardContext: getBoardContext(team),
+        });
       }
     });
   });
@@ -105,7 +233,7 @@ export const computeWeeklyTransfers = (
 
     if (!priorityNeed) return;
 
-    const budgetLimit = Math.max(0, updatedTeams[team.id].budget) * (priorityNeed.severity === 'urgent' ? 0.6 : 0.45);
+    const budgetLimit = Math.max(0, updatedTeams[team.id].budget) * getBudgetLimitShare(team, priorityNeed.severity);
 
     // Filter available targets from the global pool (ensure target team hasn't been modified heavily or isn't the buyer)
     const targets = globalListedPlayers.filter(p =>
@@ -123,7 +251,7 @@ export const computeWeeklyTransfers = (
       })[0];
 
       const buyChanceBase = team.played < 10 ? ENGINE_CONFIG.TRANSFER_EARLY_BUY_CHANCE : ENGINE_CONFIG.TRANSFER_NORMAL_BUY_CHANCE;
-      const buyChance = priorityNeed.severity === 'urgent' ? Math.min(0.9, buyChanceBase + 0.12) : buyChanceBase;
+      const buyChance = getBuyChance(team, priorityNeed.severity, buyChanceBase);
       
       if (random() < buyChance) {
         const buyer = updatedTeams[team.id];
@@ -149,9 +277,21 @@ export const computeWeeklyTransfers = (
           isStarting: false,
           isSub: false,
         };
+        decisions.push({
+          week: currentWeek,
+          action: 'bought',
+          teamId: team.id,
+          playerId: bestTarget.id,
+          fromTeamId: bestTarget.teamId,
+          fee: bestTarget.askingPrice,
+          position: bestTarget.position,
+          reason: `${team.name} bought ${bestTarget.name} because ${priorityNeed.reason}`,
+          squadNeed: summarizeNeed(priorityNeed),
+          boardContext: getBoardContext(team),
+        });
       }
     }
   });
 
-  return { players: updatedPlayers, teams: updatedTeams };
+  return { players: updatedPlayers, teams: updatedTeams, decisions };
 };

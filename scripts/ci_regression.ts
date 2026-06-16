@@ -486,6 +486,50 @@ const runInvariantChecks = () => {
     'renew',
     'Squad planning should recommend renewal for a core expiring player in a need position'
   );
+  const wageBackupCandidate = Object.values(balancedPlayers).find(player => (
+    player.teamId === contextTeam.id && !player.isStarting
+  ));
+  assert.ok(wageBackupCandidate, 'Expected a backup player for board-discipline wage planning regression');
+  const wagePlanningPlayers = Object.fromEntries(
+    Object.entries(balancedPlayers).map(([playerId, player]) => {
+      if (player.teamId !== contextTeam.id) return [playerId, player];
+      return [
+        playerId,
+        {
+          ...player,
+          wage: playerId === wageBackupCandidate.id ? 16 : 10,
+          age: 26,
+          overallRating: playerId === wageBackupCandidate.id ? 74 : player.overallRating,
+          contractLeft: 3,
+          isStarting: playerId === wageBackupCandidate.id ? false : player.isStarting,
+        },
+      ];
+    })
+  );
+  const strictDisciplinePlan = buildSquadPlan(
+    {
+      ...contextTeam,
+      boardProfile: { ...contextTeam.boardProfile, transferDiscipline: 'strict' },
+    },
+    wagePlanningPlayers
+  );
+  const aggressiveDisciplinePlan = buildSquadPlan(
+    {
+      ...contextTeam,
+      boardProfile: { ...contextTeam.boardProfile, transferDiscipline: 'aggressive' },
+    },
+    wagePlanningPlayers
+  );
+  assert.equal(
+    strictDisciplinePlan.contractDecisions.find(decision => decision.playerId === wageBackupCandidate.id)?.decision,
+    'sell',
+    'Strict boards should be quicker to sell wage-heavy backups'
+  );
+  assert.notEqual(
+    aggressiveDisciplinePlan.contractDecisions.find(decision => decision.playerId === wageBackupCandidate.id)?.decision,
+    'sell',
+    'Aggressive boards should tolerate the same backup wage profile more than strict boards'
+  );
 
   const replacementSeed = initGameData();
   const replacementTeam = Object.values(replacementSeed.teams)
@@ -785,12 +829,22 @@ const runInvariantChecks = () => {
   const closedWindowTransfers = computeWeeklyTransfers(transferPlayers, transferTeams, null, alwaysTransferRng, 10);
   assert.equal(closedWindowTransfers.players, transferPlayers, 'AI transfers should not change players outside transfer windows');
   assert.equal(closedWindowTransfers.teams, transferTeams, 'AI transfers should not change teams outside transfer windows');
+  assert.equal(closedWindowTransfers.decisions.length, 0, 'AI transfers should not log transfer decisions outside transfer windows');
   const openWindowTransfers = computeWeeklyTransfers(transferPlayers, transferTeams, null, alwaysTransferRng, 2);
   assert.equal(
     openWindowTransfers.players[transferTarget.id].teamId,
     transferBuyer.id,
     'AI transfers should use squad needs to buy listed targets during open transfer windows'
   );
+  const purchaseDecision = openWindowTransfers.decisions.find(decision => (
+    decision.action === 'bought' && decision.teamId === transferBuyer.id && decision.playerId === transferTarget.id
+  ));
+  assert.ok(purchaseDecision, 'AI transfer purchases should produce an explainable decision log');
+  assert.equal(purchaseDecision!.squadNeed?.position, 'FWD');
+  assert.ok(purchaseDecision!.reason.includes('FWD'), 'AI purchase decision reason should reference the squad need');
+  assert.equal(purchaseDecision!.boardContext.ambition, transferBuyer.boardProfile.ambition);
+  assert.equal(purchaseDecision!.boardContext.transferDiscipline, transferBuyer.boardProfile.transferDiscipline);
+  assert.equal(purchaseDecision!.boardContext.managerTransferIdentity, transferBuyer.manager.transferIdentity);
 
   const legacyTeams = Object.fromEntries(
     Object.values(midSeasonState.teams).map(team => [

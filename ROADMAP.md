@@ -118,6 +118,8 @@ Progress already in workspace:
 - Added a pure squad-planning engine with `SquadNeed`, `ContractDecision`, and `SquadPlan` outputs.
 - Assistant contract warnings and recruitment notes now trace back to squad-planning output.
 - AI weekly transfer movement now respects transfer windows and uses squad needs/contract decisions for first-pass listing and buying.
+- AI transfer listing and buying now emits explainable decision logs with squad need, contract risk, board ambition, transfer discipline, and manager transfer identity.
+- Strict and aggressive boards now diverge in wage-heavy backup contract decisions.
 
 Dependencies:
 - `v4.2` board and club context must be stable first.

@@ -9,7 +9,9 @@ What changed:
 - Added a pure `squadPlanningEngine` that evaluates positional needs and contract decisions from squad depth, availability, age, wage load, board ambition, and contract risk.
 - Updated assistant contract warnings and recruitment notes to use squad-planning decisions instead of ad hoc weak-position checks.
 - Updated AI transfers to respect transfer windows when weekly progression runs, and to buy/list from squad needs and contract decisions rather than only weak-starter heuristics.
-- Added deterministic regression coverage for board signal breakdowns, squad-planning severity, contract renewal decisions, and transfer-window no-op/open-window need-led purchases.
+- Added explainable AI transfer decision logs for listed and bought players, including squad need, contract decision, board ambition, transfer discipline, manager transfer identity, and reason text.
+- Tuned squad planning so strict boards react earlier to wage-heavy backups while aggressive boards tolerate higher wage load.
+- Added deterministic regression coverage for board signal breakdowns, squad-planning severity, contract renewal decisions, board-discipline wage behavior, transfer-window no-op/open-window need-led purchases, and transfer-decision rationale.
 
 ### Recent fixes — Comprehensive audit pass
 
