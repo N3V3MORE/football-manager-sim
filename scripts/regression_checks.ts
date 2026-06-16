@@ -120,14 +120,14 @@ const checkLiveSentOffMinutes = () => {
 
 const checkBranchGuards = () => {
   const matchEngine = readSource('src/core/matchEngine.ts');
-  const gameStore = readSource('src/store/gameStore.ts');
+  const liveMatchActions = readSource('src/store/liveMatchActions.ts');
 
   assert(
     /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\);[\s\S]*sendOffPlayer/.test(matchEngine),
     'Quick sim second-yellow branch must add yellow-card stat before red'
   );
   assert(
-    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\);[\s\S]*sendOffPlayer/.test(gameStore),
+    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\);[\s\S]*sendOffPlayer/.test(liveMatchActions),
     'Live sim second-yellow branch must add yellow-card stat before red'
   );
   assert(
@@ -135,7 +135,7 @@ const checkBranchGuards = () => {
     'Quick sim must pass formation shape into simulatePossession'
   );
   assert(
-    /buildTeamShapeProfile\(homeTeam, homeStarters\)[\s\S]*simulatePossession\([\s\S]*attShape,[\s\S]*defShape[\s\S]*\)/.test(gameStore),
+    /buildTeamShapeProfile\(homeTeam, homeStarters\)[\s\S]*simulatePossession\([\s\S]*attShape,[\s\S]*defShape[\s\S]*\)/.test(liveMatchActions),
     'Live sim must pass formation shape into simulatePossession'
   );
 };

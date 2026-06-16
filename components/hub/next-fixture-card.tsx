@@ -9,11 +9,12 @@ type NextFixtureCardProps = {
   userTeamId: string | null;
   subLabel: string;
   onPress: () => void;
+  onQuickSim?: () => void;
 };
 
-export function NextFixtureCard({ homeTeam, awayTeam, userTeamId, subLabel, onPress }: NextFixtureCardProps) {
+export function NextFixtureCard({ homeTeam, awayTeam, userTeamId, subLabel, onPress, onQuickSim }: NextFixtureCardProps) {
   return (
-    <TouchableOpacity style={styles.heroMatchCard} onPress={onPress} activeOpacity={0.85}>
+    <View style={styles.heroMatchCard}>
       <Text style={styles.heroMatchTitle}>NEXT FIXTURE</Text>
       {homeTeam && awayTeam ? (
         <>
@@ -38,16 +39,23 @@ export function NextFixtureCard({ homeTeam, awayTeam, userTeamId, subLabel, onPr
             </View>
           </View>
           <View style={styles.playBtnRow}>
-            <Text style={styles.heroPlayBtn}>Tap to play match</Text>
+            <TouchableOpacity style={styles.primaryPlayBtn} onPress={onPress} activeOpacity={0.85}>
+              <Text style={styles.primaryPlayText}>Play Live</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryPlayBtn} onPress={onQuickSim || onPress} activeOpacity={0.85}>
+              <Text style={styles.secondaryPlayText}>Quick Sim</Text>
+            </TouchableOpacity>
           </View>
         </>
       ) : (
         <View style={styles.emptyState}>
           <Text style={styles.matchupSubtext}>No fixture this week.</Text>
-          <Text style={styles.heroPlayBtn}>Tap to advance week</Text>
+          <TouchableOpacity style={[styles.primaryPlayBtn, styles.emptyPlayBtn]} onPress={onPress} activeOpacity={0.85}>
+            <Text style={styles.primaryPlayText}>Advance Week</Text>
+          </TouchableOpacity>
         </View>
       )}
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -79,7 +87,28 @@ const styles = StyleSheet.create({
   matchupVsBlock: { paddingHorizontal: 16, alignItems: 'center' },
   matchupVs: { fontSize: 22, fontWeight: '900', color: '#334155' },
   matchupSubtext: { fontSize: 14, color: '#64748b', marginBottom: 8 },
-  playBtnRow: { borderTopWidth: 1, borderTopColor: '#1e293b', paddingTop: 12, alignItems: 'center' },
-  heroPlayBtn: { fontSize: 11, fontWeight: '900', color: '#38bdf8', letterSpacing: 1.5 },
+  playBtnRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
+    paddingTop: 12,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  primaryPlayBtn: {
+    flex: 1,
+    backgroundColor: '#38bdf8',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  secondaryPlayBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  primaryPlayText: { color: '#0f172a', fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  secondaryPlayText: { color: '#38bdf8', fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
   emptyState: { paddingVertical: 20, alignItems: 'center' },
+  emptyPlayBtn: { flex: 0, alignSelf: 'stretch' },
 });

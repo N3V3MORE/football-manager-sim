@@ -62,6 +62,7 @@ export default function HubScreen() {
   const fixtures = useGameStore(state => state.fixtures);
   const competitions = useGameStore(state => state.competitions);
   const advanceWeek = useGameStore(state => state.advanceWeek);
+  const playMatch = useGameStore(state => state.playMatch);
   const inboxMessages = useGameStore(state => state.inboxMessages);
   const players = useGameStore(state => state.players);
   const news = useGameStore(state => state.news);
@@ -93,6 +94,12 @@ export default function HubScreen() {
     }
     router.push({ pathname: '/match', params: { fixtureId: myNextMatch.id } });
   }, [advanceWeek, myNextMatch, router]);
+
+  const handleQuickSim = useCallback(() => {
+    if (!myNextMatch) return;
+    playMatch(myNextMatch.id);
+    advanceWeek();
+  }, [advanceWeek, myNextMatch, playMatch]);
 
   const miniTableData = useMemo(() => {
     const sortedTeams = sortTeamsByTable(Object.values(teams).filter(team => team.division === myDivision));
@@ -232,6 +239,7 @@ export default function HubScreen() {
             userTeamId={userTeamId}
             subLabel={nextFixtureLabel}
             onPress={handlePlayMatch}
+            onQuickSim={handleQuickSim}
           />
 
           <MiniTableCard

@@ -8,6 +8,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
     "lint": "expo lint",
     "analyze": "tsx -r ./scripts/mock-env.js scripts/detailed_season_sim.ts",
     "track:season": "tsx -r ./scripts/mock-env.js scripts/season_tracker.ts",
@@ -15,9 +16,11 @@
     "turbo": "tsx -r ./scripts/mock-env.js scripts/turbo_sim.ts",
     "test:regression": "tsx -r ./scripts/mock-env.js scripts/regression_checks.ts",
     "check:save": "tsx -r ./scripts/mock-env.js scripts/save_integrity_check.ts",
+    "check:agent": "tsx -r ./scripts/mock-env.js scripts/agent_game_check.ts",
     "test:ci": "tsx -r ./scripts/mock-env.js scripts/ci_regression.ts",
     "test:news": "tsx -r ./scripts/mock-env.js scripts/test_news_output.ts",
-    "gate:release": "npx tsc --noEmit && npm run -s lint && npm run -s test:ci && npm run -s test:regression && npm run -s check:save"
+    "ci": "npm run -s typecheck && npm run -s lint && npm run -s test:ci && npm run -s test:regression && npm run -s check:save && npm run -s check:agent",
+    "gate:release": "npm run -s ci"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

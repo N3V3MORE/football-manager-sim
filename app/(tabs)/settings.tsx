@@ -3,11 +3,13 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurrentTeamCard } from '@/components/settings/current-team-card';
+import { AvailabilityWatchCard } from '@/components/settings/availability-watch-card';
+import { ContractWatchCard } from '@/components/settings/contract-watch-card';
 import { DevToolsCard } from '@/components/settings/dev-tools-card';
 import { TeamSelectionSheet } from '@/components/settings/team-selection-sheet';
 import { useGameStore } from '@/src/store/gameStore';
 import { sortTeamsByDivisionAndName } from '@/src/core/leagueUtils';
-import { isContractExpiringSoon, isPlayerInjured } from '@/src/core/playerStatusUtils';
+import { isContractExpiringSoon, isPlayerInjured, isPlayerUnavailable } from '@/src/core/playerStatusUtils';
 
 
 export default function SettingsScreen() {
@@ -18,6 +20,7 @@ export default function SettingsScreen() {
   const skipToEndOfSeason = useGameStore(state => state.skipToEndOfSeason);
   const changeTeam = useGameStore(state => state.changeTeam);
   const initializeGame = useGameStore(state => state.initializeGame);
+  const renewPlayerContract = useGameStore(state => state.renewPlayerContract);
 
   const [showChangeTeam, setShowChangeTeam] = useState(false);
 
@@ -33,6 +36,14 @@ export default function SettingsScreen() {
   );
   const expiringCount = useMemo(
     () => userSquad.filter(player => isContractExpiringSoon(player)).length,
+    [userSquad]
+  );
+  const expiringPlayers = useMemo(
+    () => userSquad.filter(player => isContractExpiringSoon(player)),
+    [userSquad]
+  );
+  const unavailablePlayers = useMemo(
+    () => userSquad.filter(player => isPlayerUnavailable(player)),
     [userSquad]
   );
 
@@ -55,7 +66,7 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.header}>
           <Text style={styles.title}>Settings</Text>
-          <Text style={styles.subtitle}>Game settings and developer tools</Text>
+          <Text style={styles.subtitle}>Club controls and squad status</Text>
         </View>
 
         <CurrentTeamCard
@@ -65,13 +76,21 @@ export default function SettingsScreen() {
           onChangeTeam={() => setShowChangeTeam(true)}
         />
 
-
-
-        <DevToolsCard
-          onAdvanceFiveWeeks={() => advanceWeeks(5)}
-          onSkipSeason={skipToEndOfSeason}
-          onResetSeason={handleResetSeason}
+        <ContractWatchCard
+          players={expiringPlayers}
+          team={userTeam}
+          onRenew={renewPlayerContract}
         />
+
+        <AvailabilityWatchCard players={unavailablePlayers} />
+
+        {__DEV__ ? (
+          <DevToolsCard
+            onAdvanceFiveWeeks={() => advanceWeeks(5)}
+            onSkipSeason={skipToEndOfSeason}
+            onResetSeason={handleResetSeason}
+          />
+        ) : null}
       </ScrollView>
 
       <TeamSelectionSheet
