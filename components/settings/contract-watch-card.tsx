@@ -16,7 +16,7 @@ const ADVICE_STYLES = {
   replace: { container: { backgroundColor: '#172033', borderColor: '#334155' }, text: { color: '#cbd5e1' } },
 } as const;
 
-export function ContractWatchCard({ players, team, onRenew }: ContractWatchCardProps) {
+export default React.memo(function ContractWatchCard({ players, team, onRenew }: ContractWatchCardProps) {
   if (!team) return null;
 
   const visiblePlayers = [...players]
@@ -78,6 +78,7 @@ export function ContractWatchCard({ players, team, onRenew }: ContractWatchCardP
     </View>
   );
 }
+);
 
 const styles = StyleSheet.create({
   card: {

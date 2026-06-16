@@ -16,7 +16,9 @@ import {
   sortTeamsByDivisionAndName,
   sortTeamsByTable,
 } from './leagueUtils';
+import { CONTINENTAL_CLUB_NAMES } from '../data/continentalClubs';
 
+// Hardcoded schedule dates; ideally should be generated from season config for dynamic league structures.
 const CARABAO_WEEKS = [3, 11, 19, 27, 35, 43, 51];
 const FA_CUP_WEEKS = [7, 15, 23, 31, 39, 47, 55];
 const EUROPE_WEEKS = [9, 21, 37, 59];
@@ -24,45 +26,20 @@ const SPECIAL_WEEKS = new Set([...CARABAO_WEEKS, ...FA_CUP_WEEKS, ...EUROPE_WEEK
 export const LEAGUE_WEEKS = Array.from({ length: 64 }, (_, index) => index + 1)
   .filter(week => !SPECIAL_WEEKS.has(week));
 
-const CONTINENTAL_CLUB_NAMES = [
-  'Aurelia Madrid',
-  'Cataluna Sporting',
-  'Rhine Athletic',
-  'Torino FC',
-  'Lisbon Mariners',
-  'Amsterdam Borough',
-  'Paris Red Star',
-  'Prague Union',
-];
-
-const COMPETITION_NAMES: Record<CompetitionId, string> = {
-  'premier-league': 'Premier League',
-  championship: 'Championship',
-  'league-one': 'League One',
-  'league-two': 'League Two',
-  'carabao-cup': 'Carabao Cup',
-  'fa-cup': 'FA Cup',
-  europe: 'Europe',
+type CompetitionMeta = {
+  name: string;
+  shortName: string;
+  accent: string;
 };
 
-const COMPETITION_SHORT_NAMES: Record<CompetitionId, string> = {
-  'premier-league': 'PL',
-  championship: 'Champ',
-  'league-one': 'L1',
-  'league-two': 'L2',
-  'carabao-cup': 'Carabao',
-  'fa-cup': 'FA Cup',
-  europe: 'Europe',
-};
-
-const COMPETITION_ACCENTS: Record<CompetitionId, string> = {
-  'premier-league': '#38bdf8',
-  championship: '#60a5fa',
-  'league-one': '#a78bfa',
-  'league-two': '#818cf8',
-  'carabao-cup': '#38bdf8',
-  'fa-cup': '#22c55e',
-  europe: '#f59e0b',
+const COMPETITION_META: Record<CompetitionId, CompetitionMeta> = {
+  'premier-league': { name: 'Premier League', shortName: 'PL', accent: '#38bdf8' },
+  championship: { name: 'Championship', shortName: 'Champ', accent: '#60a5fa' },
+  'league-one': { name: 'League One', shortName: 'L1', accent: '#a78bfa' },
+  'league-two': { name: 'League Two', shortName: 'L2', accent: '#818cf8' },
+  'carabao-cup': { name: 'Carabao Cup', shortName: 'Carabao', accent: '#38bdf8' },
+  'fa-cup': { name: 'FA Cup', shortName: 'FA Cup', accent: '#22c55e' },
+  europe: { name: 'Europe', shortName: 'Europe', accent: '#f59e0b' },
 };
 
 const ROUND_LABELS: Record<CompetitionRoundKey, string> = {
@@ -238,8 +215,8 @@ const buildLeagueCompetitionState = (
   season: number
 ): CompetitionState => ({
   id: LEAGUE_COMPETITION_BY_DIVISION[division],
-  name: COMPETITION_NAMES[LEAGUE_COMPETITION_BY_DIVISION[division]],
-  shortName: COMPETITION_SHORT_NAMES[LEAGUE_COMPETITION_BY_DIVISION[division]],
+  name: COMPETITION_META[LEAGUE_COMPETITION_BY_DIVISION[division]].name,
+  shortName: COMPETITION_META[LEAGUE_COMPETITION_BY_DIVISION[division]].shortName,
   type: 'league',
   season,
   leagueDivision: division,
@@ -272,11 +249,11 @@ const buildKnockoutCompetition = (
   fixtures: Record<string, Fixture>;
   nextCounter: number;
 } => {
-  const rounds = roundKeys.map((key, index) => createRoundState(key, weekSlots[index] || weekSlots[weekSlots.length - 1]));
+  const rounds = roundKeys.map((key, index) => createRoundState(key, weekSlots[index] ?? weekSlots[weekSlots.length - 1]!));
   const scheduledRound = scheduleKnockoutRound(
     competitionId,
     competitionType,
-    rounds[0],
+    rounds[0]!,
     entrantTeamIds,
     teams,
     fixtureCounterStart
@@ -286,8 +263,8 @@ const buildKnockoutCompetition = (
   return {
     competition: {
       id: competitionId,
-      name: COMPETITION_NAMES[competitionId],
-      shortName: COMPETITION_SHORT_NAMES[competitionId],
+      name: COMPETITION_META[competitionId].name,
+      shortName: COMPETITION_META[competitionId].shortName,
       type: competitionType,
       season,
       entrantTeamIds,
@@ -300,13 +277,13 @@ const buildKnockoutCompetition = (
   };
 };
 
-export const getCompetitionName = (competitionId: CompetitionId) => COMPETITION_NAMES[competitionId];
+export const getCompetitionName = (competitionId: CompetitionId) => COMPETITION_META[competitionId].name;
 
-export const getCompetitionShortName = (competitionId: CompetitionId) => COMPETITION_SHORT_NAMES[competitionId];
+export const getCompetitionShortName = (competitionId: CompetitionId) => COMPETITION_META[competitionId].shortName;
 
 export const getCompetitionRoundLabel = (round: CompetitionRoundKey) => ROUND_LABELS[round];
 
-export const getCompetitionAccent = (competitionId: CompetitionId) => COMPETITION_ACCENTS[competitionId];
+export const getCompetitionAccent = (competitionId: CompetitionId) => COMPETITION_META[competitionId].accent;
 
 export const getContinentalClubNames = () => [...CONTINENTAL_CLUB_NAMES];
 
@@ -484,17 +461,17 @@ export const resolveCompetitionProgression = (
     .forEach(competition => {
       const currentRoundIndex = competition.rounds.findIndex(round => round.key === competition.currentRound);
       if (currentRoundIndex < 0) return;
-      const currentRound = competition.rounds[currentRoundIndex];
+      const currentRound = competition.rounds[currentRoundIndex]!;
       if (currentRound.completed || currentRound.fixtureIds.length === 0) return;
       if (currentRound.fixtureIds.some(fixtureId => !nextFixtures[fixtureId]?.isPlayed)) return;
 
-      const winnerTeamIds = currentRound.fixtureIds.map(fixtureId => resolveFixtureWinnerId(nextFixtures[fixtureId]));
-      const loserTeamIds = currentRound.fixtureIds.map(fixtureId => resolveFixtureLoserId(nextFixtures[fixtureId]));
+      const winnerTeamIds = currentRound.fixtureIds.map(fixtureId => resolveFixtureWinnerId(nextFixtures[fixtureId]!));
+      const loserTeamIds = currentRound.fixtureIds.map(fixtureId => resolveFixtureLoserId(nextFixtures[fixtureId]!));
       const updatedRound: CompetitionRoundState = {
         ...currentRound,
         completed: true,
         winnerTeamIds,
-      };
+      } as CompetitionRoundState;
       const updatedCompetition: CompetitionState = {
         ...competition,
         rounds: competition.rounds.map((round, index) => (
@@ -506,9 +483,9 @@ export const resolveCompetitionProgression = (
       const nextRoundIndex = currentRoundIndex + 1;
 
       if (nextRoundIndex >= updatedCompetition.rounds.length || advancingTeamIds.length <= 1) {
-        const finalFixture = currentRound.fixtureIds[currentRound.fixtureIds.length - 1];
+        const finalFixture = currentRound.fixtureIds[currentRound.fixtureIds.length - 1]!;
         updatedCompetition.championTeamId = advancingTeamIds[0];
-        updatedCompetition.runnerUpTeamId = finalFixture ? resolveFixtureLoserId(nextFixtures[finalFixture]) : undefined;
+        updatedCompetition.runnerUpTeamId = finalFixture ? resolveFixtureLoserId(nextFixtures[finalFixture]!) : undefined;
         updatedCompetition.currentRound = currentRound.key;
         nextCompetitions[competition.id] = updatedCompetition;
         const champion = updatedCompetition.championTeamId ? teams[updatedCompetition.championTeamId] : null;
@@ -518,7 +495,7 @@ export const resolveCompetitionProgression = (
         return;
       }
 
-      const nextRound = updatedCompetition.rounds[nextRoundIndex];
+      const nextRound = updatedCompetition.rounds[nextRoundIndex]!;
       const scheduledRound = scheduleKnockoutRound(
         updatedCompetition.id,
         updatedCompetition.type,
@@ -634,7 +611,7 @@ export const getCompetitionPanelForTeam = (
     return {
       title,
       status: 'Winner',
-      note: `${team.name} lifted the trophy`,
+      note: `${team!.name} lifted the trophy`,
       accent: getCompetitionAccent(competitionId),
     };
   }
@@ -657,7 +634,7 @@ export const getCompetitionPanelForTeam = (
     };
   }
 
-  const currentRound = competition.rounds.find(round => round.key === competition.currentRound) || competition.rounds[0];
+  const currentRound = competition.rounds.find(round => round.key === competition.currentRound) || competition.rounds[0]!;
   const activeFixture = currentRound?.fixtureIds
     .map(fixtureId => fixtures[fixtureId])
     .find(fixture => fixture && (fixture.homeTeamId === teamId || fixture.awayTeamId === teamId));

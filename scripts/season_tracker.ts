@@ -4,6 +4,7 @@ import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/pr
 import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 import { ENGINE_CONFIG } from '../src/config/engineConfig';
 import { Player, Team } from '../src/models/types';
+import { createSeededRandom } from './utils/seededRandom';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -95,17 +96,6 @@ type TacticalChange = {
 
 const DEFAULT_TRACKER_SEED = 20260513;
 const DEFAULT_OUTPUT_PATH = './season_tracking_report.json';
-
-const createSeededRandom = (seed: number) => {
-  let state = seed >>> 0;
-
-  return () => {
-    state += 0x6D2B79F5;
-    let value = Math.imul(state ^ (state >>> 15), 1 | state);
-    value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
-};
 
 const round = (value: number, decimals = 2) => {
   const factor = 10 ** decimals;
@@ -606,9 +596,19 @@ const runSeasonTracker = () => {
   }
 
   try {
-    const seasonReports = Array.from({ length: seasons }, (_, index) => (
-      runTrackedSeason(baseSeed + index, index + 1)
-    ));
+    const rawReports = Array.from({ length: seasons }, (_, index) => {
+      try {
+        return runTrackedSeason(baseSeed + index, index + 1);
+      } catch (error) {
+        console.error(`[FAIL] Season ${index + 1} failed:`, error);
+        return null;
+      }
+    });
+    const seasonReports = rawReports.filter((report): report is NonNullable<typeof report> => report !== null);
+    const failedSeasons = rawReports.length - seasonReports.length;
+    if (failedSeasons > 0) {
+      console.error(`[WARN] ${failedSeasons}/${rawReports.length} seasons failed`);
+    }
     const aggregateGoals = seasonReports.reduce((sum, season) => sum + season.summary.totalGoals, 0);
     const aggregateMatches = seasonReports.reduce((sum, season) => sum + season.summary.matches, 0);
     const report = {

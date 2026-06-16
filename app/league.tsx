@@ -22,9 +22,11 @@ import { DEFAULT_COUNTRY_ID, LEAGUE_COUNTRIES, getLeagueCountry } from '@/src/co
 import { sortTeamsByTable } from '@/src/core/leagueUtils';
 import { PageHeader } from '@/components/ui/page-header';
 
+// Scaled-down versions of PITCH_SLOT_WIDTH / PITCH_SLOT_HEIGHT / PITCH_DOT_SIZE (see components/squad/draggable-dot.tsx)
 const MINI_SLOT_WIDTH = 46;
 const MINI_SLOT_HEIGHT = 54;
 const MINI_DOT_SIZE = 24;
+
 
 const getMiniSlotPosition = (rowIdx: number, colIdx: number, rowLength: number, totalRows: number) => {
   const rowPercent = totalRows > 1 ? 11 + (rowIdx / (totalRows - 1)) * 63 : 42;
@@ -211,14 +213,14 @@ export default function LeagueTableScreen() {
         >
           <View style={styles.countryBanner}>
             <View>
-              <Text style={styles.countryLabel}>{country.label}</Text>
-              <Text style={styles.countryHint}>{country.reelHint}</Text>
+              <Text style={styles.countryLabel}>{country!.label}</Text>
+              <Text style={styles.countryHint}>{country!.reelHint}</Text>
             </View>
             <TouchableOpacity style={styles.countryTopBtn} onPress={() => scrollCountryToTop(countryId)}>
               <Text style={styles.countryTopBtnText}>Top</Text>
             </TouchableOpacity>
           </View>
-          {country.divisions.map(division => renderDivisionSection(countryId, division, isActiveCountry))}
+          {country!.divisions.map(division => renderDivisionSection(countryId, division, isActiveCountry))}
         </ScrollView>
       </View>
     );
@@ -236,10 +238,10 @@ export default function LeagueTableScreen() {
         {LEAGUE_COUNTRIES.map(country => (
           <TouchableOpacity
             key={country.id}
-            style={[styles.reelChip, country.id === activeCountry.id && styles.reelChipActive]}
+            style={[styles.reelChip, country.id === activeCountry!.id && styles.reelChipActive]}
             onPress={() => scrollToCountry(country.id)}
           >
-            <Text style={[styles.reelChipText, country.id === activeCountry.id && styles.reelChipTextActive]}>
+            <Text style={[styles.reelChipText, country.id === activeCountry!.id && styles.reelChipTextActive]}>
               {country.label}
             </Text>
           </TouchableOpacity>

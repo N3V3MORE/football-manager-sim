@@ -10,13 +10,15 @@ import { getSeasonWeekLimit, sortTeamsByTable } from '@/src/core/leagueUtils';
 import { getCompetitionPanelForTeam, getCompetitionShortName } from '@/src/core/competitionEngine';
 import { Fixture, Player, Team } from '@/src/models/types';
 import { HubHeader } from '@/components/hub/hub-header';
-import { MiniTableCard } from '@/components/hub/mini-table-card';
-import { NextFixtureCard } from '@/components/hub/next-fixture-card';
-import { SeasonStatsCard } from '@/components/hub/season-stats-card';
+import MiniTableCard from '@/components/hub/mini-table-card';
+import NextFixtureCard from '@/components/hub/next-fixture-card';
+import SeasonStatsCard from '@/components/hub/season-stats-card';
 import { LatestNewsCard } from '@/components/hub/latest-news-card';
-import { CompetitionPanelsCard } from '@/components/hub/competition-panels-card';
-import { UpcomingFixturesCard, UpcomingFixtureCardRow } from '@/components/hub/upcoming-fixtures-card';
-import { Ionicons } from '@expo/vector-icons';
+import CompetitionPanelsCard from '@/components/hub/competition-panels-card';
+import UpcomingFixturesCard, { UpcomingFixtureCardRow } from '@/components/hub/upcoming-fixtures-card';
+import { getStatValue, type PlayerStatKey } from '@/constants/statsUtils';
+import { Colors } from '@/constants/colors';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 
 const SEASON_START = new Date(2024, 7, 10);
 
@@ -42,13 +44,7 @@ const weekToDate = (week: number): string => {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 };
 
-const getStatValue = (player: Player, stat: 'goals' | 'assists' | 'cleanSheets'): number => {
-  if (stat === 'goals') return player.goals;
-  if (stat === 'assists') return player.assists;
-  return player.cleanSheets || 0;
-};
-
-const getTopPlayerByStat = (allPlayers: Player[], stat: 'goals' | 'assists' | 'cleanSheets'): Player | undefined => (
+const getTopPlayerByStat = (allPlayers: Player[], stat: PlayerStatKey): Player | undefined => (
   [...allPlayers]
     .filter(player => getStatValue(player, stat) > 0)
     .sort((a, b) => getStatValue(b, stat) - getStatValue(a, stat))[0]
@@ -56,17 +52,31 @@ const getTopPlayerByStat = (allPlayers: Player[], stat: 'goals' | 'assists' | 'c
 
 export default function HubScreen() {
   const router = useRouter();
-  const currentWeek = useGameStore(state => state.currentWeek);
-  const userTeamId = useGameStore(state => state.userTeamId);
-  const teams = useGameStore(state => state.teams);
-  const fixtures = useGameStore(state => state.fixtures);
-  const competitions = useGameStore(state => state.competitions);
-  const advanceWeek = useGameStore(state => state.advanceWeek);
-  const playMatch = useGameStore(state => state.playMatch);
-  const inboxMessages = useGameStore(state => state.inboxMessages);
-  const players = useGameStore(state => state.players);
-  const news = useGameStore(state => state.news);
-  const careerRecord = useGameStore(state => state.careerRecord);
+  const {
+    currentWeek,
+    userTeamId,
+    teams,
+    fixtures,
+    competitions,
+    players,
+    news,
+    careerRecord,
+    inboxMessages,
+    advanceWeek,
+    playMatch,
+  } = useGameStore(state => ({
+    currentWeek: state.currentWeek,
+    userTeamId: state.userTeamId,
+    teams: state.teams,
+    fixtures: state.fixtures,
+    competitions: state.competitions,
+    players: state.players,
+    news: state.news,
+    careerRecord: state.careerRecord,
+    inboxMessages: state.inboxMessages,
+    advanceWeek: state.advanceWeek,
+    playMatch: state.playMatch,
+  }));
 
   const myTeam = userTeamId ? teams[userTeamId] : null;
   const myDivision = myTeam?.division ?? 'Premier League';
@@ -200,7 +210,7 @@ export default function HubScreen() {
             onPress={() => router.push('/inbox')}
             activeOpacity={0.8}
           >
-            <Ionicons name="mail" size={18} color="#0f172a" />
+            <IconSymbol name="envelope.fill" size={18} color={Colors.bg} />
             <Text style={styles.emptyInboxText}>
               Open Inbox{unreadInboxCount > 0 ? ` (${unreadInboxCount})` : ''}
             </Text>
@@ -276,7 +286,7 @@ export default function HubScreen() {
           onPress={() => router.push('/inbox')}
           activeOpacity={0.8}
         >
-          <Ionicons name="mail" size={22} color="#facc15" />
+          <IconSymbol name="envelope.fill" size={22} color={Colors.yellow} />
           {unreadInboxCount > 0 && <View style={styles.unreadDot} />}
         </TouchableOpacity>
       </View>
@@ -285,7 +295,7 @@ export default function HubScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0f1e' },
+  container: { flex: 1, backgroundColor: Colors.bg },
   emptyState: {
     flex: 1,
     padding: 20,
@@ -293,12 +303,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyTitle: {
-    color: '#f8fafc',
+    color: Colors.text,
     fontSize: 28,
     fontWeight: '900',
   },
   emptyCopy: {
-    color: '#94a3b8',
+    color: Colors.accentMuted,
     fontSize: 14,
     lineHeight: 22,
   },
@@ -307,12 +317,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#facc15',
+    backgroundColor: Colors.yellow,
     paddingVertical: 14,
     borderRadius: 0,
   },
   emptyInboxText: {
-    color: '#0f172a',
+    color: Colors.bg,
     fontSize: 13,
     fontWeight: '900',
   },
@@ -322,9 +332,9 @@ const styles = StyleSheet.create({
     right: 20,
     width: 44,
     height: 44,
-    backgroundColor: '#111827',
+    backgroundColor: Colors.bgDark,
     borderWidth: 1,
-    borderColor: '#1e293b',
+    borderColor: Colors.bgCard,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 5,
@@ -339,6 +349,6 @@ const styles = StyleSheet.create({
     right: 10,
     width: 8,
     height: 8,
-    backgroundColor: '#ef4444',
+    backgroundColor: Colors.red,
   },
 });

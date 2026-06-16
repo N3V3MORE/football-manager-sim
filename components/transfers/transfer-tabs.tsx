@@ -9,7 +9,7 @@ type TransferTabsProps = {
   onChange: (tab: TransferTab) => void;
 };
 
-export function TransferTabs({ activeTab, marketCount, onChange }: TransferTabsProps) {
+export default React.memo(function TransferTabs({ activeTab, marketCount, onChange }: TransferTabsProps) {
   return (
     <View style={styles.tabs}>
       <TouchableOpacity
@@ -31,6 +31,7 @@ export function TransferTabs({ activeTab, marketCount, onChange }: TransferTabsP
     </View>
   );
 }
+);
 
 const styles = StyleSheet.create({
   tabs: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#334155' },

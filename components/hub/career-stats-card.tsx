@@ -15,7 +15,7 @@ const REP_LABEL = (rep: number) => {
   return 'Unknown';
 };
 
-export function CareerStatsCard({ careerRecord, onPress }: CareerStatsCardProps) {
+export const CareerStatsCard = React.memo(function CareerStatsCard({ careerRecord, onPress }: CareerStatsCardProps) {
   const { seasonsManaged, reputation, trophies, totalWins, totalDraws, totalLosses } = careerRecord;
   const honours = trophies.filter(t => t.type !== 'relegated').length;
   const totalPlayed = totalWins + totalDraws + totalLosses;
@@ -61,7 +61,7 @@ export function CareerStatsCard({ careerRecord, onPress }: CareerStatsCardProps)
       <Text style={styles.tapHint}>Tap to view board room</Text>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

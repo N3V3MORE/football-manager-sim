@@ -18,6 +18,7 @@ type InboxActionState = Pick<
   | 'competitions'
   | 'inboxMessages'
   | 'boardObjectives'
+  | 'careerRecord'
 >;
 
 type InboxActionPatch = InboxActionState | Partial<InboxActionState>;
@@ -96,6 +97,10 @@ export const applyInboxActionState = (
       players: nextPlayers,
       teams: nextTeams,
       inboxMessages: mergeInboxMessages(carriedMessages, nextAssistantMessages),
+      careerRecord: {
+        ...state.careerRecord,
+        consecutiveLowApprovalWeeks: 0,
+      },
     };
   }
 

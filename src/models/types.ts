@@ -93,6 +93,20 @@ export interface TeamTactics {
   pressing: 'None' | 'Medium' | 'High';
 }
 
+export type MicroStatKey =
+  | 'pace'
+  | 'shooting'
+  | 'passing'
+  | 'dribbling'
+  | 'defending'
+  | 'physical'
+  | 'gk_diving'
+  | 'gk_handling'
+  | 'gk_kicking'
+  | 'gk_reflexes'
+  | 'gk_speed'
+  | 'gk_positioning';
+
 export interface PlayerStats {
   pace: number;
   shooting: number;
@@ -106,7 +120,7 @@ export interface PlayerStats {
   gk_reflexes?: number;
   gk_speed?: number;
   gk_positioning?: number;
-  [key: string]: number | undefined; // For detailed micro-stats
+  [key: string]: number | undefined;
 }
 
 export interface Player {
@@ -140,8 +154,8 @@ export interface Player {
   yellowCards: number;
   redCards: number;
   nationality: string;
-  playerTraits?: string;
-  clubJerseyNumber?: number | null;
+  playerTraits?: string[];
+  clubJerseyNumber?: number;
   stats: PlayerStats;
 }
 
@@ -196,6 +210,18 @@ export interface Fixture {
   isPlayed: boolean;
   winnerTeamId?: string;
   resolution?: 'regular' | 'penalties';
+}
+
+export interface PlayedFixture extends Omit<Fixture, 'homeScore' | 'awayScore' | 'isPlayed'> {
+  homeScore: number;
+  awayScore: number;
+  isPlayed: true;
+}
+
+export interface UnplayedFixture extends Omit<Fixture, 'homeScore' | 'awayScore' | 'isPlayed'> {
+  homeScore: null;
+  awayScore: null;
+  isPlayed: false;
 }
 
 export type InboxMessageSource = 'assistant' | 'system';

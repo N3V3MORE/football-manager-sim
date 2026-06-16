@@ -6,9 +6,9 @@ import { getTransferWindowLabel, isTransferWindowOpen } from '@/src/utils/calend
 import { Player } from '@/src/models/types';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
 import { formatContractLength, getPlayerAvailabilityStatus, isContractExpiringSoon } from '@/src/core/playerStatusUtils';
-import { TransferDialog, TransferDialogState } from '@/components/transfers/transfer-dialog';
-import { TransferPlayerCard } from '@/components/transfers/transfer-player-card';
-import { TransferTabs } from '@/components/transfers/transfer-tabs';
+import TransferDialog, { TransferDialogState } from '@/components/transfers/transfer-dialog';
+import TransferPlayerCard from '@/components/transfers/transfer-player-card';
+import TransferTabs from '@/components/transfers/transfer-tabs';
 
 type TransferTab = 'market' | 'squad';
 
@@ -28,7 +28,7 @@ export default function TransfersScreen() {
   const [dialog, setDialog] = useState<TransferDialogState>(null);
 
   if (!userTeamId) return <View style={styles.container} />;
-  const userTeam = teams[userTeamId];
+  const userTeam = teams[userTeamId]!;
 
   const marketPlayers = sortPlayersByPositionGroup(Object.values(players).filter(p => p.isTransferListed && p.teamId !== userTeamId));
   const mySquad = sortPlayersByPositionGroup(Object.values(players).filter(p => p.teamId === userTeamId));

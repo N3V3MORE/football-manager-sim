@@ -5,7 +5,7 @@ type LatestNewsCardProps = {
   news: string[];
 };
 
-export function LatestNewsCard({ news }: LatestNewsCardProps) {
+export const LatestNewsCard = React.memo(function LatestNewsCard({ news }: LatestNewsCardProps) {
   const items = news.slice(0, 3);
 
   return (
@@ -22,7 +22,7 @@ export function LatestNewsCard({ news }: LatestNewsCardProps) {
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { PageHeader } from '@/components/ui/page-header';
-import { InboxMessageCard } from '@/components/ui/inbox-message-card';
+import InboxMessageCard from '@/components/ui/inbox-message-card';
 import { useGameStore } from '@/src/store/gameStore';
 
 export default function InboxScreen() {

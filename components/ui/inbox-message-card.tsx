@@ -9,7 +9,7 @@ type InboxMessageCardProps = {
   onApply: (messageId: string) => void;
 };
 
-const SOURCE_LABELS: Record<InboxMessage['source'], string> = {
+const SOURCE_LABELS: Partial<Record<InboxMessage['source'], string>> = {
   assistant: 'Assistant Coach',
   system: 'System',
 };
@@ -38,10 +38,10 @@ const getActionLabel = (message: InboxMessage) => {
   if (message.action.type === 'apply_lineup') return 'Apply Lineup Suggestion';
   if (message.action.type === 'accept_job_offer') return 'Accept Job Offer';
   if (message.action.type === 'renew_contract') return 'Renew Contract';
-  return 'Apply Tactic Suggestion';
+  return message.action.type || 'Execute';
 };
 
-export function InboxMessageCard({
+export default React.memo(function InboxMessageCard({
   message,
   onMarkRead,
   onDismiss,
@@ -54,7 +54,7 @@ export function InboxMessageCard({
       <View style={styles.headerRow}>
         <View style={styles.metaRow}>
           <View style={[styles.chip, message.source === 'assistant' ? styles.assistantChip : styles.systemChip]}>
-            <Text style={styles.chipText}>{SOURCE_LABELS[message.source]}</Text>
+            <Text style={styles.chipText}>{SOURCE_LABELS[message.source] || message.source}</Text>
           </View>
           <View style={styles.categoryChip}>
             <Text style={styles.categoryText}>{CATEGORY_LABELS[message.category]}</Text>
@@ -73,7 +73,12 @@ export function InboxMessageCard({
           </TouchableOpacity>
         ) : null}
         {actionLabel ? (
-          <TouchableOpacity style={styles.primaryButton} onPress={() => onApply(message.id)}>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => onApply(message.id)}
+            accessibilityRole="button"
+            accessibilityLabel={actionLabel}
+          >
             <Text style={styles.primaryText}>{actionLabel}</Text>
           </TouchableOpacity>
         ) : null}
@@ -84,6 +89,7 @@ export function InboxMessageCard({
     </View>
   );
 }
+);
 
 const styles = StyleSheet.create({
   card: {

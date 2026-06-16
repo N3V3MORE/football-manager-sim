@@ -1,9 +1,4 @@
-const Module = require('module');
-const originalRequire = Module.prototype.require;
-Module.prototype.require = function(id) {
-  if (id === 'react-native-get-random-values') return {};
-  if (id === '@react-native-async-storage/async-storage') {
-    return { default: { getItem: async()=>null, setItem: async()=>null, removeItem: async()=>null } };
-  }
-  return originalRequire.apply(this, arguments);
-};
+// Minimal mock-require shim — prefer mock-env.js for full coverage.
+// This file is kept for scripts that need a lightweight mock.
+// See scripts/mock-env.js for the comprehensive React Native + Expo mock.
+require('./mock-env');

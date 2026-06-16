@@ -14,7 +14,7 @@ type MiniTableCardProps = {
   onPress: () => void;
 };
 
-export function MiniTableCard({ title, rows, userTeamId, onPress }: MiniTableCardProps) {
+export default React.memo(function MiniTableCard({ title, rows, userTeamId, onPress }: MiniTableCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
       <Text style={styles.cardTitle}>{title}</Text>
@@ -42,6 +42,7 @@ export function MiniTableCard({ title, rows, userTeamId, onPress }: MiniTableCar
     </TouchableOpacity>
   );
 }
+);
 
 const styles = StyleSheet.create({
   card: {

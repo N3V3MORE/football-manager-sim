@@ -8,7 +8,7 @@ type DevToolsCardProps = {
   onResetSeason: () => void;
 };
 
-export function DevToolsCard({
+export default React.memo(function DevToolsCard({
   onAdvanceFiveWeeks,
   onSkipSeason,
   onResetSeason,
@@ -30,6 +30,7 @@ export function DevToolsCard({
     </View>
   );
 }
+);
 
 const styles = StyleSheet.create({
   card: {

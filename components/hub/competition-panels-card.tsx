@@ -12,7 +12,7 @@ type CompetitionPanelsCardProps = {
   items: CompetitionPanel[];
 };
 
-export function CompetitionPanelsCard({ items }: CompetitionPanelsCardProps) {
+export default React.memo(function CompetitionPanelsCard({ items }: CompetitionPanelsCardProps) {
   return (
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Competition Watch</Text>
@@ -29,6 +29,7 @@ export function CompetitionPanelsCard({ items }: CompetitionPanelsCardProps) {
     </View>
   );
 }
+);
 
 const styles = StyleSheet.create({
   card: {

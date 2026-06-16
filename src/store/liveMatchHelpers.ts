@@ -40,6 +40,11 @@ export const getEligibleStarters = (
     !sentOffPlayers.has(player.id)
   ));
 
+/**
+ * Ensures the team has at least 11 eligible starters. Auto-assigns a lineup if needed.
+ * NOTE: This function MUTATES the `players` parameter in-place when auto-assigning.
+ * Callers should pass a copy of the players record if they need immutability.
+ */
 export const ensureLiveTeamStarters = (
   teamId: string,
   teams: Record<string, Team>,
@@ -50,21 +55,27 @@ export const ensureLiveTeamStarters = (
   let starters = getEligibleStarters(players, teamId, sentOffPlayers);
   if (!allowAutoAssign || starters.length >= 11) return starters;
 
-  const team = teams[teamId];
+  const team = teams[teamId]!;
   const lineupUpdates = autoAssignLineup(teamId, players, team.activeFormation);
   Object.entries(lineupUpdates).forEach(([playerId, updates]) => {
-    players[playerId] = { ...players[playerId], ...updates };
+    players[playerId] = { ...players[playerId], ...updates } as Player;
   });
   starters = getEligibleStarters(players, teamId, sentOffPlayers);
   return starters;
 };
 
+/**
+ * Drains energy from players during live match simulation.
+ * NOTE: This function MUTATES the `players` parameter in-place.
+ * Callers should pass a copy of the players record if they need immutability.
+ */
 export const drainLiveMatchEnergy = (players: Record<string, Player>, starters: Player[]) => {
   starters.forEach(player => {
+    const current = players[player.id]!;
     players[player.id] = {
-      ...players[player.id],
-      energy: Math.max(0, players[player.id].energy - ENGINE_CONFIG.ENERGY_DRAIN_PER_MINUTE),
-    };
+      ...current,
+      energy: Math.max(0, current.energy - ENGINE_CONFIG.ENERGY_DRAIN_PER_MINUTE),
+    } as Player;
   });
 };
 

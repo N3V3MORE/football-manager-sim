@@ -1,7 +1,7 @@
 import { Player, Team } from '../models/types';
 import { RoleTag } from './matchTypes';
 import { inferRoleTag } from './matchUtils';
-import { RandomGenerator, resolveRandom } from './random';
+import { RandomGenerator } from './random';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 
 type SubstitutionOptions = {
@@ -24,7 +24,7 @@ export const applySubstitutions = (
   rng?: RandomGenerator,
   options?: SubstitutionOptions
 ) => {
-  const random = resolveRandom(rng);
+  const random = rng || Math.random;
   const playerEntryMinutes = options?.playerEntryMinutes
     || substitutionEntryMinuteCache.get(playerMinutes)
     || {};
@@ -35,11 +35,11 @@ export const applySubstitutions = (
   const scoreDiff = goalsFor - goalsAgainst;
   const isChasing = scoreDiff < 0;
   const isProtectingLead = scoreDiff > 0;
-  let maxSubs = ENGINE_CONFIG.SUBS_BASE_MAX;
-  if (isChasing) maxSubs = 3 + Math.floor(random() * ENGINE_CONFIG.SUBS_CHASING_BONUS_RANGE);
-  else if (isProtectingLead) maxSubs = 2 + Math.floor(random() * ENGINE_CONFIG.SUBS_LEADING_BONUS_RANGE);
-  else if (team.tactics.mentality === 'Attacking') maxSubs = 3 + Math.floor(random() * ENGINE_CONFIG.SUBS_ATTACKING_BONUS_RANGE);
-  else if (team.tactics.mentality === 'Defensive') maxSubs = 2 + Math.floor(random() * ENGINE_CONFIG.SUBS_DEFENSIVE_BONUS_RANGE);
+  let maxSubs = ENGINE_CONFIG.SUBS.BASE_MAX;
+  if (isChasing) maxSubs = 3 + Math.floor(random() * ENGINE_CONFIG.SUBS.CHASING_BONUS_RANGE);
+  else if (isProtectingLead) maxSubs = 2 + Math.floor(random() * ENGINE_CONFIG.SUBS.LEADING_BONUS_RANGE);
+  else if (team.tactics.mentality === 'Attacking') maxSubs = 3 + Math.floor(random() * ENGINE_CONFIG.SUBS.ATTACKING_BONUS_RANGE);
+  else if (team.tactics.mentality === 'Defensive') maxSubs = 2 + Math.floor(random() * ENGINE_CONFIG.SUBS.DEFENSIVE_BONUS_RANGE);
   if (options?.maxSubsOverride !== undefined) maxSubs = options.maxSubsOverride;
   maxSubs = Math.min(5, bench.length, maxSubs);
   const usedBench = new Set<string>();
@@ -51,8 +51,8 @@ export const applySubstitutions = (
     ? ['ST', 'WINGER', 'AM', 'CM']
     : (isProtectingLead ? ['DM', 'CB', 'FB', 'WB', 'CM'] : ['CM', 'AM', 'ST', 'DM']);
   const [minMinute, maxMinute] = isChasing
-    ? ENGINE_CONFIG.SUBS_CHASING_MINUTE_RANGE
-    : (isProtectingLead ? ENGINE_CONFIG.SUBS_LEADING_MINUTE_RANGE : ENGINE_CONFIG.SUBS_BALANCED_MINUTE_RANGE);
+    ? ENGINE_CONFIG.SUBS.CHASING_MINUTE_RANGE
+    : (isProtectingLead ? ENGINE_CONFIG.SUBS.LEADING_MINUTE_RANGE : ENGINE_CONFIG.SUBS.BALANCED_MINUTE_RANGE);
 
   for (let i = 0; i < maxSubs; i++) {
     const offPool = starters.filter(player =>
@@ -71,7 +71,7 @@ export const applySubstitutions = (
         if (isChasing && attackingRoles.includes(role)) priority -= 8;
         return { player, priority };
       })
-      .sort((a, b) => b.priority - a.priority)[0].player;
+      .sort((a, b) => b.priority - a.priority)[0]!.player;
 
     const onPool = bench.filter(player => !usedBench.has(player.id));
     if (onPool.length === 0) break;
@@ -88,7 +88,7 @@ export const applySubstitutions = (
         if (isProtectingLead && defensiveRoles.includes(role)) score += 8;
         return { player, score };
       })
-      .sort((a, b) => b.score - a.score)[0].player;
+      .sort((a, b) => b.score - a.score)[0]!.player;
 
     const subMinute = options?.minuteOverride ?? (minMinute + Math.floor(random() * Math.max(1, maxMinute - minMinute + 1)));
     const offPlayerEntryMinute = playerEntryMinutes?.[offPlayer.id];

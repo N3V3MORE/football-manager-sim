@@ -13,7 +13,7 @@ const getApprovalColor = (boardApproval: number) => {
   return '#f59e0b';
 };
 
-export function BoardRoomCard({ boardApproval, managerName, onPress }: BoardRoomCardProps) {
+export const BoardRoomCard = React.memo(function BoardRoomCard({ boardApproval, managerName, onPress }: BoardRoomCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
       <Text style={styles.cardTitle}>Board Room</Text>
@@ -31,7 +31,7 @@ export function BoardRoomCard({ boardApproval, managerName, onPress }: BoardRoom
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

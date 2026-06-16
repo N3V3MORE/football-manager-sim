@@ -3,6 +3,7 @@ import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
 import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 import * as fs from 'fs';
+import { createSeededRandom } from './utils/seededRandom';
 
 type StatSnapshot = {
   goals: number;
@@ -31,17 +32,6 @@ const countByValue = (items: string[]) => {
 };
 
 const DEFAULT_ANALYSIS_SEED = 20260513;
-
-const createSeededRandom = (seed: number) => {
-  let state = seed >>> 0;
-
-  return () => {
-    state += 0x6D2B79F5;
-    let value = Math.imul(state ^ (state >>> 15), 1 | state);
-    value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
-};
 
 async function runDetailedSim() {
   const originalRandom = Math.random;
@@ -78,8 +68,8 @@ async function runDetailedSim() {
     const weekFixtures = Object.values(state.fixtures).filter(f => f.week === w);
 
     for (const fix of weekFixtures) {
-      const home = state.teams[fix.homeTeamId];
-      const away = state.teams[fix.awayTeamId];
+      const home = state.teams[fix.homeTeamId]!;
+      const away = state.teams[fix.awayTeamId]!;
 
       const preMatchPlayers: Record<string, StatSnapshot> = {};
       Object.entries(state.players).forEach(([id, player]) => {
@@ -114,8 +104,8 @@ async function runDetailedSim() {
       let matchYellowCards = 0;
       let matchRedCards = 0;
 
-      Object.keys(state.players).forEach(pId => {
-        const pNow = state.players[pId];
+       Object.keys(state.players).forEach(pId => {
+        const pNow = state.players[pId]!;
         const pBefore = preMatchPlayers[pId];
         if (!pBefore) return;
 

@@ -25,7 +25,7 @@ export const parsePreferredFormations = (value: string[]): Formation[] => (
 
 export const calculateAgeFromDob = (dob: string) => {
   const [day, month, year] = dob.split('/').map(Number);
-  const birth = new Date(year, month - 1, day);
+  const birth = new Date(year!, month! - 1, day!);
   const today = new Date();
   let age = today.getFullYear() - birth.getFullYear();
   const monthDelta = today.getMonth() - birth.getMonth();
@@ -129,7 +129,7 @@ const seedAt = (seed: number, salt: number) => (
 );
 
 const pickSeeded = <T,>(pool: T[], seed: number, salt: number): T => (
-  pool[seedAt(seed, salt) % pool.length]
+  pool[seedAt(seed, salt) % pool.length]!
 );
 
 const parseYearFromDate = (value: string) => {

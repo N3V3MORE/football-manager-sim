@@ -12,7 +12,7 @@ type CompactPlayerCardProps = {
   onLongPress: () => void;
 };
 
-export function CompactPlayerCard({
+export default React.memo(function CompactPlayerCard({
   item,
   isBench,
   isExpanded,
@@ -106,6 +106,7 @@ export function CompactPlayerCard({
     </View>
   );
 }
+);
 
 const styles = StyleSheet.create({
   playerRow: {

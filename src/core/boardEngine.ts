@@ -1,5 +1,3 @@
-import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
 import {
   BoardObjective,
   BoardProfile,
@@ -193,7 +191,9 @@ const getTeamPosition = (team: Team, teams: Record<string, Team>) => {
   return position >= 0 ? position + 1 : null;
 };
 
-const buildPositionObjective = (teamClass: string, division: LeagueDivision): BoardObjective => {
+const defaultUuidGenerator = () => (Date.now().toString(36) + Math.random().toString(36).slice(2));
+
+const buildPositionObjective = (teamClass: string, division: LeagueDivision, uuidGenerator: () => string): BoardObjective => {
   const teamCount = getDivisionTeamCount(division);
   const topHalf = Math.ceil(teamCount / 2);
   const safeZone = Math.max(teamCount - 3, topHalf + 1);
@@ -207,10 +207,10 @@ const buildPositionObjective = (teamClass: string, division: LeagueDivision): Bo
     E: { desc: `Stay clear of the drop in the ${division}`, target: safeZone },
     F: { desc: `Secure survival in the ${division}`, target: safeZone },
   };
-  const positionTarget = posTargets[teamClass] || posTargets.C;
+  const positionTarget = posTargets[teamClass] || posTargets.C!;
 
   return {
-    id: uuidv4(),
+    id: uuidGenerator(),
     description: positionTarget.desc,
     type: 'position',
     target: positionTarget.target,
@@ -218,7 +218,7 @@ const buildPositionObjective = (teamClass: string, division: LeagueDivision): Bo
   };
 };
 
-const buildWinsObjective = (teamClass: string, division: LeagueDivision): BoardObjective => {
+const buildWinsObjective = (teamClass: string, division: LeagueDivision, uuidGenerator: () => string): BoardObjective => {
   const teamCount = getDivisionTeamCount(division);
   const seasonMatches = Math.max(1, (teamCount - 1) * 2);
   const winTargetByClass: Record<string, number> = {
@@ -233,7 +233,7 @@ const buildWinsObjective = (teamClass: string, division: LeagueDivision): BoardO
   const target = winTargetByClass[teamClass] || 10;
 
   return {
-    id: uuidv4(),
+    id: uuidGenerator(),
     description: `Win at least ${target} league matches`,
     type: 'wins',
     target,
@@ -241,7 +241,7 @@ const buildWinsObjective = (teamClass: string, division: LeagueDivision): BoardO
   };
 };
 
-const buildFinancialObjective = (teamClass: string, profile: BoardProfile): BoardObjective => {
+const buildFinancialObjective = (teamClass: string, profile: BoardProfile, uuidGenerator: () => string): BoardObjective => {
   const minSpendTargets: Record<string, number> = {
     S: 65,
     A: 35,
@@ -264,7 +264,7 @@ const buildFinancialObjective = (teamClass: string, profile: BoardProfile): Boar
   if (profile.transferDiscipline === 'strict') {
     const target = maxSpendTargets[teamClass] || 8;
     return {
-      id: uuidv4(),
+      id: uuidGenerator(),
       description: `Keep gross transfer spend below GBP ${target}m`,
       type: 'max_spend',
       target,
@@ -275,7 +275,7 @@ const buildFinancialObjective = (teamClass: string, profile: BoardProfile): Boar
   const disciplineBoost = profile.transferDiscipline === 'aggressive' ? 1.15 : 1;
   const target = Math.round((minSpendTargets[teamClass] || 5) * disciplineBoost);
   return {
-    id: uuidv4(),
+    id: uuidGenerator(),
     description: `Invest at least GBP ${target}m in transfers`,
     type: 'spend',
     target,
@@ -286,9 +286,10 @@ const buildFinancialObjective = (teamClass: string, profile: BoardProfile): Boar
 const buildCupObjective = (
   competitionId: CompetitionId,
   description: string,
-  targetRound: CompetitionRoundKey
+  targetRound: CompetitionRoundKey,
+  uuidGenerator: () => string
 ): BoardObjective => ({
-  id: uuidv4(),
+  id: uuidGenerator(),
   description,
   type: 'cup_round',
   target: 1,
@@ -443,19 +444,21 @@ export const buildBoardObjectives = (
   teamClass: string,
   division: Division,
   boardProfile = buildBoardProfile(teamClass, division),
-  activeCompetitionIds: CompetitionId[] = []
+  activeCompetitionIds: CompetitionId[] = [],
+  uuidGenerator?: () => string
 ): BoardObjective[] => {
+  const uuid = uuidGenerator || defaultUuidGenerator;
   if (division === 'Continental') {
     return activeCompetitionIds.includes('europe')
-      ? [buildCupObjective('europe', 'Reach the Europe semi-final', 'semi_final')]
+      ? [buildCupObjective('europe', 'Reach the Europe semi-final', 'semi_final', uuid)]
       : [];
   }
 
   const normalizedDivision = getNormalizedDivision(division);
   const objectives: BoardObjective[] = [
-    buildPositionObjective(teamClass, normalizedDivision),
-    buildWinsObjective(teamClass, normalizedDivision),
-    buildFinancialObjective(teamClass, boardProfile),
+    buildPositionObjective(teamClass, normalizedDivision, uuid),
+    buildWinsObjective(teamClass, normalizedDivision, uuid),
+    buildFinancialObjective(teamClass, boardProfile, uuid),
   ];
 
   if (boardProfile.targetCompetitions.includes('fa-cup')) {
@@ -468,7 +471,8 @@ export const buildBoardObjectives = (
     objectives.push(buildCupObjective(
       'fa-cup',
       `Reach the FA Cup ${targetRound === 'quarter_final' ? 'quarter-final' : targetRound === 'round_4' ? 'Round 4' : 'Round 3'}`,
-      targetRound
+      targetRound,
+      uuid
     ));
   }
 
@@ -482,7 +486,8 @@ export const buildBoardObjectives = (
     objectives.push(buildCupObjective(
       'carabao-cup',
       `Reach the Carabao Cup ${targetRound === 'semi_final' ? 'semi-final' : targetRound === 'quarter_final' ? 'quarter-final' : 'Round 3'}`,
-      targetRound
+      targetRound,
+      uuid
     ));
   }
 
@@ -491,7 +496,8 @@ export const buildBoardObjectives = (
     objectives.push(buildCupObjective(
       'europe',
       `Reach the Europe ${targetRound === 'final' ? 'final' : 'semi-final'}`,
-      targetRound
+      targetRound,
+      uuid
     ));
   }
 

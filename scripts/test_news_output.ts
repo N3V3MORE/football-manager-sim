@@ -6,7 +6,7 @@ const testNews = () => {
   const data = initGameData();
   const firstTeamId = Object.keys(data.teams)[0];
   
-  useGameStore.getState().initializeGame(firstTeamId);
+  useGameStore.getState().initializeGame(firstTeamId!);
   console.log('Advance Week 1...');
   useGameStore.getState().advanceWeek();
 
@@ -23,7 +23,7 @@ const testNews = () => {
   if (state.inboxMessages.length === 0) {
     console.log('No inbox messages pending.');
   } else {
-    state.inboxMessages.forEach((msg, i) => {
+    state.inboxMessages.forEach((msg) => {
       console.log(`\n[${msg.category.toUpperCase()} - ${msg.source.toUpperCase()}] ${msg.title}`);
       console.log(`> ${msg.body}`);
       if (msg.action) {

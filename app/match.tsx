@@ -55,8 +55,8 @@ export default function MatchScreen() {
 
   if (!fixture) return <Text>Loading...</Text>;
 
-  const homeTeam = teams[fixture.homeTeamId];
-  const awayTeam = teams[fixture.awayTeamId];
+  const homeTeam = teams[fixture.homeTeamId]!;
+  const awayTeam = teams[fixture.awayTeamId]!;
 
   // Colors & Anti-Clash
   const homeTheme = getTeamTheme(homeTeam.name);
@@ -113,7 +113,7 @@ export default function MatchScreen() {
           <View style={styles.teamBox}>
             <Text style={[styles.teamName, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
             <Text style={styles.score}>
-                {minute > 0 || currentFixture.isPlayed ? currentFixture.homeScore : '-'}
+                {minute > 0 || currentFixture!.isPlayed ? currentFixture!.homeScore : '-'}
             </Text>
           </View>
           <View style={styles.vsBox}>
@@ -122,7 +122,7 @@ export default function MatchScreen() {
           <View style={styles.teamBox}>
             <Text style={[styles.teamName, { color: awayPrimary }]}>{awayTeam.name}</Text>
             <Text style={styles.score}>
-                {minute > 0 || currentFixture.isPlayed ? currentFixture.awayScore : '-'}
+                {minute > 0 || currentFixture!.isPlayed ? currentFixture!.awayScore : '-'}
             </Text>
           </View>
         </View>

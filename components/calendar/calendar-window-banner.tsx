@@ -6,13 +6,13 @@ type CalendarWindowBannerProps = {
   isOpen: boolean;
 };
 
-export function CalendarWindowBanner({ text, isOpen }: CalendarWindowBannerProps) {
+export const CalendarWindowBanner = React.memo(function CalendarWindowBanner({ text, isOpen }: CalendarWindowBannerProps) {
   return (
     <View style={isOpen ? styles.windowBanner : styles.windowBannerClosed}>
       <Text style={styles.windowText}>{text}</Text>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   windowBanner: { backgroundColor: '#064e3b', paddingVertical: 6, alignItems: 'center', marginVertical: 4 },

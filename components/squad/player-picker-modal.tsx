@@ -3,7 +3,7 @@ import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { Player } from '@/src/models/types';
 import { Slot } from '@/src/constants/formations';
 import { getPositionColor } from '@/src/constants/positionColors';
-import { PlayerPickerRow } from '@/components/squad/player-picker-row';
+import PlayerPickerRow from '@/components/squad/player-picker-row';
 
 type PickerSections = {
   recommended: Player[];

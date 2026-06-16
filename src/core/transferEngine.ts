@@ -1,7 +1,7 @@
 import { Player, Team } from '../models/types';
 import { removePlayerFromTeamSelections } from './formationMapUtils';
 import { ENGINE_CONFIG } from '../config/engineConfig';
-import { RandomGenerator, resolveRandom } from './random';
+import { RandomGenerator } from './random';
 
 type PositionKey = Player['position'];
 
@@ -19,7 +19,7 @@ export const computeWeeklyTransfers = (
   userTeamId: string | null,
   rng?: RandomGenerator
 ): { players: Record<string, Player>, teams: Record<string, Team> } => {
-  const random = resolveRandom(rng);
+  const random = rng || Math.random;
   const updatedPlayers = { ...players };
   const updatedTeams = { ...teams };
 
@@ -48,16 +48,16 @@ export const computeWeeklyTransfers = (
       const minutesShare = (p.minutesPlayed || 0) / (Math.max(1, team.played) * 90);
       const effectiveRating = getEffectiveRating(p);
 
-      if (minutesShare > ENGINE_CONFIG.TRANSFER_LIST_MIN_MINUTES_SHARE && effectiveRating < 6.4 && random() < ENGINE_CONFIG.TRANSFER_LIST_POOR_FORM_CHANCE) {
+      if (minutesShare > ENGINE_CONFIG.TRANSFER_MARKET.LIST_MIN_MINUTES_SHARE && effectiveRating < 6.4 && random() < ENGINE_CONFIG.TRANSFER_MARKET.POOR_FORM_CHANCE) {
         shouldList = true;
-      } else if (p.age >= 30 && minutesShare < 0.15 && random() < ENGINE_CONFIG.TRANSFER_LIST_VETERAN_CHANCE) {
+      } else if (p.age >= 30 && minutesShare < 0.15 && random() < ENGINE_CONFIG.TRANSFER_MARKET.VETERAN_CHANCE) {
         shouldList = true;
-      } else if (!p.isStarting && random() < ENGINE_CONFIG.TRANSFER_LIST_BACKUP_CHANCE) {
+      } else if (!p.isStarting && random() < ENGINE_CONFIG.TRANSFER_MARKET.BACKUP_CHANCE) {
         shouldList = true;
       }
 
       if (shouldList && (depthByPosition[p.position] || 0) > (minDepth[p.position] || 2)) {
-        updatedPlayers[p.id] = { ...updatedPlayers[p.id], isTransferListed: true, askingPrice: p.marketValue };
+        updatedPlayers[p.id] = { ...updatedPlayers[p.id], isTransferListed: true, askingPrice: p.marketValue } as Player;
         depthByPosition[p.position] = Math.max(0, (depthByPosition[p.position] || 0) - 1);
       }
     });
@@ -91,7 +91,7 @@ export const computeWeeklyTransfers = (
     
     const weakestStarter = weakestPosition.weakest;
     const requiredUpgrade = weakestStarter.overallRating + 2;
-    const budgetLimit = updatedTeams[team.id].budget * 0.45;
+    const budgetLimit = updatedTeams[team.id]!.budget * 0.45;
 
     // Filter available targets from the global pool (ensure target team hasn't been modified heavily or isn't the buyer)
     const targets = globalListedPlayers.filter(p =>
@@ -109,32 +109,32 @@ export const computeWeeklyTransfers = (
         return bValue - aValue;
       })[0];
 
-      const buyChance = team.played < 10 ? ENGINE_CONFIG.TRANSFER_EARLY_BUY_CHANCE : ENGINE_CONFIG.TRANSFER_NORMAL_BUY_CHANCE;
+      const buyChance = team.played < 10 ? ENGINE_CONFIG.TRANSFER_MARKET.EARLY_BUY_CHANCE : ENGINE_CONFIG.TRANSFER_MARKET.NORMAL_BUY_CHANCE;
       
       if (random() < buyChance) {
-        const buyer = updatedTeams[team.id];
+        const buyer = updatedTeams[team.id]!;
         updatedTeams[team.id] = {
           ...buyer,
-          budget: buyer.budget - bestTarget.askingPrice,
-          transferSpend: buyer.transferSpend + bestTarget.askingPrice,
-        };
+          budget: buyer.budget - bestTarget!.askingPrice,
+          transferSpend: buyer.transferSpend + bestTarget!.askingPrice,
+        } as Team;
 
-        const seller = updatedTeams[bestTarget.teamId];
+        const seller = updatedTeams[bestTarget!.teamId];
         if (seller) {
-          updatedTeams[bestTarget.teamId] = removePlayerFromTeamSelections(
-            { ...seller, budget: seller.budget + bestTarget.askingPrice },
-            bestTarget.id
+          updatedTeams[bestTarget!.teamId] = removePlayerFromTeamSelections(
+            { ...seller, budget: seller.budget + bestTarget!.askingPrice },
+            bestTarget!.id
           );
         }
 
-        updatedPlayers[bestTarget.id] = {
-          ...updatedPlayers[bestTarget.id],
+        updatedPlayers[bestTarget!.id] = {
+          ...updatedPlayers[bestTarget!.id],
           teamId: team.id,
           isTransferListed: false,
           askingPrice: 0,
           isStarting: false,
           isSub: false,
-        };
+        } as Player;
       }
     }
   });

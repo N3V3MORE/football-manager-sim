@@ -1,7 +1,7 @@
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { Player } from '../models/types';
 import { PlayerCounterStat, RoleTag } from './matchTypes';
-import { RandomGenerator, resolveRandom } from './random';
+import { RandomGenerator } from './random';
 
 export const runDuel = (
   att: number,
@@ -9,7 +9,7 @@ export const runDuel = (
   luck: number = 30,
   rng?: RandomGenerator
 ) => {
-  const random = resolveRandom(rng);
+  const random = rng || Math.random;
   const curveStat = (s: number) => {
     const gamma = ENGINE_CONFIG.RATING_CURVE_GAMMA || 1.0;
     const clamped = Math.max(0, Math.min(100, s));
@@ -35,17 +35,17 @@ export const weightedPick = <T>(
   if (items.length === 0) {
     throw new RangeError('weightedPick requires at least one item.');
   }
-  const random = resolveRandom(rng);
+  const random = rng || Math.random;
   const weights = items.map(item => Math.max(0.1, getWeight(item)));
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   let roll = random() * totalWeight;
 
   for (let i = 0; i < items.length; i++) {
-    roll -= weights[i];
-    if (roll <= 0) return items[i];
+    roll -= weights[i]!;
+    if (roll <= 0) return items[i]!;
   }
 
-  return items[items.length - 1];
+  return items[items.length - 1]!;
 };
 
 export const addPlayerStat = (

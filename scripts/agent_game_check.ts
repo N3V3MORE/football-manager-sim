@@ -148,10 +148,10 @@ try {
     assert.ok(ownPlayer, 'Expected at least one owned player');
     assert.ok(targetPlayer, 'Expected at least one transfer target');
 
-    state().listPlayerForSale(ownPlayer.id, 1);
-    assert.equal(state().players[ownPlayer.id].isTransferListed, true, 'Owned player should be listed');
-    state().unlistPlayer(ownPlayer.id);
-    assert.equal(state().players[ownPlayer.id].isTransferListed, false, 'Owned player should be unlisted');
+    state().listPlayerForSale(ownPlayer!.id, 1);
+    assert.equal(state().players[ownPlayer!.id]!.isTransferListed, true, 'Owned player should be listed');
+    state().unlistPlayer(ownPlayer!.id);
+    assert.equal(state().players[ownPlayer!.id]!.isTransferListed, false, 'Owned player should be unlisted');
 
     const bidResult = state().buyPlayer(targetPlayer.id, 0, 1);
     assert.equal(typeof bidResult.success, 'boolean');
@@ -171,7 +171,7 @@ try {
 
     assert.ok(state().liveMatches[liveFixtureId], 'Live match state should exist before finishing');
     state().finishLiveMatch(liveFixtureId);
-    assertPlayedFixtureIsValid(state().fixtures[liveFixtureId]);
+    assertPlayedFixtureIsValid(state().fixtures[liveFixtureId]!);
     assert.ok(!state().liveMatches[liveFixtureId], 'Live match state should be cleaned up after finishing');
     assert.ok(eventCount > 0, 'Live match should emit at least one event');
   });
@@ -182,7 +182,7 @@ try {
     quickFixtureId = fixture.id;
 
     state().playMatch(quickFixtureId);
-    assertPlayedFixtureIsValid(state().fixtures[quickFixtureId]);
+    assertPlayedFixtureIsValid(state().fixtures[quickFixtureId]!);
     assert.ok(!state().liveMatches[quickFixtureId], 'Quick sim should not leave live match state behind');
   });
 

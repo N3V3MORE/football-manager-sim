@@ -1,5 +1,5 @@
 import { Player } from '../models/types';
-import { RandomGenerator, resolveRandom } from './random';
+import { RandomGenerator } from './random';
 
 type InjuryEvent = {
   playerId: string;
@@ -35,7 +35,7 @@ export const applyMatchInjuries = (
   updatedPlayers: Record<string, Player>,
   rng?: RandomGenerator
 ) => {
-  const random = resolveRandom(rng);
+  const random = rng || Math.random;
   const candidates = participants
     .filter(player => (
       (minuteMap[player.id] || 0) >= 20 &&
@@ -46,13 +46,13 @@ export const applyMatchInjuries = (
   if (random() >= getTeamInjuryChance(candidates, minuteMap)) return [] as InjuryEvent[];
 
   const weightedCandidates = [...candidates].sort((a, b) => {
-    const loadA = (minuteMap[a.id] || 0) + Math.max(0, 65 - updatedPlayers[a.id].energy);
-    const loadB = (minuteMap[b.id] || 0) + Math.max(0, 65 - updatedPlayers[b.id].energy);
+    const loadA = (minuteMap[a.id] || 0) + Math.max(0, 65 - updatedPlayers[a.id]!.energy);
+    const loadB = (minuteMap[b.id] || 0) + Math.max(0, 65 - updatedPlayers[b.id]!.energy);
     return loadB - loadA;
   });
-  const injuredPlayer = weightedCandidates[0];
+  const injuredPlayer = weightedCandidates[0]!;
   const weeks = getInjuryLength(random());
-  const injuryType = INJURY_TYPES[Math.floor(random() * INJURY_TYPES.length)];
+  const injuryType = INJURY_TYPES[Math.floor(random() * INJURY_TYPES.length)]!;
 
   updatedPlayers[injuredPlayer.id] = {
     ...updatedPlayers[injuredPlayer.id],
@@ -60,7 +60,7 @@ export const applyMatchInjuries = (
     injuryType,
     isStarting: false,
     isSub: false,
-  };
+  } as Player;
 
   return [{
     playerId: injuredPlayer.id,

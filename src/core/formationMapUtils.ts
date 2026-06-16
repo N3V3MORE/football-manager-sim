@@ -1,6 +1,14 @@
 import { Player, Team } from '../models/types';
 import { Slot } from '../constants/formations';
 
+const FIT_SCORES = {
+  EXACT_SUBPOS: 100,
+  SAME_LANE_SUBPOS: 80,
+  SAME_POSITION: 60,
+  ADJACENT_POSITION: 45,
+  WILDCARD: 25,
+} as const;
+
 const SLOT_SUBPOS: Record<string, string[]> = {
   GK: ['GK'],
   LB: ['LB', 'LWB'],
@@ -25,17 +33,17 @@ const SLOT_SUBPOS: Record<string, string[]> = {
 };
 
 export const getSlotFitScore = (player: Player, slot: Slot) => {
-  if (slot.pos === 'GK') return player.position === 'GK' ? 100 : -Infinity;
+  if (slot.pos === 'GK') return player.position === 'GK' ? FIT_SCORES.EXACT_SUBPOS : -Infinity;
   if (player.position === 'GK') return -Infinity;
 
   let score = 0;
   const allowedSubPositions = SLOT_SUBPOS[slot.label] || [slot.label];
 
-  if (player.subPosition === slot.label) score += 100;
-  if (player.altPositions?.includes(slot.label)) score += 80;
-  if (allowedSubPositions.includes(player.subPosition)) score += 60;
-  if (player.altPositions?.some(alt => allowedSubPositions.includes(alt))) score += 45;
-  if (player.position === slot.pos) score += 25;
+  if (player.subPosition === slot.label) score += FIT_SCORES.EXACT_SUBPOS;
+  if (player.altPositions?.includes(slot.label)) score += FIT_SCORES.SAME_LANE_SUBPOS;
+  if (allowedSubPositions.includes(player.subPosition)) score += FIT_SCORES.SAME_POSITION;
+  if (player.altPositions?.some(alt => allowedSubPositions.includes(alt))) score += FIT_SCORES.ADJACENT_POSITION;
+  if (player.position === slot.pos) score += FIT_SCORES.WILDCARD;
 
   return score > 0 ? score : -Infinity;
 };
@@ -57,7 +65,7 @@ export const rebuildFormationSlotPlayers = (
       const playerId = formationMap[`${rowIdx}-${colIdx}`];
       const mappedStarter = playerId ? starters.find(player => player.id === playerId) || null : null;
       if (mappedStarter && isPlayerSlotFit(mappedStarter, slot)) {
-        slotPlayers[rowIdx][colIdx] = mappedStarter;
+        slotPlayers[rowIdx]![colIdx] = mappedStarter;
         assignedStarterIds.add(mappedStarter.id);
       }
     });
@@ -66,7 +74,7 @@ export const rebuildFormationSlotPlayers = (
   const missingStarters = starters.filter(player => !assignedStarterIds.has(player.id));
   slots.forEach((row, rowIdx) => {
     row.forEach((slot, colIdx) => {
-      if (slotPlayers[rowIdx][colIdx]) return;
+      if (slotPlayers[rowIdx]![colIdx]) return;
       const bestIndex = missingStarters
         .map((player, index) => ({
           index,
@@ -80,14 +88,14 @@ export const rebuildFormationSlotPlayers = (
         })[0]?.index;
 
       if (bestIndex === undefined) return;
-      slotPlayers[rowIdx][colIdx] = missingStarters.splice(bestIndex, 1)[0];
+      slotPlayers[rowIdx]![colIdx] = missingStarters.splice(bestIndex, 1)[0]!;
     });
   });
 
   slots.forEach((row, rowIdx) => {
     row.forEach((_, colIdx) => {
-      if (slotPlayers[rowIdx][colIdx] || missingStarters.length === 0) return;
-      slotPlayers[rowIdx][colIdx] = missingStarters.shift() || null;
+      if (slotPlayers[rowIdx]![colIdx] || missingStarters.length === 0) return;
+      slotPlayers[rowIdx]![colIdx] = missingStarters.shift() || null;
     });
   });
 

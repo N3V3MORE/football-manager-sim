@@ -3,12 +3,11 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import {
   Formation,
   GameState,
+  Team,
   TeamTactics,
 } from '../models/types';
 import { initGameData } from '../utils/initGame';
-import {
-  resolveCompetitionProgression,
-} from '../core/competitionEngine';
+import { TEMP_TEAM_ID } from '../constants';
 import {
   runBoardReview,
 } from '../core/boardEngine';
@@ -23,18 +22,15 @@ import {
 } from '../core/careerEngine';
 import {
   LiveMatchState,
-  removeLiveMatchFixture,
 } from './liveMatchHelpers';
 import {
   generateAssistantWeekMessages,
-  generatePostMatchReportMessage,
   generateSystemInboxMessages,
   mergeInboxMessages,
   pruneInboxMessagesForManagedTeam,
 } from './inboxHelpers';
 import {
   renewPlayerContractState,
-  StoreActionResult,
 } from './contractActions';
 import { applyInboxActionState } from './inboxActions';
 import {
@@ -55,6 +51,7 @@ import { buildManagedTeamObjectives } from './managedTeamObjectives';
 import { DEFAULT_GAME_STATE, safeStorage, sanitizePersistedState } from './persistence';
 import { advanceWeekState } from './weekLifecycle';
 import { finishLiveMatchState, processLiveMatchMinuteState } from './liveMatchActions';
+import { applySharedPostMatchResolution } from './matchResultProcessing';
 
 interface GameStore extends GameState {
   liveMatches: Record<string, LiveMatchState>;
@@ -92,49 +89,53 @@ export const useGameStore = create<GameStore>()(
       liveMatches: {},
 
       initializeGame: (userTeamId) => {
-        const data = initGameData();
-        
-        // Remap 'temp' to first actual team ID
-        const actualTeamId = userTeamId === 'temp' ? Object.keys(data.teams)[0] : userTeamId;
-        
-        // Clear starters for the user's team so they stay in reserves
-        Object.values(data.players).forEach(p => {
-          if (p.teamId === actualTeamId) {
-            p.isStarting = false;
-            p.isSub = false;
-          }
-        });
+        try {
+          const data = initGameData();
+          
+          // Remap TEMP_TEAM_ID to first actual team ID
+          const actualTeamId = userTeamId === TEMP_TEAM_ID ? Object.keys(data.teams)[0]! : userTeamId;
+          
+          // Clear starters for the user's team so they stay in reserves
+          Object.values(data.players).forEach(p => {
+            if (p.teamId === actualTeamId) {
+              p.isStarting = false;
+              p.isSub = false;
+            }
+          });
 
-        const userTeam = data.teams[actualTeamId];
-        const objectives = buildManagedTeamObjectives(userTeam, data.competitions);
-        const initialNews = ['Season begins! The Premier League simulation is underway.'];
-        const inboxMessages = mergeInboxMessages(
-          [],
-          [
-            ...generateAssistantWeekMessages({
-              currentWeek: 1,
-              userTeamId: actualTeamId,
-              teams: data.teams,
-              players: data.players,
-              fixtures: data.fixtures,
-            }),
-            ...generateSystemInboxMessages(1, initialNews),
-          ]
-        );
+          const userTeam = data.teams[actualTeamId]!;
+          const objectives = buildManagedTeamObjectives(userTeam, data.competitions);
+          const initialNews = ['Season begins! The Premier League simulation is underway.'];
+          const inboxMessages = mergeInboxMessages(
+            [],
+            [
+              ...generateAssistantWeekMessages({
+                currentWeek: 1,
+                userTeamId: actualTeamId,
+                teams: data.teams,
+                players: data.players,
+                fixtures: data.fixtures,
+              }),
+              ...generateSystemInboxMessages(1, initialNews),
+            ]
+          );
 
-        set({
-          userTeamId: actualTeamId,
-          currentWeek: 1,
-          teams: data.teams,
-          players: data.players,
-          fixtures: data.fixtures,
-          competitions: data.competitions,
-          boardObjectives: objectives,
-          news: initialNews,
-          inboxMessages,
-          careerRecord: createDefaultCareerRecord(),
-          liveMatches: {},
-        });
+          set({
+            userTeamId: actualTeamId!,
+            currentWeek: 1,
+            teams: data.teams,
+            players: data.players,
+            fixtures: data.fixtures,
+            competitions: data.competitions,
+            boardObjectives: objectives,
+            news: initialNews,
+            inboxMessages,
+            careerRecord: createDefaultCareerRecord(),
+            liveMatches: {},
+          });
+        } catch (e) {
+          console.error('initializeGame failed:', e);
+        }
       },
 
       markInboxMessageRead: (messageId: string) => {
@@ -152,13 +153,9 @@ export const useGameStore = create<GameStore>()(
       },
 
       renewPlayerContract: (playerId: string, years: number, wage: number) => {
-        let result: StoreActionResult = { success: false, message: '' };
-        set(state => {
-          const update = renewPlayerContractState(state, playerId, years, wage);
-          result = update.result;
-          return update.patch;
-        });
-        return result;
+        const update = renewPlayerContractState(get(), playerId, years, wage);
+        set(update.patch);
+        return update.result;
       },
 
       applyInboxAction: (messageId: string) => {
@@ -170,45 +167,33 @@ export const useGameStore = create<GameStore>()(
           const previousPlayers = state.players;
           const { players, teams, fixture } = quickSimMatch(fixtureId, state.players, state.teams, state.fixtures, state.userTeamId);
           const nextFixtures = { ...state.fixtures, [fixtureId]: fixture };
-          const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, teams);
-          const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);
-          const postMatchReport = generatePostMatchReportMessage({
-            currentWeek: state.currentWeek,
-            userTeamId: state.userTeamId,
+          const resolved = applySharedPostMatchResolution({
+            state,
+            updatedPlayers: players,
+            updatedTeams: teams,
+            updatedFixtures: nextFixtures,
+            updatedCompetitions: state.competitions,
             fixture,
-            teams,
-            players,
             previousPlayers,
+            liveMatches: state.liveMatches,
           });
 
           return {
             players,
             teams,
-            fixtures: competitionProgression.fixtures,
-            competitions: competitionProgression.competitions,
-            news: competitionProgression.generatedNews.length > 0
-              ? [...competitionProgression.generatedNews, ...state.news].slice(0, 20)
-              : state.news,
-            liveMatches,
-            inboxMessages: mergeInboxMessages(
-              state.inboxMessages,
-              [
-                ...(postMatchReport ? [postMatchReport] : []),
-                ...generateSystemInboxMessages(state.currentWeek, competitionProgression.generatedNews),
-              ]
-            ),
+            fixtures: resolved.fixtures,
+            competitions: resolved.competitions,
+            news: resolved.news,
+            liveMatches: resolved.liveMatches,
+            inboxMessages: resolved.inboxMessages,
           };
         });
       },
 
       processMatchMinute: (fixtureId: string, minute: number) => {
-        let eventMsg: string | null = null;
-        set(state => {
-          const update = processLiveMatchMinuteState(state, fixtureId, minute);
-          eventMsg = update.event;
-          return update.patch;
-        });
-        return { event: eventMsg };
+        const update = processLiveMatchMinuteState(get(), fixtureId, minute);
+        set(update.patch);
+        return { event: update.event };
       },
 
       finishLiveMatch: (fixtureId: string) => {
@@ -236,12 +221,16 @@ export const useGameStore = create<GameStore>()(
       },
 
       skipToEndOfSeason: () => {
-        const maxWeek = getSeasonWeekLimit(get().fixtures, get().competitions);
-        let guard = maxWeek + 2;
-        while (get().currentWeek <= maxWeek && guard-- > 0) {
-          get().advanceWeek();
-          if (get().currentWeek === 1) break;
-        }
+        set((state) => {
+          if (!state.userTeamId) return state;
+          const startingSeason = state.careerRecord.seasonsManaged;
+          let s = { ...state };
+          for (let i = 0; i < 40; i++) {
+            s = advanceWeekState(s) as any;
+            if (s.careerRecord.seasonsManaged !== startingSeason) break;
+          }
+          return s;
+        });
       },
 
       swapPlayer: (removeId: string | null, addId: string, slotKey?: string) => {
@@ -275,13 +264,9 @@ export const useGameStore = create<GameStore>()(
       },
 
       buyPlayer: (playerId: string, fee: number, wageOffered: number) => {
-        let result: StoreActionResult = { success: false, message: '' };
-        set(state => {
-          const update = buyPlayerState(state, playerId, fee, wageOffered);
-          result = update.result;
-          return update.patch;
-        });
-        return result;
+        const update = buyPlayerState(get(), playerId, fee, wageOffered);
+        set(update.patch);
+        return update.result;
       },
 
       listPlayerForSale: (playerId: string, askingPrice: number) => {
@@ -299,7 +284,7 @@ export const useGameStore = create<GameStore>()(
       checkBoardObjectives: () => {
          set(state => {
             if (!state.userTeamId) return state;
-            const myTeam = state.teams[state.userTeamId];
+            const myTeam = state.teams[state.userTeamId]!;
             const seasonWeekLimit = getSeasonWeekLimit(state.fixtures, state.competitions);
             const review = runBoardReview(
               myTeam,
@@ -318,7 +303,7 @@ export const useGameStore = create<GameStore>()(
                    ...myTeam,
                    boardApproval: review.nextApproval,
                    manager: review.nextManager,
-                 },
+                 } as Team,
                },
                boardObjectives: review.updatedObjectives
             };
@@ -329,6 +314,10 @@ export const useGameStore = create<GameStore>()(
       name: 'football-manager-storage',
       storage: createJSONStorage(() => safeStorage),
       version: 8,
+      partialize: (state: GameStore) => {
+        const { liveMatches, ...rest } = state;
+        return rest;
+      },
       migrate: (persistedState, version) => {
         const rawState = (persistedState || {}) as Partial<GameStore>;
         const sanitized = sanitizePersistedState(rawState);

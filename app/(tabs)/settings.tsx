@@ -2,10 +2,10 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CurrentTeamCard } from '@/components/settings/current-team-card';
-import { AvailabilityWatchCard } from '@/components/settings/availability-watch-card';
-import { ContractWatchCard } from '@/components/settings/contract-watch-card';
-import { DevToolsCard } from '@/components/settings/dev-tools-card';
+import CurrentTeamCard from '@/components/settings/current-team-card';
+import AvailabilityWatchCard from '@/components/settings/availability-watch-card';
+import ContractWatchCard from '@/components/settings/contract-watch-card';
+import DevToolsCard from '@/components/settings/dev-tools-card';
 import { TeamSelectionSheet } from '@/components/settings/team-selection-sheet';
 import { useGameStore } from '@/src/store/gameStore';
 import { sortTeamsByDivisionAndName } from '@/src/core/leagueUtils';
@@ -24,7 +24,7 @@ export default function SettingsScreen() {
 
   const [showChangeTeam, setShowChangeTeam] = useState(false);
 
-  const userTeam = userTeamId ? teams[userTeamId] : null;
+  const userTeam = userTeamId ? teams[userTeamId]! : null;
   const sortedTeams = useMemo(() => sortTeamsByDivisionAndName(Object.values(teams)), [teams]);
   const userSquad = useMemo(
     () => userTeamId ? Object.values(players).filter(player => player.teamId === userTeamId) : [],

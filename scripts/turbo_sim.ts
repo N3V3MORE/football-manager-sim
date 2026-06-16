@@ -11,47 +11,51 @@ async function runTurboSim(seasons = 500) {
   let totalMatches = 0;
 
   for (let season = 1; season <= seasons; season++) {
-    const data = initGameData();
-    let state = {
-      players: data.players,
-      teams: data.teams,
-      fixtures: data.fixtures,
-      currentWeek: 1,
-      news: [] as string[],
-    };
-    const seasonWeeks = getSeasonWeekLimit(state.fixtures);
+    try {
+      const data = initGameData();
+      let state = {
+        players: data.players,
+        teams: data.teams,
+        fixtures: data.fixtures,
+        currentWeek: 1,
+        news: [] as string[],
+      };
+      const seasonWeeks = getSeasonWeekLimit(state.fixtures);
 
-    for (let week = 1; week <= seasonWeeks; week++) {
-      const weekFixtures = Object.values(state.fixtures).filter(fixture => fixture.week === week);
+      for (let week = 1; week <= seasonWeeks; week++) {
+        const weekFixtures = Object.values(state.fixtures).filter(fixture => fixture.week === week);
 
-      for (const fixture of weekFixtures) {
-        const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures);
-        state.players = result.players;
-        state.teams = result.teams;
-        state.fixtures[fixture.id] = result.fixture;
-        totalMatches++;
+        for (const fixture of weekFixtures) {
+          const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures);
+          state.players = result.players;
+          state.teams = result.teams;
+          state.fixtures[fixture.id] = result.fixture;
+          totalMatches++;
+        }
+
+        const progression = computeWeeklyProgression(
+          state.currentWeek,
+          state.players,
+          state.teams,
+          state.fixtures,
+          state.news
+        );
+        state.players = progression.players;
+        state.teams = progression.teams;
+        state.currentWeek = progression.currentWeek;
+        state.news = progression.news;
+
+        const transfers = computeWeeklyTransfers(state.players, state.teams, null);
+        state.players = transfers.players;
+        state.teams = transfers.teams;
       }
 
-      const progression = computeWeeklyProgression(
-        state.currentWeek,
-        state.players,
-        state.teams,
-        state.fixtures,
-        state.news
-      );
-      state.players = progression.players;
-      state.teams = progression.teams;
-      state.currentWeek = progression.currentWeek;
-      state.news = progression.news;
-
-      const transfers = computeWeeklyTransfers(state.players, state.teams, null);
-      state.players = transfers.players;
-      state.teams = transfers.teams;
-    }
-
-    if (season % 50 === 0 || season === seasons) {
-      const elapsed = (Date.now() - startTime) / 1000;
-      console.log(`[OK] Season ${season}/${seasons} | Elapsed: ${elapsed.toFixed(2)}s | Matches: ${totalMatches}`);
+      if (season % 50 === 0 || season === seasons) {
+        const elapsed = (Date.now() - startTime) / 1000;
+        console.log(`[OK] Season ${season}/${seasons} | Elapsed: ${elapsed.toFixed(2)}s | Matches: ${totalMatches}`);
+      }
+    } catch (error) {
+      console.error(`[FAIL] Season ${season} failed:`, error);
     }
   }
 

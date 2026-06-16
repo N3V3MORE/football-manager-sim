@@ -250,15 +250,15 @@ export const generateJobOfferCandidates = (
         : 'steady';
 
   if (trajectory === 'upward') {
-    if (normalizedDivIndex > 0) targetDivisions.push(DIVISION_ORDER[normalizedDivIndex - 1]);
+    if (normalizedDivIndex > 0) targetDivisions.push(DIVISION_ORDER[normalizedDivIndex - 1]!);
     targetDivisions.push(leagueDivision);
   } else if (trajectory === 'downward') {
     targetDivisions.push(leagueDivision);
-    if (normalizedDivIndex < DIVISION_ORDER.length - 1) targetDivisions.push(DIVISION_ORDER[normalizedDivIndex + 1]);
+    if (normalizedDivIndex < DIVISION_ORDER.length - 1) targetDivisions.push(DIVISION_ORDER[normalizedDivIndex + 1]!);
   } else {
     targetDivisions.push(leagueDivision);
     if (summary.boardVerdict === 'warning' && normalizedDivIndex < DIVISION_ORDER.length - 1) {
-      targetDivisions.push(DIVISION_ORDER[normalizedDivIndex + 1]);
+      targetDivisions.push(DIVISION_ORDER[normalizedDivIndex + 1]!);
     }
   }
 

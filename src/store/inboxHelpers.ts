@@ -74,7 +74,7 @@ const hashSeed = (value: string) => (
 );
 
 const pickTemplate = <T,>(seed: string, options: T[]): T => (
-  options[hashSeed(seed) % options.length]
+  options[hashSeed(seed) % options.length]!
 );
 
 const average = (values: number[]) => (
@@ -393,6 +393,8 @@ const generateRecoveryMessages = (
     }));
 };
 
+const contractWarningsIssued = new Map<string, number>();
+
 const generateContractMessages = (
   currentWeek: number,
   team: Team,
@@ -402,12 +404,19 @@ const generateContractMessages = (
   return getTeamSquad(players, team.id)
     .filter(player => isContractExpiringSoon(player))
     .filter(player => {
+      const warningKey = `${team.id}-${player.id}`;
+      const lastWarningWeek = contractWarningsIssued.get(warningKey);
+      if (lastWarningWeek !== undefined && currentWeek - lastWarningWeek < 6) return false;
+      
       if (currentWeek < 30 && currentWeek % 6 !== 0) return false;
       const previous = previousPlayers?.[player.id];
-      return !previous || previous.contractLeft > player.contractLeft || previous.injuryWeeks !== player.injuryWeeks || currentWeek >= 34 || currentWeek % 6 === 0;
+      const hasStateChange = !previous || previous.contractLeft > player.contractLeft || previous.injuryWeeks !== player.injuryWeeks;
+      if (currentWeek >= 34 && !hasStateChange && currentWeek % 2 !== 0) return false;
+      return hasStateChange || currentWeek % 6 === 0 || (currentWeek >= 34 && currentWeek % 2 === 0);
     })
     .slice(0, 3)
     .map(player => {
+      contractWarningsIssued.set(`${team.id}-${player.id}`, currentWeek);
       const renewal = getRenewalOffer(player);
       const advice = getContractAdviceLabel(player, team);
       return buildMessage({
@@ -696,8 +705,8 @@ export const generatePostMatchReportMessage = ({
     .filter(player => (player.injuryWeeks || 0) > (previousPlayers[player.id]?.injuryWeeks || 0));
 
   const isHome = fixture.homeTeamId === userTeamId;
-  const myGoals = isHome ? fixture.homeScore : fixture.awayScore;
-  const theirGoals = isHome ? fixture.awayScore : fixture.homeScore;
+  const myGoals = isHome ? fixture.homeScore! : fixture.awayScore!;
+  const theirGoals = isHome ? fixture.awayScore! : fixture.homeScore!;
   const reportSeed = `${fixture.id}-${myGoals}-${theirGoals}-${team.id}`;
   const resultPrefix = myGoals > theirGoals
     ? pickTemplate(`${reportSeed}-win`, [
@@ -760,7 +769,7 @@ export const generatePostMatchReportMessage = ({
     ? `Discipline hurt us as well: ${disciplineCases.map(item => `${item.player.name}${item.redDelta > 0 ? ' saw red' : ' picked up a booking'}`).join(', ')}.`
     : '';
   const injuryNote = injuryCases.length > 0
-    ? `We also lost ${injuryCases.map(player => `${player.name} (${player.injuryType || 'injury'}, ${player.injuryWeeks}w)`).join(', ')}.`
+    ? `We also lost ${injuryCases.map(player => `${player.name} (${player.injuryType || 'injury'}${player.injuryWeeks ? `, ${player.injuryWeeks}w` : ''})`).join(', ')}.`
     : '';
 
   return buildMessage({

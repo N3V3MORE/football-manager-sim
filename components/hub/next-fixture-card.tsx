@@ -12,7 +12,7 @@ type NextFixtureCardProps = {
   onQuickSim?: () => void;
 };
 
-export function NextFixtureCard({ homeTeam, awayTeam, userTeamId, subLabel, onPress, onQuickSim }: NextFixtureCardProps) {
+export default React.memo(function NextFixtureCard({ homeTeam, awayTeam, userTeamId, subLabel, onPress, onQuickSim }: NextFixtureCardProps) {
   return (
     <View style={styles.heroMatchCard}>
       <Text style={styles.heroMatchTitle}>NEXT FIXTURE</Text>
@@ -58,6 +58,7 @@ export function NextFixtureCard({ homeTeam, awayTeam, userTeamId, subLabel, onPr
     </View>
   );
 }
+);
 
 const styles = StyleSheet.create({
   heroMatchCard: {

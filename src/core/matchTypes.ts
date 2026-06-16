@@ -26,7 +26,3 @@ export type TeamShapeProfile = {
   gkDistribution: number;
 };
 
-export type ShapeAccumulator = {
-  gkDistributionAccumulator: number;
-  gkSamples: number;
-};

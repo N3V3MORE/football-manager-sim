@@ -81,7 +81,7 @@ export const setFormationState = (
       ));
 
       if (!candidate) return;
-      updatedPlayers[candidate.id] = { ...updatedPlayers[candidate.id], isStarting: true, isSub: false };
+      updatedPlayers[candidate.id] = { ...updatedPlayers[candidate.id], isStarting: true, isSub: false } as Player;
       formationMap[`${rowIdx}-${colIdx}`] = candidate.id;
       assignedIds.add(candidate.id);
     });
@@ -92,10 +92,16 @@ export const setFormationState = (
       row.forEach((_, colIdx) => {
         const slotKey = `${rowIdx}-${colIdx}`;
         if (formationMap[slotKey]) return;
-        const player = eligibleTeamPlayers.find(candidate => !assignedIds.has(candidate.id));
+        const player = eligibleTeamPlayers.find(candidate => {
+          if (assignedIds.has(candidate.id)) return false;
+          const isGKSlot = slotKey.endsWith('-0') && rowIdx === 0;
+          if (isGKSlot && candidate.position !== 'GK') return false;
+          if (!isGKSlot && candidate.position === 'GK') return false;
+          return true;
+        });
         if (!player) return;
 
-        updatedPlayers[player.id] = { ...updatedPlayers[player.id], isStarting: true, isSub: false };
+        updatedPlayers[player.id] = { ...updatedPlayers[player.id], isStarting: true, isSub: false } as Player;
         formationMap[slotKey] = player.id;
         assignedIds.add(player.id);
       });
@@ -159,21 +165,41 @@ export const toggleStartingState = (
   if (starters.length >= 11) {
     const toSwap = starters.filter(candidate => candidate.position === player.position)
       .sort((a, b) => a.overallRating - b.overallRating)[0]
-      || starters.sort((a, b) => a.overallRating - b.overallRating)[0];
+      || starters.sort((a, b) => a.overallRating - b.overallRating)[0]!;
     removeFromMap(toSwap.id);
 
     return {
       players: {
         ...state.players,
-        [toSwap.id]: { ...toSwap, isStarting: false, isSub: true },
-        [playerId]: { ...player, isStarting: true, isSub: false },
+        [toSwap.id]: { ...toSwap, isStarting: false, isSub: true } as Player,
+        [playerId]: { ...player, isStarting: true, isSub: false } as Player,
       },
       teams: updatedTeams,
     };
   }
 
+  const team = state.teams[player.teamId];
+  const updatedFormationMap = team?.formationMap ? { ...team.formationMap } : {};
+  const hasOpenSlot = Object.keys(updatedFormationMap).length < 11;
+  if (hasOpenSlot && team) {
+    const slots = getSlotsForFormation(team.activeFormation);
+    let assigned = false;
+    for (const [rowIdx, row] of slots.entries()) {
+      for (const [colIdx] of row.entries()) {
+        const slotKey = `${rowIdx}-${colIdx}`;
+        if (updatedFormationMap[slotKey]) continue;
+        updatedFormationMap[slotKey] = playerId;
+        updatedTeams = { ...updatedTeams, [team.id]: { ...team, formationMap: updatedFormationMap } };
+        assigned = true;
+        break;
+      }
+      if (assigned) break;
+    }
+  }
+
   return {
     players: { ...state.players, [playerId]: { ...player, isStarting: true, isSub: false } },
+    teams: updatedTeams,
   };
 };
 
@@ -209,11 +235,20 @@ export const swapPlayerState = (
   }
 
   let updatedTeams = state.teams;
-  if (slotKey && state.userTeamId) {
+  if (state.userTeamId) {
     const team = state.teams[state.userTeamId];
-    const map = { ...(team.formationMap || {}) };
-    map[slotKey] = addId;
-    updatedTeams = { ...state.teams, [state.userTeamId]: { ...team, formationMap: map } };
+    if (team) {
+      const map = { ...(team.formationMap || {}) };
+      if (slotKey) {
+        map[slotKey] = addId;
+      }
+      if (removeId) {
+        Object.keys(map).forEach(key => {
+          if (map[key] === removeId) delete map[key];
+        });
+      }
+      updatedTeams = { ...state.teams, [state.userTeamId]: { ...team, formationMap: map } };
+    }
   }
 
   return { players: { ...state.players, ...updates }, teams: updatedTeams };

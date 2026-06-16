@@ -30,7 +30,7 @@ const REAL_TEAMS = [
   { name: 'Wolves',             class: 'C' },
 ];
 
-const getRandomTactics = () => {
+const getRandomTactics = (): TeamTactics => {
   const mentalities: TeamTactics['mentality'][] = ['Defensive', 'Balanced', 'Attacking'];
   const passingStyles: TeamTactics['passingStyle'][] = ['Short', 'Mixed', 'Direct'];
   const tempos: TeamTactics['tempo'][] = ['Slow', 'Normal', 'Fast'];
@@ -38,11 +38,11 @@ const getRandomTactics = () => {
   const pressings: TeamTactics['pressing'][] = ['None', 'Medium', 'High'];
 
   return {
-    mentality: mentalities[Math.floor(Math.random() * mentalities.length)],
-    passingStyle: passingStyles[Math.floor(Math.random() * passingStyles.length)],
-    tempo: tempos[Math.floor(Math.random() * tempos.length)],
-    defensiveLine: lines[Math.floor(Math.random() * lines.length)],
-    pressing: pressings[Math.floor(Math.random() * pressings.length)],
+    mentality: mentalities[Math.floor(Math.random() * mentalities.length)]!,
+    passingStyle: passingStyles[Math.floor(Math.random() * passingStyles.length)]!,
+    tempo: tempos[Math.floor(Math.random() * tempos.length)]!,
+    defensiveLine: lines[Math.floor(Math.random() * lines.length)]!,
+    pressing: pressings[Math.floor(Math.random() * pressings.length)]!,
   };
 };
 
@@ -71,7 +71,7 @@ type BasePlayerRow = {
   marketValue?: number;
   age: number;
   nationality: string;
-  clubJerseyNumber?: number | null;
+  clubJerseyNumber?: number;
   stats: RawPlayerStats;
 };
 
@@ -179,7 +179,7 @@ const buildPlayerRecord = (rp: BasePlayerRow, teamId: string, playerId: string, 
     yellowCards: 0,
     redCards: 0,
     nationality: rp.nationality || 'Unknown',
-    ...(rp.clubJerseyNumber !== undefined ? { clubJerseyNumber: rp.clubJerseyNumber ?? null } : {}),
+    ...(rp.clubJerseyNumber !== undefined ? { clubJerseyNumber: rp.clubJerseyNumber } : {}),
     stats: {
       pace: rp.stats?.pace || 50,
       shooting: rp.stats?.shooting || 50,
@@ -204,7 +204,7 @@ const markBestStarters = (teamPlayers: Player[], players: Record<string, Player>
   const mids = sorted.filter(p => p.position === 'MID').slice(0, 3);
   const fwds = sorted.filter(p => p.position === 'FWD').slice(0, 3);
   [...gks, ...defs, ...mids, ...fwds].forEach(player => {
-    players[player.id] = { ...players[player.id], isStarting: true };
+    players[player.id] = { ...players[player.id], isStarting: true } as Player;
   });
 };
 
@@ -222,7 +222,7 @@ export const initGameData = (userTeamName?: string) => {
   const playersByTeam: Record<string, LeaguePlayerRow[]> = {};
   premierLeaguePlayers.forEach(player => {
     if (!playersByTeam[player.clubName]) playersByTeam[player.clubName] = [];
-    playersByTeam[player.clubName].push(player);
+    playersByTeam[player.clubName]!.push(player);
   });
 
   let teamCounter = 1;
@@ -291,8 +291,8 @@ export const initGameData = (userTeamName?: string) => {
   const lowerRows = lowerLeaguePlayers;
   const lowerGroups = lowerRows.reduce<Record<LeagueDivision, Record<string, LowerLeaguePlayerRow[]>>>((acc, row) => {
     if (!acc[row.leagueName]) acc[row.leagueName] = {};
-    if (!acc[row.leagueName][row.clubName]) acc[row.leagueName][row.clubName] = [];
-    acc[row.leagueName][row.clubName].push(row);
+    if (!acc[row.leagueName]![row.clubName]) acc[row.leagueName]![row.clubName] = [];
+    acc[row.leagueName]![row.clubName]!.push(row);
     return acc;
   }, { Championship: {}, 'League One': {}, 'League Two': {} } as Record<LeagueDivision, Record<string, LowerLeaguePlayerRow[]>>);
 

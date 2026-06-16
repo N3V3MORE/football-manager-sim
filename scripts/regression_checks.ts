@@ -12,23 +12,14 @@ import {
   qualifiesForWindowedCleanSheet,
 } from '../src/core/postMatchAccounting';
 import { advanceSeason } from '../src/core/seasonTransition';
-import { Player } from '../src/models/types';
+import { Player, Team } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
+import { createSeededRandom } from './utils/seededRandom';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) {
     throw new Error(message);
   }
-};
-
-const createSeededRandom = (seed: number) => {
-  let state = seed >>> 0;
-  return () => {
-    state += 0x6D2B79F5;
-    let value = Math.imul(state ^ (state >>> 15), 1 | state);
-    value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
 };
 
 const readSource = (filePath: string) => fs.readFileSync(path.join(process.cwd(), filePath), 'utf8');
@@ -67,9 +58,9 @@ const checkCleanSheetWindows = () => {
     updatedPlayers
   );
 
-  assert(updatedPlayers[shortSubbedBeforeGoal.id].cleanSheets === 0, 'Short subbed-off player should not get clean sheet');
-  assert(updatedPlayers[qualifiedBeforeGoal.id].cleanSheets === 1, 'Qualified subbed-off player before concession should get clean sheet');
-  assert(updatedPlayers[playedThroughGoal.id].cleanSheets === 0, 'Player on pitch for concession should not get clean sheet');
+  assert(updatedPlayers[shortSubbedBeforeGoal.id]!.cleanSheets === 0, 'Short subbed-off player should not get clean sheet');
+  assert(updatedPlayers[qualifiedBeforeGoal.id]!.cleanSheets === 1, 'Qualified subbed-off player before concession should get clean sheet');
+  assert(updatedPlayers[playedThroughGoal.id]!.cleanSheets === 0, 'Player on pitch for concession should not get clean sheet');
 };
 
 const checkLiveSentOffMinutes = () => {
@@ -87,8 +78,8 @@ const checkLiveSentOffMinutes = () => {
     .map(player => player.id);
   assert(homeStarterIds.length > 0 && awayStarterIds.length > 0, 'Regression setup needs live starters');
 
-  const sentOffPlayerId = homeStarterIds[0];
-  const beforeMinutes = state.players[sentOffPlayerId].minutesPlayed || 0;
+  const sentOffPlayerId = homeStarterIds[0]!;
+  const beforeMinutes = state.players[sentOffPlayerId]!.minutesPlayed || 0;
 
   useGameStore.setState(prev => ({
     fixtures: {
@@ -111,7 +102,7 @@ const checkLiveSentOffMinutes = () => {
   }));
 
   useGameStore.getState().finishLiveMatch(fixture!.id);
-  const after = useGameStore.getState().players[sentOffPlayerId];
+  const after = useGameStore.getState().players[sentOffPlayerId]!;
   assert(
     (after.minutesPlayed || 0) - beforeMinutes === 42,
     `Sent-off live player should receive 42 minutes, got ${(after.minutesPlayed || 0) - beforeMinutes}`
@@ -142,11 +133,11 @@ const checkBranchGuards = () => {
 
 const checkUserTeamProgressionDoesNotAdaptFormation = () => {
   const data = initGameData();
-  const userTeam = Object.values(data.teams)[0];
+  const userTeam = Object.values(data.teams)[0]!;
   const beforeFormation = userTeam.activeFormation;
   const beforeTactics = JSON.stringify(userTeam.tactics);
 
-  const teams = {
+  const teams: Record<string, Team> = {
     ...data.teams,
     [userTeam.id]: {
       ...userTeam,
@@ -162,11 +153,11 @@ const checkUserTeamProgressionDoesNotAdaptFormation = () => {
   try {
     const result = computeWeeklyProgression(1, data.players, teams, data.fixtures, [], userTeam.id);
     assert(
-      result.teams[userTeam.id].activeFormation === beforeFormation,
+      result.teams[userTeam.id]!.activeFormation === beforeFormation,
       'User team formation should not be changed by AI tactical adaptation'
     );
     assert(
-      JSON.stringify(result.teams[userTeam.id].tactics) === beforeTactics,
+      JSON.stringify(result.teams[userTeam.id]!.tactics) === beforeTactics,
       'User team tactics should not be changed by AI tactical adaptation'
     );
   } finally {
@@ -238,8 +229,8 @@ const checkPromotionRelegation = () => {
     .sort((a, b) => a.points - b.points || a.goalsFor - b.goalsFor || a.name.localeCompare(b.name))
     .slice(0, 3);
 
-  assert(championshipTop.every(team => nextSeason.teams[team.id].division === 'Premier League'), 'Top Championship teams should be promoted');
-  assert(premierBottom.every(team => nextSeason.teams[team.id].division === 'Championship'), 'Bottom Premier League teams should be relegated');
+  assert(championshipTop.every(team => nextSeason.teams[team.id]!.division === 'Premier League'), 'Top Championship teams should be promoted');
+  assert(premierBottom.every(team => nextSeason.teams[team.id]!.division === 'Championship'), 'Bottom Premier League teams should be relegated');
 };
 
 const checkStaleFormationMapRecoveryModel = () => {
@@ -278,10 +269,10 @@ const checkStaleFormationMapRecoveryModel = () => {
 
 const checkFormationMapRejectsWrongPositions = () => {
   const data = initGameData('Arsenal');
-  const team = Object.values(data.teams).find(item => item.name === 'Arsenal');
+  const team = Object.values(data.teams).find(item => item.name === 'Arsenal')!;
   assert(team, 'Regression setup needs Arsenal');
 
-  const squad = Object.values(data.players).filter(player => player.teamId === team!.id);
+  const squad = Object.values(data.players).filter(player => player.teamId === team.id);
   const keeper = squad.find(player => player.position === 'GK');
   const striker = squad.find(player => player.subPosition === 'ST' || player.position === 'FWD');
   const midfielder = squad.find(player => player.position === 'MID');
@@ -290,22 +281,22 @@ const checkFormationMapRejectsWrongPositions = () => {
 
   const starters = squad.map(player => ({
     ...player,
-    isStarting: [keeper!.id, striker!.id, midfielder!.id].includes(player.id) || player.overallRating >= 80,
+    isStarting: [keeper.id, striker.id, midfielder.id].includes(player.id) || player.overallRating >= 80,
   })).filter(player => player.isStarting).slice(0, 11);
 
   const slots = getSlotsForFormation('4-3-3');
   const corruptedMap = {
-    '0-0': keeper!.id,
-    '0-2': midfielder!.id,
-    '3-0': striker!.id,
+    '0-0': keeper.id,
+    '0-2': midfielder.id,
+    '3-0': striker.id,
   };
 
   const rebuiltSlots = rebuildFormationSlotPlayers(slots, starters, corruptedMap);
   const rebuiltMap = rebuildFormationMap(slots, starters, corruptedMap);
 
-  assert(rebuiltSlots[3][0]?.position === 'GK', 'Corrupted formation map should put a keeper back in GK');
-  assert(rebuiltSlots[0].every(player => player?.position !== 'GK'), 'Corrupted formation map should not leave a keeper in the forward line');
-  assert(rebuiltMap['3-0'] === rebuiltSlots[3][0]?.id, 'Rebuilt map should persist the corrected GK slot');
+  assert(rebuiltSlots[3]![0]?.position === 'GK', 'Corrupted formation map should put a keeper back in GK');
+  assert(rebuiltSlots[0]!.every(player => player?.position !== 'GK'), 'Corrupted formation map should not leave a keeper in the forward line');
+  assert(rebuiltMap['3-0'] === rebuiltSlots[3]![0]?.id, 'Rebuilt map should persist the corrected GK slot');
 };
 
 const checkSeededFormationDiversity = () => {
@@ -393,7 +384,7 @@ const checkZustandStoreLiveMatchCleanup = () => {
   useGameStore.getState().initializeGame('T1');
   const store = useGameStore.getState();
   
-  const fixtureId = Object.keys(store.fixtures)[0];
+  const fixtureId = Object.keys(store.fixtures)[0]!;
   assert(fixtureId, 'Needs at least one fixture for store test');
 
   // Trigger Live Match start

@@ -10,7 +10,7 @@ type FormationSelectionModalProps = {
   onSelect: (formation: Formation) => void;
 };
 
-export function FormationSelectionModal({
+export default React.memo(function FormationSelectionModal({
   visible,
   formations,
   selectedFormation,
@@ -46,6 +46,7 @@ export function FormationSelectionModal({
     </Modal>
   );
 }
+);
 
 const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: 40 },

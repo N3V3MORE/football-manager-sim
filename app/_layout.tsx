@@ -3,10 +3,13 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { installAgentGameHandler } from '@/src/dev/agentGameHandler';
 import { useGameStore } from '@/src/store/gameStore';
+import { TEMP_TEAM_ID } from '@/src/constants';
+import { Colors } from '@/constants/colors';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -14,7 +17,6 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const userTeamId = useGameStore(state => state.userTeamId);
   const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
@@ -38,28 +40,17 @@ export default function RootLayout() {
     const hasLeagueData = Object.keys(state.teams).length > 0 && Object.keys(state.fixtures).length > 0;
 
     if (!hasManagedTeam && !hasLeagueData) {
-      state.initializeGame('temp');
-      return;
+      state.initializeGame(TEMP_TEAM_ID);
     }
+  }, [hasHydrated]);
 
-    if (Object.values(state.teams).some(team => !team.division)) {
-      useGameStore.setState({
-        teams: Object.fromEntries(
-          Object.entries(state.teams).map(([teamId, team]) => [
-            teamId,
-            {
-              ...team,
-              division: team.division || 'Premier League',
-              countryId: team.countryId || 'england',
-              clubClass: team.clubClass || 'C',
-            },
-          ])
-        ),
-      });
-    }
-  }, [hasHydrated, userTeamId]);
-
-  if (!hasHydrated) return null;
+  if (!hasHydrated) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={Colors.accent} />
+      </View>
+    );
+  }
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

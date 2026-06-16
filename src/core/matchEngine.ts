@@ -9,7 +9,7 @@ import { rebuildFormationMap } from './formationMapUtils';
 import { applyMinuteCaps, buildStarterBenchMinuteMap } from './minuteMapUtils';
 import { applyMatchInjuries } from './injuryEngine';
 import { isPlayerUnavailable } from './playerStatusUtils';
-import { defaultRandomGenerator, RandomGenerator, resolveRandom } from './random';
+import { defaultRandomGenerator, RandomGenerator } from './random';
 import { applyMatchResult } from './teamUtils';
 import {
   addPlayerStat,
@@ -152,7 +152,7 @@ export const simulatePossession = (
   defenderShape?: TeamShapeProfile,
   rng?: RandomGenerator
 ): { goal: boolean; scorer?: Player; assister?: Player; event: string | null; foul?: { player: Player; type: 'Y' | 'R' } } => {
-  const random = resolveRandom(rng);
+  const random = rng || Math.random;
   if (attPlayers.length === 0 || defPlayers.length === 0) return { goal: false, event: null };
   const attRoles = getRoleGroups(attPlayers);
   const defRoles = getRoleGroups(defPlayers);
@@ -203,8 +203,8 @@ export const simulatePossession = (
   if (dTac.pressing === 'None') defensiveBonus *= ENGINE_CONFIG.DEFENSIVE_PRESS_NONE_MULTIPLIER;
 
   // Anti-Steamroll
-  if (attackerGoals - defenderGoals >= ENGINE_CONFIG.STEAMROLL_MARGIN_1) defensiveBonus *= ENGINE_CONFIG.STEAMROLL_BONUS_1;
-  if (attackerGoals - defenderGoals >= ENGINE_CONFIG.STEAMROLL_MARGIN_2) defensiveBonus *= ENGINE_CONFIG.STEAMROLL_BONUS_2;
+  if (attackerGoals - defenderGoals >= ENGINE_CONFIG.STEAMROLL[0]!.margin) defensiveBonus *= ENGINE_CONFIG.STEAMROLL[0]!.bonus;
+  if (attackerGoals - defenderGoals >= ENGINE_CONFIG.STEAMROLL[1]!.margin) defensiveBonus *= ENGINE_CONFIG.STEAMROLL[1]!.bonus;
 
   // Tempo and pressing should influence chance volume and shot profile.
   const tempoMultiplier = aTac.tempo === 'Fast'
@@ -254,10 +254,10 @@ export const simulatePossession = (
 
   // UNDERDOG BUFF: Increased Chaos Factor (from 0.15 to 0.25) so lower teams get through more often
   const buildOutEdge = attShape.buildOutSupport - defShape.centralShield;
-  const phaseOneAttack = activeMid.stats.passing * passBonus * 1.1 * (1 + clamp(buildOutEdge * 0.02, -0.1, 0.16));
+  const phaseOneAttack = activeMid!.stats.passing * passBonus * 1.1 * (1 + clamp(buildOutEdge * 0.02, -0.1, 0.16));
   const phase1Success = runDuel(phaseOneAttack, phaseOneDefense * interceptBonus, ENGINE_CONFIG.DUEL_LUCK_MIDFIELD, rng);
   if (!phase1Success && random() > ENGINE_CONFIG.PHASE_ONE_FAIL_ESCAPE_CHANCE) {
-    return { goal: false, event: buildPhaseOneStopEvent(defender, activeMid, random) };
+    return { goal: false, event: buildPhaseOneStopEvent(defender, activeMid!, random) };
   }
 
   // Phase 2: Final Third / Chance Creation
@@ -292,9 +292,9 @@ export const simulatePossession = (
     ? weightedPick(defenderPool, p => (p.stats.defending || 50) + p.stats.pace * 0.15, rng)
     : (defDef[0] || defPlayers[0]);
 
-  const creatorRole = inferRoleTag(creator);
+  const creatorRole = inferRoleTag(creator!);
   const shieldStrength = avgStat([...defRoles.DM, ...defRoles.CM], p => (p.stats.defending || 50), 55);
-  const throughBallSkill = creator.stats.passing > 70 ? 1.0 : 0.9;
+  const throughBallSkill = creator!.stats.passing > 70 ? 1.0 : 0.9;
   const roleThroughBallBoost = creatorRole === 'AM' || creatorRole === 'CM' ? 1.08 : 1.0;
   const shieldPenalty = shieldStrength > 72 ? 0.9 : 1.0;
   const shapeThroughBallBoost = attShape.finalThirdPresence > defShape.centralShield ? 1.05 : 0.95;
@@ -305,16 +305,16 @@ export const simulatePossession = (
 
   // Use Physicality for target-man types in Phase 2
   let creationStat = isThroughBall
-    ? (creator.stats.passing * 1.1)
-    : Math.max(creator.stats.dribbling || 70, (creator.stats.physical || 70) * 0.9);
-  if (isWideRoute) creationStat = Math.max(creationStat, creator.stats.pace * 0.95 + creator.stats.dribbling * 0.4);
+    ? (creator!.stats.passing * 1.1)
+    : Math.max(creator!.stats.dribbling || 70, (creator!.stats.physical || 70) * 0.9);
+  if (isWideRoute) creationStat = Math.max(creationStat, creator!.stats.pace * 0.95 + creator!.stats.dribbling * 0.4);
 
   creationStat *= passBonus;
   const routeShapeBoost = isWideRoute
     ? (1 + clamp((attShape.widePresence - defShape.widePresence) * 0.02, -0.08, 0.12))
     : (1 + clamp((attShape.centralShield - defShape.centralShield) * 0.02, -0.08, 0.1));
   creationStat *= routeShapeBoost;
-  let defenderStat = (activeDefender.stats.defending || 60) * defensiveBonus;
+  let defenderStat = (activeDefender!.stats.defending || 60) * defensiveBonus;
 
   if (isThroughBall && isHighLine) defenderStat *= 0.85;
   if (isThroughBall && isDeepLine) defenderStat *= 1.1;
@@ -322,9 +322,9 @@ export const simulatePossession = (
   if (!runDuel(creationStat, defenderStat, ENGINE_CONFIG.DUEL_LUCK_ATTACK, rng)) {
     if (random() < ENGINE_CONFIG.FOUL_CHANCE) {
       const type = random() < ENGINE_CONFIG.RED_CARD_CHANCE ? 'R' : 'Y';
-      return { goal: false, event: buildFoulEvent(activeDefender, type, random), foul: { player: activeDefender, type } };
+      return { goal: false, event: buildFoulEvent(activeDefender!, type, random), foul: { player: activeDefender!, type } };
     }
-    return { goal: false, event: buildFinalThirdStopEvent(creator, defender, activeDefender, random) };
+    return { goal: false, event: buildFinalThirdStopEvent(creator!, defender, activeDefender!, random) };
   }
 
   // Phase 3: Finishing
@@ -341,21 +341,21 @@ export const simulatePossession = (
     return Math.max(1, shooting - 55) * roleMultiplier;
   }, rng);
 
-  const gk = gkDef[0] || defPlayers[0];
+  const gk = gkDef[0] || defPlayers[0]!;
   let shotStat = (finisher.stats.shooting || 70) * shootingBonus;
   shotStat *= 1 + clamp((attShape.boxTargetPresence - defShape.lineLoad.def) * 0.025, -0.08, 0.1);
 
   // Toned down impact boost further to prevent 150-goal seasons
   if (finisher.impactCoefficient > 1.2) shotStat *= (1.0 + (finisher.impactCoefficient - 1.0) * 0.15);
 
-  const gkShotStop = (gk.stats.gk_reflexes || gk.stats.defending || 65);
-  const gkPosition = gk.stats.gk_positioning || 60;
-  const gkHandling = gk.stats.gk_handling || 55;
+  const gkShotStop = (gk!.stats.gk_reflexes || gk!.stats.defending || 65);
+  const gkPosition = gk!.stats.gk_positioning || 60;
+  const gkHandling = gk!.stats.gk_handling || 55;
   let reflexStat = (gkShotStop * 0.6) + (gkPosition * 0.25) + (gkHandling * 0.15);
   reflexStat *= 1 + clamp((defShape.lineLoad.def - attShape.boxTargetPresence) * 0.012, -0.04, 0.06);
 
   if (runDuel(shotStat, reflexStat, ENGINE_CONFIG.DUEL_LUCK_SHOOTING, rng)) {
-    const assister = creator.id !== finisher.id ? creator : undefined;
+    const assister = creator!.id !== finisher.id ? creator! : undefined;
     return {
       goal: true,
       scorer: finisher,
@@ -364,7 +364,7 @@ export const simulatePossession = (
     };
   }
 
-  const missEvent = buildMissEvent(finisher, gk, activeDefender, random);
+  const missEvent = buildMissEvent(finisher, gk!, activeDefender!, random);
   return { goal: false, event: missEvent };
 };
 
@@ -382,9 +382,8 @@ export const quickSimMatch = (
   userTeamId?: string | null,
   options?: { rng?: RandomGenerator }
 ): { players: Record<string, Player>, teams: Record<string, Team>, fixture: Fixture, events: string[] } => {
-  const rng = options?.rng || defaultRandomGenerator;
-  const random = rng.next;
-  const fixture = fixtures[fixtureId];
+  const random = options?.rng || defaultRandomGenerator;
+  const fixture = fixtures[fixtureId]!;
   if (!fixture || fixture.isPlayed) return { players, teams, fixture, events: [] };
 
   const updatedPlayers = { ...players };
@@ -393,8 +392,8 @@ export const quickSimMatch = (
 
   const homeStarters = getTeamMatchStarters(fixture.homeTeamId, userTeamId, updatedPlayers, updatedTeams, isPlayerUnavailable, rebuildFormationMap);
   const awayStarters = getTeamMatchStarters(fixture.awayTeamId, userTeamId, updatedPlayers, updatedTeams, isPlayerUnavailable, rebuildFormationMap);
-  const homeTeam = updatedTeams[fixture.homeTeamId];
-  const awayTeam = updatedTeams[fixture.awayTeamId];
+  const homeTeam = updatedTeams[fixture.homeTeamId]!;
+  const awayTeam = updatedTeams[fixture.awayTeamId]!;
   
   const homeBench = getTeamMatchBench(fixture.homeTeamId, homeStarters, updatedPlayers, isPlayerUnavailable);
   const awayBench = getTeamMatchBench(fixture.awayTeamId, awayStarters, updatedPlayers, isPlayerUnavailable);
@@ -422,9 +421,9 @@ export const quickSimMatch = (
   const awayMinutes = buildStarterBenchMinuteMap(awayStarters, awayBench);
   const homeSubEntryMinutes: Record<string, number> = {};
   const awaySubEntryMinutes: Record<string, number> = {};
-  const substitutionCheckpoints = [56, 66, 76, 84];
+  const substitutionCheckpoints = ENGINE_CONFIG.SUBS.CHECKPOINTS;
   let appliedCheckpointIndex = 0;
-  const firstAttackIsHome = random() < 0.5;
+  const firstAttackIsHome = random() < ENGINE_CONFIG.FIRST_ATTACK_HOME_BIAS;
 
   const matchYellowCards = new Set<string>();
   const sentOffPlayers = new Set<string>();
@@ -463,11 +462,10 @@ export const quickSimMatch = (
     }
   };
 
-  for (let i = 0; i < ENGINE_CONFIG.TOTAL_POSSESSIONS; i++) {
-    const minute = Math.max(1, Math.min(90, Math.ceil(((i + 1) * 90) / ENGINE_CONFIG.TOTAL_POSSESSIONS)));
-    while (appliedCheckpointIndex < substitutionCheckpoints.length && minute >= substitutionCheckpoints[appliedCheckpointIndex]) {
-      const subMinute = substitutionCheckpoints[appliedCheckpointIndex];
-      applySubstitutions(currentHomeXI, availableHomeBench, sentOffPlayers, homeMinutes, homeTeam, hScore, aScore, rng, {
+  const handleSubstitutionCheckpoints = (minute: number) => {
+    while (appliedCheckpointIndex < substitutionCheckpoints.length && minute >= substitutionCheckpoints[appliedCheckpointIndex]!) {
+      const subMinute = substitutionCheckpoints[appliedCheckpointIndex]!;
+      applySubstitutions(currentHomeXI, availableHomeBench, sentOffPlayers, homeMinutes, homeTeam, hScore, aScore, random, {
         maxSubsOverride: 1,
         minuteOverride: subMinute,
         playerEntryMinutes: homeSubEntryMinutes,
@@ -479,7 +477,7 @@ export const quickSimMatch = (
           matchEvents.push(`${homeTeam.name} make a change: ${offPlayer.name} off, ${onPlayer.name} on.`);
         },
       });
-      applySubstitutions(currentAwayXI, availableAwayBench, sentOffPlayers, awayMinutes, awayTeam, aScore, hScore, rng, {
+      applySubstitutions(currentAwayXI, availableAwayBench, sentOffPlayers, awayMinutes, awayTeam, aScore, hScore, random, {
         maxSubsOverride: 1,
         minuteOverride: subMinute,
         playerEntryMinutes: awaySubEntryMinutes,
@@ -493,25 +491,9 @@ export const quickSimMatch = (
       });
       appliedCheckpointIndex += 1;
     }
-    const isHomeAttacking = ((i + (firstAttackIsHome ? 0 : 1)) % 2) === 0;
-    const attTeam = isHomeAttacking ? homeTeam : awayTeam;
-    const defTeam = isHomeAttacking ? awayTeam : homeTeam;
-    const attPlayers = isHomeAttacking ? scaledHome : scaledAway;
-    const defPlayers = isHomeAttacking ? scaledAway : scaledHome;
-    const attShape = isHomeAttacking ? homeShape : awayShape;
-    const defShape = isHomeAttacking ? awayShape : homeShape;
+  };
 
-    const poss = simulatePossession(
-      attTeam,
-      defTeam,
-      attPlayers,
-      defPlayers,
-      isHomeAttacking ? hScore : aScore,
-      isHomeAttacking ? aScore : hScore,
-      attShape,
-      defShape,
-      rng
-    );
+  const processPossessionOutcome = (poss: ReturnType<typeof simulatePossession>, isHomeAttacking: boolean, minute: number) => {
     if (poss.event) matchEvents.push(poss.event);
     if (poss.goal) {
       if (isHomeAttacking) {
@@ -524,22 +506,51 @@ export const quickSimMatch = (
       if (poss.scorer) addPlayerStat(updatedPlayers, poss.scorer.id, 'goals');
       if (poss.assister) addPlayerStat(updatedPlayers, poss.assister.id, 'assists');
     }
-    if (poss.foul) {
-      const playerId = poss.foul.player.id;
-      if (sentOffPlayers.has(playerId)) continue;
-      if (poss.foul.type === 'Y') {
-        if (matchYellowCards.has(playerId)) {
-          if (random() < ENGINE_CONFIG.SECOND_YELLOW_RED_CHANCE) {
-            addPlayerStat(updatedPlayers, playerId, 'yellowCards');
-            sendOffPlayer(playerId, minute);
-            matchEvents.push(`${poss.foul.player.name} receives a second yellow and is sent off.`);
-          }
-        } else {
-          addPlayerStat(updatedPlayers, playerId, 'yellowCards');
-          matchYellowCards.add(playerId);
-        }
-      } else {
+  };
+
+  const handleFoulAndCard = (playerId: string, playerName: string, minute: number) => {
+    if (sentOffPlayers.has(playerId)) return false;
+    addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+    if (matchYellowCards.has(playerId)) {
+      if (random() < ENGINE_CONFIG.SECOND_YELLOW_RED_CHANCE) {
         sendOffPlayer(playerId, minute);
+        matchEvents.push(`${playerName} receives a second yellow and is sent off.`);
+        return true;
+      }
+      return false;
+    }
+    matchYellowCards.add(playerId);
+    return false;
+  };
+
+  for (let i = 0; i < ENGINE_CONFIG.TOTAL_POSSESSIONS; i++) {
+    const minute = Math.max(1, Math.min(90, Math.ceil(((i + 1) * 90) / ENGINE_CONFIG.TOTAL_POSSESSIONS)));
+    handleSubstitutionCheckpoints(minute);
+    const isHomeAttacking = ((i + (firstAttackIsHome ? 0 : 1)) % 2) === 0;
+    const attTeam = isHomeAttacking ? homeTeam : awayTeam;
+    const defTeam = isHomeAttacking ? awayTeam : homeTeam;
+    const attPlayers = isHomeAttacking ? scaledHome : scaledAway;
+    const defPlayers = isHomeAttacking ? scaledAway : scaledHome;
+    const attShape = isHomeAttacking ? homeShape : awayShape;
+    const defShape = isHomeAttacking ? awayShape : homeShape;
+
+    const poss = simulatePossession(
+      attTeam!,
+      defTeam!,
+      attPlayers,
+      defPlayers,
+      isHomeAttacking ? hScore : aScore,
+      isHomeAttacking ? aScore : hScore,
+      attShape,
+      defShape,
+      random
+    );
+    processPossessionOutcome(poss, isHomeAttacking, minute);
+    if (poss.foul) {
+      if (poss.foul.type === 'R') {
+        sendOffPlayer(poss.foul.player.id, minute);
+      } else {
+        handleFoulAndCard(poss.foul.player.id, poss.foul.player.name, minute);
       }
     }
   }
@@ -558,7 +569,7 @@ export const quickSimMatch = (
     isDraw: hScore === aScore,
     teamTactics: homeTeam.tactics,
     updatedPlayers,
-    rng,
+    rng: random,
   });
   applySharedPostMatchAccounting({
     teamParticipants: awayParticipants,
@@ -570,25 +581,25 @@ export const quickSimMatch = (
     isDraw: aScore === hScore,
     teamTactics: awayTeam.tactics,
     updatedPlayers,
-    rng,
+    rng: random,
   });
-  applyMatchInjuries(homeParticipants, homeMinutes, updatedPlayers, rng)
+  applyMatchInjuries(homeParticipants, homeMinutes, updatedPlayers, random)
     .forEach(event => matchEvents.push(`${event.playerName} suffers a ${event.injuryType} and will miss ${event.weeks} week${event.weeks === 1 ? '' : 's'}.`));
-  applyMatchInjuries(awayParticipants, awayMinutes, updatedPlayers, rng)
+  applyMatchInjuries(awayParticipants, awayMinutes, updatedPlayers, random)
     .forEach(event => matchEvents.push(`${event.playerName} suffers a ${event.injuryType} and will miss ${event.weeks} week${event.weeks === 1 ? '' : 's'}.`));
 
   let winnerTeamId: string | undefined;
   let resolution: Fixture['resolution'] | undefined;
   if (fixture.isKnockout) {
     if (hScore === aScore) {
-      const homePenaltyEdge = currentHomeXI.reduce((sum, player) => sum + player.overallRating, 0) + (GLOBAL_HOME_ADVANTAGE * 50);
+      const homePenaltyEdge = currentHomeXI.reduce((sum, player) => sum + player.overallRating, 0) + (GLOBAL_HOME_ADVANTAGE * ENGINE_CONFIG.KNOCKOUT.PENALTY_ADVANTAGE_MULTIPLIER);
       const awayPenaltyEdge = currentAwayXI.reduce((sum, player) => sum + player.overallRating, 0);
       const totalEdge = Math.max(1, homePenaltyEdge + awayPenaltyEdge);
       winnerTeamId = (random() * totalEdge) < homePenaltyEdge ? homeTeam.id : awayTeam.id;
       resolution = 'penalties';
-      matchEvents.push(`${updatedTeams[winnerTeamId].name} keep their nerve and advance on penalties.`);
+      matchEvents.push(`${updatedTeams[winnerTeamId]!.name} keep their nerve and advance on penalties.`);
     } else {
-      winnerTeamId = hScore > aScore ? homeTeam.id : awayTeam.id;
+      winnerTeamId = hScore > aScore ? homeTeam!.id : awayTeam!.id;
       resolution = 'regular';
     }
   }
@@ -608,8 +619,8 @@ export const quickSimMatch = (
     lastStartingXI: matchStarters.map(p => p.id),
   });
 
-  updatedTeams[homeTeam.id] = updateLog(homeTeam, hScore, aScore, homeStarters);
-  updatedTeams[awayTeam.id] = updateLog(awayTeam, aScore, hScore, awayStarters);
+  updatedTeams[homeTeam.id] = updateLog(homeTeam!, hScore, aScore, homeStarters);
+  updatedTeams[awayTeam.id] = updateLog(awayTeam!, aScore, hScore, awayStarters);
 
   return { players: updatedPlayers, teams: updatedTeams, fixture: updatedFixture, events: matchEvents };
 };

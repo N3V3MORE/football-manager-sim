@@ -1,7 +1,12 @@
 import { Slot, getSlotsForFormation } from '../constants/formations';
 import { Player, Team } from '../models/types';
-import { LaneTag, RoleTag, ShapeAccumulator, TeamShapeProfile } from './matchTypes';
+import { LaneTag, RoleTag, TeamShapeProfile } from './matchTypes';
 import { inferRoleTag } from './matchUtils';
+
+type ShapeAccumulator = {
+  gkDistributionAccumulator: number;
+  gkSamples: number;
+};
 
 const createRoleLoad = (): Record<RoleTag, number> => ({
   GK: 0,
@@ -42,6 +47,9 @@ const inferLineFromRole = (role: RoleTag): 'def' | 'mid' | 'fwd' => {
 const addGkDistributionSample = (accumulator: ShapeAccumulator, role: RoleTag, player: Player) => {
   if (role !== 'GK') return;
   accumulator.gkSamples += 1;
+  // gk_kicking takes priority over gk_reflexes as the primary distribution stat because
+  // kicking directly models a goalkeeper's ability to launch accurate long passes and set
+  // play in motion, which matters more for build-out support than shot-stopping reflexes.
   accumulator.gkDistributionAccumulator += (
     ((player.stats.passing || 50) * 0.35) +
     ((player.stats.gk_kicking || player.stats.gk_reflexes || 50) * 0.4) +

@@ -32,29 +32,37 @@ export const buyPlayerState = (
 
   if (!userTeam || !player) {
     return {
-      patch: state,
+      patch: {},
       result: { success: false, message: 'Invalid team or player.' },
     };
   }
 
   if (userTeam.budget < fee) {
     return {
-      patch: state,
+      patch: {},
       result: { success: false, message: 'Insufficient transfer funds.' },
     };
   }
 
   if (fee < player.askingPrice * 0.85) {
     return {
-      patch: state,
+      patch: {},
       result: { success: false, message: `The club rejected your bid of GBP ${fee}m.` },
     };
   }
 
   if (wageOffered > 0 && wageOffered < player.wage * 0.9) {
     return {
-      patch: state,
+      patch: {},
       result: { success: false, message: `${player.name} rejected your wage offer of GBP ${wageOffered}k/w.` },
+    };
+  }
+
+  const isSelfTransfer = player.teamId === userTeam.id;
+  if (isSelfTransfer) {
+    return {
+      patch: {},
+      result: { success: false, message: 'Player is already at your club.' },
     };
   }
 
@@ -83,7 +91,7 @@ export const buyPlayerState = (
       teams: {
         ...state.teams,
         [userTeam.id]: updatedUserTeam,
-        ...(updatedSellingTeam && sellingTeam ? { [sellingTeam.id]: updatedSellingTeam } : {}),
+        ...(updatedSellingTeam ? { [player.teamId]: updatedSellingTeam } : {}),
       },
       players: { ...state.players, [playerId]: updatedPlayer },
     },

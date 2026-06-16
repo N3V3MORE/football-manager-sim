@@ -1,3 +1,4 @@
+// 621-line monolithic file that should be split into command handlers, validators, and simulators.
 import { Fixture, Formation, TeamTactics } from '../models/types';
 import { getSeasonWeekLimit } from '../core/leagueUtils';
 import { isPlayerUnavailable } from '../core/playerStatusUtils';
@@ -369,7 +370,7 @@ const buildSnapshot = (payload: AgentPayload = {}) => {
   };
 };
 
-const getInitialTeamId = () => Object.keys(initGameData().teams)[0];
+const getInitialTeamId = () => Object.keys(initGameData().teams)[0]!;
 
 const applyAssistantActions = (payload: AgentPayload) => {
   const current = state();
@@ -398,7 +399,7 @@ const quickSimNext = (payload: AgentPayload) => {
   const fixture = getNextFixture(readString(payload, 'fixtureId'));
   if (fixture.isPlayed) throw new Error(`Fixture ${fixture.id} is already played`);
   state().playMatch(fixture.id);
-  return fixtureSummary(state().fixtures[fixture.id]);
+  return fixtureSummary(state().fixtures[fixture.id]!);
 };
 
 const liveSimNext = (payload: AgentPayload) => {
@@ -416,7 +417,7 @@ const liveSimNext = (payload: AgentPayload) => {
   }
 
   return {
-    fixture: fixtureSummary(state().fixtures[fixture.id]),
+    fixture: fixtureSummary(state().fixtures[fixture.id]!),
     events,
     liveMatchActive: Boolean(state().liveMatches[fixture.id]),
   };
@@ -541,7 +542,7 @@ const runAgentCommand = (command: AgentCommand, payload?: AgentPayload): AgentCo
     else if (command === 'validate') data = validateAgentGameState();
     else if (command === 'snapshot') data = buildSnapshot(payload);
     else if (command === 'rawState') data = state();
-    else if (command === 'initialize') state().initializeGame(readString(payload, 'teamId') || getInitialTeamId());
+    else if (command === 'initialize') state().initializeGame(readString(payload, 'teamId') ?? getInitialTeamId());
     else if (command === 'changeTeam') state().changeTeam(readString(payload, 'teamId') || '');
     else if (command === 'applyAssistantActions') data = applyAssistantActions(payload);
     else if (command === 'applyInboxAction') state().applyInboxAction(readString(payload, 'messageId') || '');

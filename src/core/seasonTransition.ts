@@ -184,9 +184,13 @@ export const advanceSeason = (
       resetPlayerSeasonStats(player),
     ])
   );
+  // Safe: DIVISION_ORDER is a fixed tuple of LeagueDivision keys, so fromEntries produces
+  // a record with exactly those keys mapped to Team[].
   const divisionTables = Object.fromEntries(
     DIVISION_ORDER.map(division => [division, getDivisionTeams(contractAdjustedTeams, division)])
   ) as Record<LeagueDivision, Team[]>;
+  // Safe: iterating over contractAdjustedTeams entries produces string keys (team IDs)
+  // mapped to their Division values. Every entry has a valid string key and Division value.
   const nextDivisionByTeamId: Record<string, Division> = Object.fromEntries(
     Object.values(contractAdjustedTeams).map(team => [team.id, team.division])
   ) as Record<string, Division>;
@@ -267,7 +271,7 @@ export const advanceSeason = (
 
       return [teamId, resetTeamStats(nextTeam)];
     })
-  ) as Record<string, Team>;
+  ) as Record<string, Team>; // Safe: every entry is constructed as [string, Team] from the reviewed teams map.
 
   let lineupSeededPlayers = nextPlayers;
   const lineupSeededTeams = Object.fromEntries(
@@ -276,7 +280,7 @@ export const advanceSeason = (
       lineupSeededPlayers = seeded.players;
       return [teamId, seeded.team];
     })
-  ) as Record<string, Team>;
+  ) as Record<string, Team>; // Safe: every entry is constructed as [string, Team] from reseedTeamLineupForNewSeason.
 
   const europeQualifiedTeamIds = getSeasonEuropeQualifiedTeamIds(contractAdjustedTeams, competitions);
   if (europeQualifiedTeamIds.length > 0) {

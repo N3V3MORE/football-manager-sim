@@ -8,7 +8,7 @@ type TeamColorBadgeProps = {
   mirrored?: boolean;
 };
 
-export function TeamColorBadge({ name, isUser, mirrored = false }: TeamColorBadgeProps) {
+export const TeamColorBadge = React.memo(function TeamColorBadge({ name, isUser, mirrored = false }: TeamColorBadgeProps) {
   const theme = getTeamTheme(name);
 
   return (
@@ -33,7 +33,7 @@ export function TeamColorBadge({ name, isUser, mirrored = false }: TeamColorBadg
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },

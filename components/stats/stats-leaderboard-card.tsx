@@ -16,7 +16,7 @@ type StatsLeaderboardCardProps = {
   onToggle: () => void;
 };
 
-export function StatsLeaderboardCard({
+export default React.memo(function StatsLeaderboardCard({
   title,
   rows,
   isExpanded,
@@ -48,6 +48,7 @@ export function StatsLeaderboardCard({
     </TouchableOpacity>
   );
 }
+);
 
 const styles = StyleSheet.create({
   card: {

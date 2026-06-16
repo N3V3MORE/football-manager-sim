@@ -9,7 +9,7 @@ type CurrentTeamCardProps = {
   onChangeTeam: () => void;
 };
 
-export function CurrentTeamCard({ team, injuredCount = 0, expiringCount = 0, onChangeTeam }: CurrentTeamCardProps) {
+export default React.memo(function CurrentTeamCard({ team, injuredCount = 0, expiringCount = 0, onChangeTeam }: CurrentTeamCardProps) {
   const manager = team?.manager;
   const hasAlerts = injuredCount > 0 || expiringCount > 0;
 
@@ -40,6 +40,7 @@ export function CurrentTeamCard({ team, injuredCount = 0, expiringCount = 0, onC
     </View>
   );
 }
+);
 
 const styles = StyleSheet.create({
   card: {

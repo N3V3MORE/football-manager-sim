@@ -10,7 +10,7 @@ type TransferPlayerCardProps = {
   onAction: () => void;
 };
 
-export function TransferPlayerCard({
+export default React.memo(function TransferPlayerCard({
   player,
   subLabel,
   actionLabel,
@@ -42,6 +42,7 @@ export function TransferPlayerCard({
     </View>
   );
 }
+);
 
 const styles = StyleSheet.create({
   card: { backgroundColor: '#1e293b', padding: 12, borderRadius: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },

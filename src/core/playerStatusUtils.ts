@@ -6,6 +6,12 @@ export const isPlayerUnavailable = (player: Player) => (
   player.matchesSuspended > 0 || isPlayerInjured(player)
 );
 
+/**
+ * Returns a human-readable availability status string for UI display.
+ * This function bridges core status logic (suspension / injury checks) with
+ * presentation — it lives in core because the checks depend on core types,
+ * but the returned strings are intended for display purposes.
+ */
 export const getPlayerAvailabilityStatus = (player: Player) => {
   if (player.matchesSuspended > 0) {
     return `${player.matchesSuspended} match suspension${player.matchesSuspended === 1 ? '' : 's'}`;

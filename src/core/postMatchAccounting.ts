@@ -1,6 +1,6 @@
 import { Player, TeamTactics } from '../models/types';
 import { addPlayerStat } from './matchUtils';
-import { RandomGenerator, resolveRandom } from './random';
+import { RandomGenerator } from './random';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 
 export const CLEAN_SHEET_MINUTES_REQUIRED = 60;
@@ -82,7 +82,7 @@ export const applySharedPostMatchAccounting = ({
   rng,
   applyEnergyDrain = true,
 }: SharedPostMatchInput) => {
-  const random = resolveRandom(rng);
+  const random = rng || Math.random;
   applyWindowedCleanSheets(
     teamParticipants,
     teamStarterIds,
@@ -97,27 +97,28 @@ export const applySharedPostMatchAccounting = ({
     if (minutes <= 0) return;
 
     const drainMultiplier =
-      (teamTactics.tempo === 'Fast' ? ENGINE_CONFIG.TEMPO_FAST_DRAIN_MULTIPLIER : 1.0) *
-      (teamTactics.pressing === 'High' ? ENGINE_CONFIG.PRESSING_HIGH_DRAIN_MULTIPLIER : 1.0);
-    const drain = ENGINE_CONFIG.BASE_POST_MATCH_ENERGY_DRAIN * (minutes / 90) * drainMultiplier;
-    let rating = ENGINE_CONFIG.BASE_MATCH_RATING + (random() * ENGINE_CONFIG.MATCH_RATING_RANDOM_SPREAD + ENGINE_CONFIG.MATCH_RATING_RANDOM_SHIFT);
-    if (isWin) rating += ENGINE_CONFIG.MATCH_RATING_WIN_BONUS;
-    if (isDraw) rating += ENGINE_CONFIG.MATCH_RATING_DRAW_BONUS;
-    if (!isWin && !isDraw) rating -= ENGINE_CONFIG.MATCH_RATING_LOSS_PENALTY;
+      (teamTactics.tempo === 'Fast' ? ENGINE_CONFIG.POST_MATCH.TEMPO_FAST_DRAIN_MULTIPLIER : 1.0) *
+      (teamTactics.pressing === 'High' ? ENGINE_CONFIG.POST_MATCH.PRESSING_HIGH_DRAIN_MULTIPLIER : 1.0);
+    const drain = ENGINE_CONFIG.POST_MATCH.BASE_ENERGY_DRAIN * (minutes / 90) * drainMultiplier;
+    let rating = ENGINE_CONFIG.POST_MATCH.BASE_MATCH_RATING + (random() * ENGINE_CONFIG.POST_MATCH.MATCH_RATING_RANDOM_SPREAD + ENGINE_CONFIG.POST_MATCH.MATCH_RATING_RANDOM_SHIFT);
+    if (isWin) rating += ENGINE_CONFIG.POST_MATCH.MATCH_RATING_WIN_BONUS;
+    if (isDraw) rating += ENGINE_CONFIG.POST_MATCH.MATCH_RATING_DRAW_BONUS;
+    if (!isWin && !isDraw) rating -= ENGINE_CONFIG.POST_MATCH.MATCH_RATING_LOSS_PENALTY;
     if (concededGoalsTotal === 0 && (player.position === 'DEF' || player.position === 'GK')) {
-      rating += ENGINE_CONFIG.MATCH_RATING_CLEAN_SHEET_BONUS;
+      rating += ENGINE_CONFIG.POST_MATCH.MATCH_RATING_CLEAN_SHEET_BONUS;
     }
     rating += (player.impactCoefficient - 1.0);
-    if (minutes < 30) rating -= ENGINE_CONFIG.MATCH_RATING_SHORT_CAMEO_PENALTY;
+    if (minutes < 30) rating -= ENGINE_CONFIG.POST_MATCH.MATCH_RATING_SHORT_CAMEO_PENALTY;
     rating = Math.max(1.0, Math.min(10.0, Math.round(rating * 10) / 10));
 
+    const currentPlayer = updatedPlayers[player.id]!;
     updatedPlayers[player.id] = {
-      ...updatedPlayers[player.id],
+      ...currentPlayer,
       energy: applyEnergyDrain
-        ? Math.max(0, updatedPlayers[player.id].energy - drain)
-        : updatedPlayers[player.id].energy,
-      minutesPlayed: (updatedPlayers[player.id].minutesPlayed || 0) + minutes,
-      matchRatingHistory: [...(updatedPlayers[player.id].matchRatingHistory || []), rating],
-    };
+        ? Math.max(0, currentPlayer.energy - drain)
+        : currentPlayer.energy,
+      minutesPlayed: (currentPlayer.minutesPlayed || 0) + minutes,
+      matchRatingHistory: [...(currentPlayer.matchRatingHistory || []), rating],
+    } as Player;
   });
 };

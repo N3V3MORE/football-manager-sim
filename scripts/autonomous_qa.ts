@@ -15,8 +15,8 @@ async function runAutonomousQA() {
 
   console.log('--- TEST: TACTICS AND LINEUP SPAM ---');
   if (myPlayers.length > 2) {
-    const p1 = myPlayers[0];
-    const p2 = myPlayers[1];
+    const p1 = myPlayers[0]!;
+    const p2 = myPlayers[1]!;
 
     useGameStore.getState().swapPlayer(p1.id, p2.id, '0-0');
     useGameStore.getState().swapStartingSlots('T1', '0-0', '1-0');
@@ -28,7 +28,7 @@ async function runAutonomousQA() {
 
   console.log('--- TEST: TRANSFER EXTREMES ---');
   const otherTeamsPlayers = players.filter(player => player.teamId !== 'T1');
-  const target = otherTeamsPlayers[0];
+  const target = otherTeamsPlayers[0]!;
 
   let bidResult = useGameStore.getState().buyPlayer(target.id, 0, 10);
   console.log(`GBP 0 bid result: ${bidResult.message}`);
@@ -36,8 +36,8 @@ async function runAutonomousQA() {
   bidResult = useGameStore.getState().buyPlayer(target.id, 5000, 500);
   console.log(`GBP 5000m bid result: ${bidResult.message}`);
 
-  useGameStore.getState().listPlayerForSale(myPlayers[0].id, 0);
-  useGameStore.getState().unlistPlayer(myPlayers[0].id);
+  useGameStore.getState().listPlayerForSale(myPlayers[0]!.id, 0);
+  useGameStore.getState().unlistPlayer(myPlayers[0]!.id);
   console.log('[OK] Transfer listings toggled successfully');
 
   console.log('--- TEST: EMPTY TEAM MATCHES ---');
@@ -47,7 +47,7 @@ async function runAutonomousQA() {
     }));
   });
 
-  const fixtureId = Object.keys(state().fixtures)[0];
+  const fixtureId = Object.keys(state().fixtures)[0]!;
   useGameStore.getState().processMatchMinute(fixtureId, 15);
   console.log('[OK] Empty user squad did not break processMatchMinute');
 
@@ -55,7 +55,12 @@ async function runAutonomousQA() {
   console.log(`--- TEST: RAPID SEASON ADVANCE (${seasonWeeks} WEEKS) ---`);
   try {
     for (let i = 0; i < seasonWeeks; i++) {
-      useGameStore.getState().advanceWeek();
+      try {
+        useGameStore.getState().advanceWeek();
+      } catch (error) {
+        console.error(`[FAIL] Rapid advance failed at week ${i + 1}/${seasonWeeks}:`, error);
+        throw error;
+      }
     }
     console.log('[OK] Rapid week advance survived');
   } catch (error) {
@@ -65,10 +70,12 @@ async function runAutonomousQA() {
 
   const finalState = state();
   console.log('--- QA COMPLETE ---');
-  console.log(`Final Arsenal points: ${finalState.teams['T1'].points}`);
-  console.log(`Final Arsenal budget: GBP ${finalState.teams['T1'].budget.toFixed(1)}m`);
+  console.log(`Final Arsenal points: ${finalState.teams['T1']!.points}`);
+  console.log(`Final Arsenal budget: GBP ${finalState.teams['T1']!.budget.toFixed(1)}m`);
   console.log(`Board objectives met: ${finalState.boardObjectives.filter(objective => objective.met).length}/${finalState.boardObjectives.length}`);
 
+  // Reset state after QA run
+  useGameStore.getState().initializeGame('T1');
   process.exit(0);
 }
 

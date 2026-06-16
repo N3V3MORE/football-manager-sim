@@ -2,7 +2,7 @@ import { Player, Team, Fixture } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { applyTacticalAdaptation } from './tacticalAdaptationEngine';
 import { getSeasonWeekLimit } from './leagueUtils';
-import { RandomGenerator, resolveRandom } from './random';
+import { RandomGenerator } from './random';
 
 export { computeWeeklyTransfers } from './transferEngine';
 
@@ -21,7 +21,7 @@ export const computeWeeklyProgression = (
   news: string[];
   generatedNews: string[];
 } => {
-  const random = resolveRandom(rng);
+  const random = rng || Math.random;
   const playedFixtures = Object.values(fixtures).filter(f => f.week === currentWeek);
   const seasonWeekLimit = getSeasonWeekLimit(fixtures);
   const newNews: string[] = [];
@@ -35,12 +35,12 @@ export const computeWeeklyProgression = (
     return Math.abs((f.homeScore ?? 0) - (f.awayScore ?? 0)) >= 3;
   });
   if (bigWins.length > 0) {
-    const fixture = bigWins[Math.floor(random() * bigWins.length)];
+    const fixture = bigWins[Math.floor(random() * bigWins.length)]!;
     const winner = (fixture.homeScore! > fixture.awayScore!) ? teams[fixture.homeTeamId] : teams[fixture.awayTeamId];
     const loser = (fixture.homeScore! > fixture.awayScore!) ? teams[fixture.awayTeamId] : teams[fixture.homeTeamId];
     const winningScore = Math.max(fixture.homeScore!, fixture.awayScore!);
     const losingScore = Math.min(fixture.homeScore!, fixture.awayScore!);
-    newNews.push(`${winner.name} thrashes ${loser.name} ${winningScore}-${losingScore}!`);
+    newNews.push(`${winner!.name} thrashes ${loser!.name} ${winningScore}-${losingScore}!`);
   }
 
   const allPlayers = Object.values(players);
@@ -90,8 +90,8 @@ export const computeWeeklyProgression = (
     ? allPlayers.filter(p => teams[p.teamId]?.division === userDivision)
     : allPlayers;
   const sortedByGoals = [...divisionPlayers].sort((a, b) => b.goals - a.goals);
-  if (sortedByGoals.length > 0 && sortedByGoals[0].goals > 0) {
-    const top = sortedByGoals[0];
+  if (sortedByGoals.length > 0 && sortedByGoals[0]!.goals > 0) {
+    const top = sortedByGoals[0]!;
     newNews.push(`${top.name} (${teams[top.teamId]?.name}) leads the golden boot with ${top.goals} goals.`);
     if (random() > 0.5 && sortedByGoals.length > 1) {
       const contenderCount = Math.min(3, sortedByGoals.length - 1);

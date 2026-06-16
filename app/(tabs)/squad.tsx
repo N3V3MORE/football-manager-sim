@@ -8,13 +8,14 @@ import { Formation, Player, TeamTactics } from '@/src/models/types';
 import { getSlotsForFormation, Slot } from '@/src/constants/formations';
 import { getSlotFitScore, rebuildFormationMap, rebuildFormationSlotPlayers } from '@/src/core/formationMapUtils';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
-import { CompactPlayerCard } from '@/components/squad/compact-player-card';
+import CompactPlayerCard from '@/components/squad/compact-player-card';
 import { DraggableDot, getPitchSlotPosition, PITCH_DOT_SIZE, PITCH_SLOT_HEIGHT, PITCH_SLOT_WIDTH } from '@/components/squad/draggable-dot';
-import { FormationSelectionModal } from '@/components/squad/formation-selection-modal';
+import FormationSelectionModal from '@/components/squad/formation-selection-modal';
 import { PlayerPickerModal } from '@/components/squad/player-picker-modal';
 import { SquadInfoModal } from '@/components/squad/squad-info-modal';
-import { TacticSection } from '@/components/squad/tactic-section';
+import TacticSection from '@/components/squad/tactic-section';
 import { isPlayerUnavailable } from '@/src/core/playerStatusUtils';
+import { TACTIC_SECTIONS } from '@/constants/tactics';
 
 const FORMATIONS: Formation[] = [
   '4-3-3',
@@ -32,72 +33,12 @@ const FORMATIONS: Formation[] = [
 ];
 
 type SlotBounds = { x: number; y: number; w: number; h: number };
-type TacticConfig = {
-  key: keyof TeamTactics;
-  title: string;
-  options: string[];
-  descriptions: Record<string, string>;
-};
-
 const areFormationMapsEqual = (a: Record<string, string>, b: Record<string, string>) => {
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
   if (aKeys.length !== bKeys.length) return false;
   return aKeys.every(key => a[key] === b[key]);
 };
-
-const TACTIC_SECTIONS: TacticConfig[] = [
-  {
-    key: 'mentality',
-    title: 'Mentality',
-    options: ['Defensive', 'Balanced', 'Attacking'],
-    descriptions: {
-      Defensive: 'Focus on shape and discipline. Lower goal threat but 15% better defense.',
-      Balanced: 'Standard approach. No specific stat bonuses or penalties.',
-      Attacking: 'Push players forward. Increased shooting accuracy but vulnerable to counters.',
-    },
-  },
-  {
-    key: 'passingStyle',
-    title: 'Passing Style',
-    options: ['Short', 'Mixed', 'Direct'],
-    descriptions: {
-      Short: 'Patient buildup. Higher pass completion but fewer direct balls.',
-      Mixed: 'A balanced blend of short and direct passing.',
-      Direct: 'Bypass midfield more often. More through-balls, more risk.',
-    },
-  },
-  {
-    key: 'tempo',
-    title: 'Tempo',
-    options: ['Slow', 'Normal', 'Fast'],
-    descriptions: {
-      Slow: 'Control the game and conserve more energy.',
-      Normal: 'Standard rhythm and frequency of play.',
-      Fast: 'Higher intensity and chance creation, but burns more energy.',
-    },
-  },
-  {
-    key: 'defensiveLine',
-    title: 'Defensive Line',
-    options: ['Deep', 'Standard', 'High'],
-    descriptions: {
-      Deep: 'Protect space behind the defense but concede more midfield territory.',
-      Standard: 'Balanced defensive positioning.',
-      High: 'Compress the pitch, but risk through-balls behind.',
-    },
-  },
-  {
-    key: 'pressing',
-    title: 'Pressing',
-    options: ['None', 'Medium', 'High'],
-    descriptions: {
-      None: 'Sit off and conserve energy.',
-      Medium: 'Press selectively.',
-      High: 'Aggressive pressure with higher energy cost.',
-    },
-  },
-];
 
 export default function SquadScreen() {
   const userTeamId    = useGameStore(s => s.userTeamId);
@@ -127,7 +68,7 @@ export default function SquadScreen() {
   const sortedSquad = sortPlayersByPositionGroup(mySquad);
 
   const activeFormation = myTeam?.activeFormation || '4-3-3';
-  const baseFormation = activeFormation.split(' ')[0];
+  const baseFormation = activeFormation.split(' ')[0]!;
   const slots = getSlotsForFormation(activeFormation);
 
   const starters  = sortedSquad.filter(player => player.isStarting && !isPlayerUnavailable(player));
@@ -145,10 +86,10 @@ export default function SquadScreen() {
       const available = [...starters];
       arr.forEach((row, r) => {
          row.forEach((_, c) => {
-            const slot = slots[r][c];
+            const slot = slots[r]![c]!;
             let idx = available.findIndex(p => p.subPosition === slot.label);
             if (idx === -1) idx = available.findIndex(p => p.position === slot.pos);
-            if (idx !== -1) arr[r][c] = available.splice(idx, 1)[0];
+            if (idx !== -1) arr[r]![c] = available.splice(idx, 1)[0]!;
          });
       });
       arr.forEach((row) => {
@@ -172,8 +113,8 @@ export default function SquadScreen() {
 
   const measureSlots = () => {
      Object.keys(slotRefs.current).forEach(key => {
-        slotRefs.current[key]?.measure((x: number, y: number, w: number, h: number, px: number, py: number) => {
-           slotBounds.current[key] = { x: px, y: py, w, h };
+        slotRefs.current[key]?.measure((_x: number, _y: number, w: number, h: number, px: number, py: number) => {
+           slotBounds.current[key!] = { x: px, y: py, w, h };
         });
      });
   };
@@ -244,7 +185,7 @@ export default function SquadScreen() {
     setTactics(userTeamId, { [key]: value } as Partial<TeamTactics>);
   };
 
-  const activeSlot = activeSlotIndex !== null ? slots[activeSlotIndex.row]?.[activeSlotIndex.col] : null;
+  const activeSlot = activeSlotIndex !== null ? slots[activeSlotIndex.row]![activeSlotIndex.col]! : null;
   const pickerSections = activeSlot ? getPickerSections(activeSlot) : null;
   const tactics = myTeam?.tactics;
 
@@ -298,7 +239,7 @@ export default function SquadScreen() {
                            <View key={slotKey} style={[styles.pitchSlotAnchor, position]}>
                              <DraggableDot
                                 slot={slot}
-                                assigned={assigned}
+                                assigned={assigned ?? null}
                                 onPress={() => handleSlotPress(rowIdx, colIdx)}
                                 onDragBegin={() => { setScrollEnabled(false); measureSlots(); }}
                                 onDragEnd={(mx: number, my: number) => handleDragEnd(rowIdx, colIdx, mx, my)}

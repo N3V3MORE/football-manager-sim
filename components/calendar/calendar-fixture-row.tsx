@@ -12,7 +12,7 @@ type CalendarFixtureRowProps = {
   score: string | null;
 };
 
-export function CalendarFixtureRow({
+export const CalendarFixtureRow = React.memo(function CalendarFixtureRow({
   week,
   dateLabel,
   isHome,
@@ -51,7 +51,7 @@ export function CalendarFixtureRow({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: {

@@ -8,7 +8,7 @@ type PlayerPickerRowProps = {
   onPress: () => void;
 };
 
-export function PlayerPickerRow({ item, onPress }: PlayerPickerRowProps) {
+export default React.memo(function PlayerPickerRow({ item, onPress }: PlayerPickerRowProps) {
   const isSuspended = item.matchesSuspended > 0;
   const isExhausted = item.energy < 70;
   const warningColor = (isSuspended || isExhausted) ? '#ef4444' : undefined;
@@ -30,6 +30,7 @@ export function PlayerPickerRow({ item, onPress }: PlayerPickerRowProps) {
     </TouchableOpacity>
   );
 }
+);
 
 const styles = StyleSheet.create({
   pickerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#334155', gap: 10 },

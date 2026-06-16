@@ -2,6 +2,7 @@ import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../src/constants/for
 import { isPlayerSlotFit, rebuildFormationMap } from '../src/core/formationMapUtils';
 import { Formation, Team } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
+import { createSeededRandom } from './utils/seededRandom';
 
 const FORMATIONS: Formation[] = [
   '4-3-3',
@@ -21,16 +22,6 @@ const FORMATIONS: Formation[] = [
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
-
-const createSeededRandom = (seed: number) => {
-  let state = seed >>> 0;
-  return () => {
-    state += 0x6D2B79F5;
-    let value = Math.imul(state ^ (state >>> 15), 1 | state);
-    value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
-};
 
 const withSeededRandom = <T,>(seed: number, task: () => T) => {
   const originalRandom = Math.random;
@@ -61,12 +52,12 @@ const validateReferences = (label: string) => {
   const state = useGameStore.getState();
 
   Object.values(state.players).forEach(player => {
-    assert(state.teams[player.teamId], `${label}: ${player.name} points to missing team ${player.teamId}`);
+    assert(state.teams[player.teamId]!, `${label}: ${player.name} points to missing team ${player.teamId}`);
   });
 
   Object.values(state.fixtures).forEach(fixture => {
-    assert(state.teams[fixture.homeTeamId], `${label}: fixture ${fixture.id} has missing home team ${fixture.homeTeamId}`);
-    assert(state.teams[fixture.awayTeamId], `${label}: fixture ${fixture.id} has missing away team ${fixture.awayTeamId}`);
+    assert(state.teams[fixture.homeTeamId]!, `${label}: fixture ${fixture.id} has missing home team ${fixture.homeTeamId}`);
+    assert(state.teams[fixture.awayTeamId]!, `${label}: fixture ${fixture.id} has missing away team ${fixture.awayTeamId}`);
   });
 
   Object.values(state.teams).forEach(team => {
@@ -91,20 +82,20 @@ const validateUserLineup = (label: string, team: Team) => {
 
   Object.entries(team.formationMap || {}).forEach(([slotKey, playerId]) => {
     const [rowIndex, colIndex] = slotKey.split('-').map(Number);
-    const slot = slots[rowIndex]?.[colIndex];
-    const player = state.players[playerId];
+    const slot = slots[rowIndex!]?.[colIndex!];
+    const player = state.players[playerId]!;
     assert(slot, `${label}: ${team.name} stored map has invalid slot ${slotKey}`);
-    assert(player?.teamId === team.id, `${label}: ${team.name} stored map has invalid player ${playerId}`);
+    assert(player.teamId === team.id, `${label}: ${team.name} stored map has invalid player ${playerId}`);
     assert(player.isStarting, `${label}: ${player.name} is stored in map but not marked starting`);
     assert(isPlayerSlotFit(player, slot), `${label}: ${player.name} is stored in bad slot ${slot.label}`);
   });
 
   Object.entries(rebuiltMap).forEach(([slotKey, playerId]) => {
     const [rowIndex, colIndex] = slotKey.split('-').map(Number);
-    const slot = slots[rowIndex]?.[colIndex];
-    const player = state.players[playerId];
+    const slot = slots[rowIndex!]?.[colIndex!];
+    const player = state.players[playerId]!;
     assert(slot, `${label}: ${team.name} formation map has invalid slot ${slotKey}`);
-    assert(player?.teamId === team.id, `${label}: ${team.name} formation map has invalid player ${playerId}`);
+    assert(player.teamId === team.id, `${label}: ${team.name} formation map has invalid player ${playerId}`);
     assert(player.isStarting, `${label}: ${player.name} is mapped but not marked starting`);
     assert(isPlayerSlotFit(player, slot), `${label}: ${player.name} is mapped to bad slot ${slot.label}`);
   });
@@ -116,7 +107,7 @@ const initializeUserTeam = (formation: Formation) => {
   assert(userTeamId, 'User team should be selected after initialization');
   useGameStore.getState().setFormation(userTeamId, formation);
 
-  const userTeam = useGameStore.getState().teams[userTeamId];
+  const userTeam = useGameStore.getState().teams[userTeamId]!;
   assert(userTeam, `Missing initialized user team ${userTeamId}`);
   return userTeam;
 };
@@ -132,7 +123,7 @@ const checkSeasonSkipContinuity = () => {
   useGameStore.getState().skipToEndOfSeason();
 
   const state = useGameStore.getState();
-  const after = state.teams[before.id];
+  const after = state.teams[before.id]!;
   assert(after, `Missing user team after season skip ${before.id}`);
   assert(after.activeFormation === beforeFormation, 'Season skip changed the user formation');
   assert(JSON.stringify(after.tactics) === beforeTactics, 'Season skip changed user tactics');
@@ -156,7 +147,7 @@ const checkCorruptedMapRecovery = () => {
     teams: {
       ...state.teams,
       [team.id]: {
-        ...state.teams[team.id],
+        ...state.teams[team.id]!,
         formationMap: {
           '0-0': keeper.id,
           '3-0': forward.id,
@@ -166,7 +157,7 @@ const checkCorruptedMapRecovery = () => {
   }));
 
   useGameStore.getState().setFormation(team.id, team.activeFormation);
-  validateUserLineup('corrupted map recovery', useGameStore.getState().teams[team.id]);
+  validateUserLineup('corrupted map recovery', useGameStore.getState().teams[team.id]!);
 };
 
 const checkBenchBounds = () => {
@@ -178,7 +169,7 @@ const checkBenchBounds = () => {
   const userPlayers = teamPlayers(userTeamId);
   const bench = userPlayers.filter(player => player.isSub && !player.isStarting);
   assert(bench.length <= 7, `User bench should not exceed 7 players, got ${bench.length}`);
-  validateUserLineup('3-4-3 setup', state.teams[userTeamId]);
+  validateUserLineup('3-4-3 setup', state.teams[userTeamId]!);
 };
 
 const checkManagerProfilesLoaded = () => {

@@ -9,7 +9,7 @@ type TacticSectionProps = {
   onSelect: (option: string) => void;
 };
 
-export function TacticSection({
+export default React.memo(function TacticSection({
   title,
   selectedOption,
   options,
@@ -38,6 +38,7 @@ export function TacticSection({
     </View>
   );
 }
+);
 
 const styles = StyleSheet.create({
   tacticsSection: { gap: 10 },

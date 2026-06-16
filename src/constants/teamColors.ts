@@ -48,7 +48,7 @@ export const getTeamTheme = (teamName: string): TeamTheme => {
             (lower.includes('sheffield') && kl === 'sheffield utd') ||
             (lower.includes('nott') && kl === 'nottingham forest');
     });
-    if (fuzzyKey) return TEAM_COLORS[fuzzyKey];
+    if (fuzzyKey) return TEAM_COLORS[fuzzyKey]!;
     return { primary: '#f8fafc', secondary: '#0f172a', stadium: 'Community Stadium', founded: 1900 };
 };
 

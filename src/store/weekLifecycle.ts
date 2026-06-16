@@ -1,10 +1,10 @@
 import { GameState, InboxMessage, Team } from '../models/types';
-import { resolveCompetitionProgression } from '../core/competitionEngine';
 import { quickSimMatch } from '../core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../core/progressionEngine';
 import { getSeasonWeekLimit } from '../core/leagueUtils';
 import { runBoardReview } from '../core/boardEngine';
 import { advanceSeason } from '../core/seasonTransition';
+import { resolveCompetitionProgression } from '../core/competitionEngine';
 import {
   applySeasonEndToCareer,
   buildSeasonSummary,
@@ -22,6 +22,7 @@ import {
   mergeInboxMessages,
   pruneInboxMessagesForManagedTeam,
 } from './inboxHelpers';
+
 
 export type WeeklyLifecycleState = GameState & {
   liveMatches: Record<string, LiveMatchState>;
@@ -49,29 +50,33 @@ const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TSt
   let inboxMessages = state.inboxMessages;
 
   weekFixtures.forEach(fixtureToPlay => {
-    const previousPlayers = updatedPlayers;
-    const { players, teams, fixture } = quickSimMatch(
-      fixtureToPlay.id,
-      updatedPlayers,
-      updatedTeams,
-      updatedFixtures,
-      state.userTeamId
-    );
-    updatedPlayers = players;
-    updatedTeams = teams;
-    updatedFixtures = { ...updatedFixtures, [fixtureToPlay.id]: fixture };
-    updatedLiveMatches = removeLiveMatchFixture(updatedLiveMatches, fixtureToPlay.id);
+    try {
+      const previousPlayers = updatedPlayers;
+      const { players, teams, fixture } = quickSimMatch(
+        fixtureToPlay.id,
+        updatedPlayers,
+        updatedTeams,
+        updatedFixtures,
+        state.userTeamId
+      );
+      updatedPlayers = players;
+      updatedTeams = teams;
+      updatedFixtures = { ...updatedFixtures, [fixtureToPlay.id]: fixture };
+      updatedLiveMatches = removeLiveMatchFixture(updatedLiveMatches, fixtureToPlay.id);
 
-    const postMatchReport = generatePostMatchReportMessage({
-      currentWeek: state.currentWeek,
-      userTeamId: state.userTeamId,
-      fixture,
-      teams,
-      players,
-      previousPlayers,
-    });
-    if (postMatchReport) {
-      inboxMessages = mergeInboxMessages(inboxMessages, [postMatchReport]);
+      const postMatchReport = generatePostMatchReportMessage({
+        currentWeek: state.currentWeek,
+        userTeamId: state.userTeamId,
+        fixture,
+        teams,
+        players,
+        previousPlayers,
+      });
+      if (postMatchReport) {
+        inboxMessages = mergeInboxMessages(inboxMessages, [postMatchReport]);
+      }
+    } catch (e) {
+      console.error('playCurrentWeekFixtures: failed to play fixture', fixtureToPlay.id, e);
     }
   });
 
@@ -126,25 +131,25 @@ const applyBoardReview = <TState extends WeeklyLifecycleState>(state: TState, re
     }
   );
 
-  const nextState = {
-    ...state,
-    teams: {
-      ...state.teams,
-      [teamBefore.id]: {
-        ...teamBefore,
-        boardApproval: review.nextApproval,
-        manager: review.nextManager,
+    const nextState = {
+      ...state,
+      teams: {
+        ...state.teams,
+        [teamBefore.id]: {
+          ...teamBefore,
+          boardApproval: review.nextApproval,
+          manager: review.nextManager,
+        } as Team,
       },
-    },
-    boardObjectives: review.updatedObjectives,
-  };
+      boardObjectives: review.updatedObjectives,
+    };
 
   return {
     nextState,
     boardMessages: generateBoardInboxMessages({
       week: reviewWeek,
       teamBefore,
-      teamAfter: nextState.teams[teamBefore.id],
+      teamAfter: nextState.teams[teamBefore.id]!,
       objectivesBefore: state.boardObjectives,
       objectivesAfter: nextState.boardObjectives,
     }),
@@ -225,7 +230,7 @@ const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
     };
   }
 
-  const userTeam = state.teams[state.userTeamId];
+  const userTeam = state.teams[state.userTeamId!]!;
   const isSacked = state.careerRecord.consecutiveLowApprovalWeeks >= 4;
   const seasonSummary = buildSeasonSummary(
     state.careerRecord.seasonsManaged + 1,

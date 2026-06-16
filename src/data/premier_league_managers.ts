@@ -1,3 +1,4 @@
+// Static 2024/25 season snapshot; should be updated for new seasons.
 export interface PremierLeagueManagerSource {
   teamName: string;
   manager: string;

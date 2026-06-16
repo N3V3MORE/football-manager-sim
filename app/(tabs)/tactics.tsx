@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '@/src/store/gameStore';
 import { TeamTactics } from '@/src/models/types';
+import { TACTIC_SECTIONS } from '@/constants/tactics';
 
 export default function TacticsScreen() {
   const userTeamId = useGameStore(s => s.userTeamId);
@@ -21,13 +22,13 @@ export default function TacticsScreen() {
     );
   }
 
-  const renderSection = <K extends keyof TeamTactics>(
+  const renderSection = (
     title: string,
-    key: K,
-    options: TeamTactics[K][],
-    descriptions: Record<TeamTactics[K], string>
+    key: keyof TeamTactics,
+    options: string[],
+    descriptions: Record<string, string>
   ) => {
-    const selectedOption = tactics[key];
+    const selectedOption = tactics[key] as string;
 
     return (
       <View style={styles.section}>
@@ -59,60 +60,9 @@ export default function TacticsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {renderSection(
-          'Mentality', 
-          'mentality', 
-          ['Defensive', 'Balanced', 'Attacking'],
-          {
-            Defensive: 'Focus on shape and discipline. Lower goal threat but 15% better defense.',
-            Balanced: 'Standard approach. No specific stat bonuses or penalties.',
-            Attacking: 'Push players forward. Increased shooting accuracy but vulnerable to counters.',
-          }
-        )}
-
-        {renderSection(
-          'Passing Style', 
-          'passingStyle', 
-          ['Short', 'Mixed', 'Direct'],
-          {
-            Short: 'Patient buildup. Higher pass completion but fewer "Direct-to-Goal" balls.',
-            Mixed: 'A blend of both. Versatile and unpredictable.',
-            Direct: 'Bypass the midfield. More frequent through-balls but higher risk of losing possession.',
-          }
-        )}
-
-        {renderSection(
-          'Tempo', 
-          'tempo', 
-          ['Slow', 'Normal', 'Fast'],
-          {
-            Slow: 'Control the game. Conserves 25% more player energy.',
-            Normal: 'Standard frequency of play.',
-            Fast: 'Intense speed. Better for catching defenses off guard, but uses 35% more energy.',
-          }
-        )}
-
-        {renderSection(
-          'Defensive Line', 
-          'defensiveLine', 
-          ['Deep', 'Standard', 'High'],
-          {
-            Deep: 'Park the bus. Great against long balls, but gives the opponent more space in midfield.',
-            Standard: 'Balanced positioning.',
-            High: 'Squeeze the pitch. Better for interceptions, but highly vulnerable to through-balls.',
-          }
-        )}
-
-        {renderSection(
-          'Pressing', 
-          'pressing', 
-          ['None', 'Medium', 'High'],
-          {
-            None: 'Sit back. Conserves energy massively.',
-            Medium: 'Press selectively.',
-            High: 'Full-court relentless pressure. 30% better tackling, but astronomical energy drain.',
-          }
-        )}
+        {TACTIC_SECTIONS.map((section) => (
+          renderSection(section.title, section.key, section.options, section.descriptions)
+        ))}
       </ScrollView>
     </SafeAreaView>
   );

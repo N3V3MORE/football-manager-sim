@@ -82,6 +82,6 @@ export const BASE_FORMATION_SLOTS: Record<string, Slot[][]> = {
 };
 
 export const getSlotsForFormation = (formation: string): Slot[][] => {
-  const base = formation.split(' ')[0];
-  return BASE_FORMATION_SLOTS[base] || BASE_FORMATION_SLOTS['4-3-3'];
+  const base = formation.split(' ')[0]!;
+  return BASE_FORMATION_SLOTS[base] || BASE_FORMATION_SLOTS['4-3-3']!;
 };

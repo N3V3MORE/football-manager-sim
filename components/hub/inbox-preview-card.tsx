@@ -10,7 +10,7 @@ type InboxPreviewCardProps = {
 
 
 
-export function InboxPreviewCard({ messages, unreadCount, onPress }: InboxPreviewCardProps) {
+export default React.memo(function InboxPreviewCard({ messages, unreadCount, onPress }: InboxPreviewCardProps) {
   const latestMessage = messages[0];
 
   return (
@@ -39,6 +39,7 @@ export function InboxPreviewCard({ messages, unreadCount, onPress }: InboxPrevie
     </TouchableOpacity>
   );
 }
+);
 
 const styles = StyleSheet.create({
   card: {

@@ -17,6 +17,7 @@ import { buildGenericManager, deriveInitialBoardApproval, hydrateManagerContext 
 import { buildLegacyInboxMessages } from './inboxHelpers';
 import { LiveMatchState } from './liveMatchHelpers';
 import { buildManagedTeamObjectives } from './managedTeamObjectives';
+import { TEMP_TEAM_ID } from '../constants';
 
 export type PersistedStoreState = Partial<GameState & {
   liveMatches: Record<string, LiveMatchState>;
@@ -50,13 +51,20 @@ export const DEFAULT_GAME_STATE: GameState = {
 
 export const safeStorage = {
   getItem: async (key: string) => {
-    try { return await AsyncStorage.getItem(key); } catch { return null; }
+    try { return await AsyncStorage.getItem(key); } catch (error) {
+      console.warn('AsyncStorage getItem failed:', error);
+      return null;
+    }
   },
   setItem: async (key: string, value: string) => {
-    try { await AsyncStorage.setItem(key, value); } catch { /* silent */ }
+    try { await AsyncStorage.setItem(key, value); } catch (error) {
+      console.warn('AsyncStorage setItem failed:', error);
+    }
   },
   removeItem: async (key: string) => {
-    try { await AsyncStorage.removeItem(key); } catch { /* silent */ }
+    try { await AsyncStorage.removeItem(key); } catch (error) {
+      console.warn('AsyncStorage removeItem failed:', error);
+    }
   },
 };
 
@@ -160,9 +168,11 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
       Object.entries(state.teams).map(([teamId, team]) => {
         const typedTeam = (team && typeof team === 'object' ? team : {}) as Partial<Team>;
         const division = (typedTeam.division || 'Premier League') as Team['division'];
+        const countryId = (typedTeam.countryId || 'england') as string;
+        const clubClass = (typedTeam.clubClass || 'C') as string;
         const boardProfile = typedTeam.boardProfile && typeof typedTeam.boardProfile === 'object'
           ? typedTeam.boardProfile
-          : buildBoardProfile(typedTeam.clubClass || 'C', division, Boolean(typedTeam.isExternal));
+          : buildBoardProfile(clubClass, division, Boolean(typedTeam.isExternal));
         const managerSource = typedTeam.manager && typeof typedTeam.manager === 'object'
           ? typedTeam.manager as Manager
           : buildGenericManager(
@@ -178,6 +188,9 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
           teamId,
           {
             ...typedTeam,
+            division,
+            countryId,
+            clubClass,
             boardProfile,
             manager,
             transferSpend: Number.isFinite(typedTeam.transferSpend) ? typedTeam.transferSpend : 0,
@@ -248,8 +261,11 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
   const competitions = state.competitions && typeof state.competitions === 'object'
     ? state.competitions as Record<string, CompetitionState>
     : buildLegacyLeagueCompetitions(teams, fixtures, careerRecord.seasonsManaged + 1);
-  const userTeamId = typeof state.userTeamId === 'string' ? state.userTeamId : null;
-  const migratedBoardObjectives = userTeamId && teams[userTeamId]
+  let userTeamId = typeof state.userTeamId === 'string' ? state.userTeamId : null;
+  if (userTeamId === TEMP_TEAM_ID) {
+    userTeamId = Object.keys(teams)[0] || null;
+  }
+  const migratedBoardObjectives = userTeamId && teams[userTeamId!]
     ? reconcileBoardObjectives(
         state.boardObjectives,
         buildManagedTeamObjectives(teams[userTeamId], competitions)
@@ -259,6 +275,7 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
   return {
     ...state,
     currentWeek: Number.isFinite(state.currentWeek) && (state.currentWeek || 0) > 0 ? state.currentWeek : 1,
+    userTeamId,
     teams,
     players,
     fixtures,

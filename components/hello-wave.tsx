@@ -1,6 +1,7 @@
+import React from 'react';
 import Animated from 'react-native-reanimated';
 
-export function HelloWave() {
+export default React.memo(function HelloWave() {
   return (
     <Animated.Text
       style={{
@@ -13,7 +14,7 @@ export function HelloWave() {
         animationIterationCount: 4,
         animationDuration: '300ms',
       }}>
-      👋
+      {'👋'}
     </Animated.Text>
   );
-}
+});

@@ -4,32 +4,15 @@ import { useGameStore } from '@/src/store/gameStore';
 import { useMemo, useState } from 'react';
 import { Player } from '@/src/models/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatsLeaderboardCard, StatsLeaderboardRow } from '@/components/stats/stats-leaderboard-card';
+import StatsLeaderboardCard, { StatsLeaderboardRow } from '@/components/stats/stats-leaderboard-card';
 import { PageHeader } from '@/components/ui/page-header';
+import { getStatValue, PlayerStatKey } from '@/constants/statsUtils';
 
-type PlayerStatKey = 'goals' | 'assists' | 'cleanSheets' | 'yellowCards' | 'redCards';
 type PaneConfig = {
   title: string;
   stat: PlayerStatKey;
   rows: StatsLeaderboardRow[];
   valueColor?: string;
-};
-
-const getStatValue = (player: Player, stat: PlayerStatKey): number => {
-  switch (stat) {
-    case 'goals':
-      return player.goals;
-    case 'assists':
-      return player.assists;
-    case 'cleanSheets':
-      return player.cleanSheets;
-    case 'yellowCards':
-      return player.yellowCards;
-    case 'redCards':
-      return player.redCards;
-    default:
-      return 0;
-  }
 };
 
 const buildLeaderboard = (

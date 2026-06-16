@@ -13,21 +13,15 @@ import { buildStarterMinuteMap } from '../core/minuteMapUtils';
 import { applySharedPostMatchAccounting } from '../core/postMatchAccounting';
 import { applyMatchInjuries } from '../core/injuryEngine';
 import { isPlayerUnavailable } from '../core/playerStatusUtils';
-import { resolveCompetitionProgression } from '../core/competitionEngine';
 import {
   LiveMatchState,
   drainLiveMatchEnergy,
   ensureLiveTeamStarters,
   getPlayersByIds,
   getPossessionIndexForMinute,
-  removeLiveMatchFixture,
   updateTeamStats,
 } from './liveMatchHelpers';
-import {
-  generatePostMatchReportMessage,
-  generateSystemInboxMessages,
-  mergeInboxMessages,
-} from './inboxHelpers';
+import { applySharedPostMatchResolution } from './matchResultProcessing';
 
 type LiveMatchActionState = GameState & {
   liveMatches: Record<string, LiveMatchState>;
@@ -42,7 +36,7 @@ export const processLiveMatchMinuteState = (
   rng: RandomGenerator = defaultRandomGenerator
 ): { patch: LiveMatchActionPatch; event: string | null } => {
   let eventMsg: string | null = null;
-  const random = rng.next;
+  const random = rng;
   const fixture = state.fixtures[fixtureId];
   if (!fixture || fixture.isPlayed) return { patch: state, event: eventMsg };
 
@@ -51,8 +45,8 @@ export const processLiveMatchMinuteState = (
   if (updatedFixture.homeScore === null) updatedFixture.homeScore = 0;
   if (updatedFixture.awayScore === null) updatedFixture.awayScore = 0;
 
-  const homeTeam = state.teams[fixture.homeTeamId];
-  const awayTeam = state.teams[fixture.awayTeamId];
+  const homeTeam = state.teams[fixture.homeTeamId]!;
+  const awayTeam = state.teams[fixture.awayTeamId]!;
   const storedLiveState = state.liveMatches?.[fixtureId];
   const sentOffPlayers = new Set(storedLiveState?.sentOffPlayerIds || []);
   const sentOffMinutes = { ...(storedLiveState?.sentOffMinutes || {}) };
@@ -103,8 +97,8 @@ export const processLiveMatchMinuteState = (
     };
 
     const res = simulatePossession(
-      attacker,
-      defender,
+      attacker!,
+      defender!,
       attPlayers,
       defPlayers,
       isHomeAttacking ? updatedFixture.homeScore! : updatedFixture.awayScore!,
@@ -197,8 +191,8 @@ export const finishLiveMatchState = (
   if (!fixture || fixture.isPlayed) return state;
   const previousPlayers = state.players;
 
-  const homeTeam = state.teams[fixture.homeTeamId];
-  const awayTeam = state.teams[fixture.awayTeamId];
+  const homeTeam = state.teams[fixture.homeTeamId]!;
+  const awayTeam = state.teams[fixture.awayTeamId]!;
   const liveMatchState = state.liveMatches?.[fixtureId];
   const sentOffMinutes = liveMatchState?.sentOffMinutes || {};
   const sentOffPlayers = new Set(liveMatchState?.sentOffPlayerIds || []);
@@ -260,7 +254,7 @@ export const finishLiveMatchState = (
       const homePenaltyEdge = homeTeamStarters.reduce((sum, player) => sum + player.overallRating, 0) + 25;
       const awayPenaltyEdge = awayTeamStarters.reduce((sum, player) => sum + player.overallRating, 0);
       const totalEdge = Math.max(1, homePenaltyEdge + awayPenaltyEdge);
-      winnerTeamId = (rng.next() * totalEdge) < homePenaltyEdge ? homeTeam.id : awayTeam.id;
+      winnerTeamId = (rng() * totalEdge) < homePenaltyEdge ? homeTeam.id : awayTeam.id;
       resolution = 'penalties';
     } else {
       winnerTeamId = hScore > aScore ? homeTeam.id : awayTeam.id;
@@ -287,32 +281,24 @@ export const finishLiveMatchState = (
     },
   };
   const nextFixtures = { ...state.fixtures, [fixtureId]: updatedFixture };
-  const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, updatedTeams);
-  const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);
-  const postMatchReport = generatePostMatchReportMessage({
-    currentWeek: state.currentWeek,
-    userTeamId: state.userTeamId,
+  const resolved = applySharedPostMatchResolution({
+    state,
+    updatedPlayers,
+    updatedTeams,
+    updatedFixtures: nextFixtures,
+    updatedCompetitions: state.competitions,
     fixture: updatedFixture,
-    teams: updatedTeams,
-    players: updatedPlayers,
     previousPlayers,
+    liveMatches: state.liveMatches,
   });
 
   return {
-    fixtures: competitionProgression.fixtures,
-    competitions: competitionProgression.competitions,
+    fixtures: resolved.fixtures,
+    competitions: resolved.competitions,
     teams: updatedTeams,
     players: updatedPlayers,
-    news: competitionProgression.generatedNews.length > 0
-      ? [...competitionProgression.generatedNews, ...state.news].slice(0, 20)
-      : state.news,
-    liveMatches,
-    inboxMessages: mergeInboxMessages(
-      state.inboxMessages,
-      [
-        ...(postMatchReport ? [postMatchReport] : []),
-        ...generateSystemInboxMessages(state.currentWeek, competitionProgression.generatedNews),
-      ]
-    ),
+    news: resolved.news,
+    liveMatches: resolved.liveMatches,
+    inboxMessages: resolved.inboxMessages,
   };
 };

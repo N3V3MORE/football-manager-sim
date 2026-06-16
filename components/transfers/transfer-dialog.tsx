@@ -15,7 +15,7 @@ type TransferDialogProps = {
   onSubmit: () => void;
 };
 
-export function TransferDialog({
+export default React.memo(function TransferDialog({
   dialog,
   budget,
   onClose,
@@ -84,6 +84,7 @@ export function TransferDialog({
     </Modal>
   );
 }
+);
 
 const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },

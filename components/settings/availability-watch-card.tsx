@@ -7,7 +7,7 @@ type AvailabilityWatchCardProps = {
   players: Player[];
 };
 
-export function AvailabilityWatchCard({ players }: AvailabilityWatchCardProps) {
+export default React.memo(function AvailabilityWatchCard({ players }: AvailabilityWatchCardProps) {
   const visiblePlayers = players.slice(0, 4);
   const hiddenCount = Math.max(0, players.length - visiblePlayers.length);
 
@@ -38,6 +38,7 @@ export function AvailabilityWatchCard({ players }: AvailabilityWatchCardProps) {
     </View>
   );
 }
+);
 
 const styles = StyleSheet.create({
   card: {
