@@ -138,7 +138,7 @@ const applyBoardReview = <TState extends WeeklyLifecycleState>(state: TState, re
       },
     },
     boardObjectives: review.updatedObjectives,
-    boardReviewAppliedWeek: reviewWeek,
+    boardReviewAppliedWeek: reviewWeek + 1,
   };
 
   return {
@@ -331,6 +331,7 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
     ...nextState,
     players: transferState.players,
     teams: transferState.teams,
+    transfersAppliedWeek: nextState.currentWeek,
   };
 
   const boardReview = applyBoardReview(nextState, initialWeek);

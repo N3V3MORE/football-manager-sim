@@ -19,10 +19,11 @@ export const LEAGUE_COUNTRIES: LeagueCountryPyramid[] = [
 
 export const DEFAULT_COUNTRY_ID = LEAGUE_COUNTRIES[0]?.id ?? 'england';
 
-export const getLeagueCountry = (countryId?: string) => (
-  LEAGUE_COUNTRIES.find(country => country.id === (countryId || DEFAULT_COUNTRY_ID)) || LEAGUE_COUNTRIES[0]
-);
+export const getLeagueCountry = (countryId?: string) => {
+  const found = LEAGUE_COUNTRIES.find(country => country.id === (countryId || DEFAULT_COUNTRY_ID));
+  return found || LEAGUE_COUNTRIES[0] || { id: 'england', label: 'England', reelHint: '', divisions: [] as Division[] };
+};
 
 export const getLeagueCountryIndex = (countryId?: string) => (
-  Math.max(0, LEAGUE_COUNTRIES.findIndex(country => country.id === (countryId || DEFAULT_COUNTRY_ID)))
+  LEAGUE_COUNTRIES.findIndex(country => country.id === (countryId || DEFAULT_COUNTRY_ID))
 );

@@ -130,7 +130,7 @@ export const buildTeamShapeProfile = (
       const mapped = mapPlayerId ? takeBy(player => player.id === mapPlayerId) : undefined;
       const exact = mapped || takeBy(player => player.subPosition === slot.label || player.altPositions?.includes(slot.label));
       const positional = exact || takeBy(player => player.position === slot.pos);
-      const player = positional || takeBy(() => true);
+      const player = positional || takeBy(player => player.position !== 'GK' || slot.pos === 'GK');
       if (!player) return;
 
       const role = inferRoleTag(player);

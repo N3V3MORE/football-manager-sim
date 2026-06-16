@@ -53,11 +53,11 @@ export const safeStorage = {
   getItem: async (key: string) => {
     try { return await AsyncStorage.getItem(key); } catch { return null; }
   },
-  setItem: async (key: string, value: string) => {
-    try { await AsyncStorage.setItem(key, value); } catch { /* silent */ }
+    setItem: async (key: string, value: string) => {
+    try { await AsyncStorage.setItem(key, value); } catch (e) { console.warn('save failed:', e); }
   },
   removeItem: async (key: string) => {
-    try { await AsyncStorage.removeItem(key); } catch { /* silent */ }
+    try { await AsyncStorage.removeItem(key); } catch (e) { console.warn('remove failed:', e); }
   },
 };
 
@@ -288,7 +288,16 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
         Number.isFinite(state.currentWeek) && (state.currentWeek || 0) > 0 ? state.currentWeek || 1 : 1
       ),
     boardObjectives: migratedBoardObjectives,
-    liveMatches: state.liveMatches && typeof state.liveMatches === 'object' ? state.liveMatches : {},
+    liveMatches: state.liveMatches && typeof state.liveMatches === 'object'
+      ? Object.fromEntries(
+          Object.entries(state.liveMatches).filter(([, liveState]) => {
+            const ls = liveState as Partial<LiveMatchState>;
+            return Boolean(ls) && typeof ls === 'object' &&
+              Array.isArray(ls.homeStarterIds) && ls.homeStarterIds.length > 0 &&
+              Array.isArray(ls.awayStarterIds) && ls.awayStarterIds.length > 0;
+          })
+        )
+      : {},
     careerRecord,
   };
 };

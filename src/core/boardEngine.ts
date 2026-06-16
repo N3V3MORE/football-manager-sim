@@ -151,7 +151,7 @@ const buildSquadContextSignal = (
   const availablePlayers = squad.filter(player => !isPlayerUnavailable(player));
   const availableByPosition = availablePlayers.reduce<Record<'GK' | 'DEF' | 'MID' | 'FWD', number>>(
     (acc, player) => {
-      acc[player.position] += 1;
+      if (player.position in acc) acc[player.position] += 1;
       return acc;
     },
     { GK: 0, DEF: 0, MID: 0, FWD: 0 }
@@ -297,7 +297,7 @@ const buildCupObjective = (
   targetRound,
 });
 
-export const clampBoardMetric = (value: number) => Math.min(100, Math.max(0, value));
+export const clampBoardMetric = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
 
 export const describeBoardSeasonExpectations = (
   profile: BoardProfile,
@@ -550,7 +550,6 @@ const evaluateObjective = (
         approvalDelta += 8;
       }
       break;
-    case 'goalDiff':
     default:
       break;
   }
@@ -576,13 +575,13 @@ export const evaluateBoardObjectives = (
 
 export const getFormApprovalDelta = (form: string[]) => {
   if (!form || form.length === 0) return 0;
-  const last = form[form.length - 1];
-  if (last === 'L') return -2;
-  if (last === 'W') return 1;
-  return 0;
+  const recent = form.slice(-3);
+  const losses = recent.filter(r => r === 'L').length;
+  const wins = recent.filter(r => r === 'W').length;
+  return wins - losses;
 };
 
-const getReviewVerdict = (
+export const getReviewVerdict = (
   nextApproval: number,
   pressureScore: number,
   replacementRisk: number
@@ -631,7 +630,8 @@ export const runBoardReview = (
       const competition = objective.competitionId
         ? context?.competitions?.[objective.competitionId]
         : undefined;
-      const isCompetitionResolved = !competition || competition.eliminatedTeamIds.includes(team.id);
+      if (!competition) return;
+      const isCompetitionResolved = competition.eliminatedTeamIds.includes(team.id);
       if (!isSeasonComplete && !isCompetitionResolved) return;
       const penalty = objective.competitionId === 'europe'
         ? 5
@@ -728,7 +728,7 @@ export const shouldReplaceManagerAfterReview = (
   if (review.verdict === 'critical') {
     return {
       shouldReplace: true,
-      reason: review.reasons[0] || 'season targets were missed badly',
+      reason: review.reasons.find(r => r.length > 0) || 'season targets were missed badly',
     };
   }
 
@@ -741,7 +741,7 @@ export const shouldReplaceManagerAfterReview = (
   ) {
     return {
       shouldReplace: true,
-      reason: review.reasons[0] || 'results and board confidence both fell away',
+      reason: review.reasons.find(r => r.length > 0) || 'results and board confidence both fell away',
     };
   }
 
@@ -753,7 +753,7 @@ export const shouldReplaceManagerAfterReview = (
   ) {
     return {
       shouldReplace: true,
-      reason: review.reasons[0] || 'the board decided the trajectory was no longer acceptable',
+      reason: review.reasons.find(r => r.length > 0) || 'the board decided the trajectory was no longer acceptable',
     };
   }
 

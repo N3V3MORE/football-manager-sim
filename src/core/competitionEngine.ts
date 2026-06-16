@@ -507,7 +507,9 @@ export const resolveCompetitionProgression = (
 
       if (nextRoundIndex >= updatedCompetition.rounds.length || advancingTeamIds.length <= 1) {
         const finalFixture = currentRound.fixtureIds[currentRound.fixtureIds.length - 1];
-        updatedCompetition.championTeamId = advancingTeamIds[0];
+        if (advancingTeamIds.length > 0) {
+          updatedCompetition.championTeamId = advancingTeamIds[0];
+        }
         updatedCompetition.runnerUpTeamId = finalFixture ? resolveFixtureLoserId(nextFixtures[finalFixture]) : undefined;
         updatedCompetition.currentRound = currentRound.key;
         nextCompetitions[competition.id] = updatedCompetition;
@@ -563,7 +565,7 @@ export const getCompetitionResultForTeam = (
 
   const activeRound = competition.rounds.find(round => round.key === competition.currentRound);
   if (activeRound && activeRound.entrantTeamIds.includes(teamId)) {
-    return { competitionId: competition.id, name: competition.name, finish: activeRound.key };
+    return { competitionId: competition.id, name: competition.name, finish: 'not_qualified' };
   }
 
   return { competitionId: competition.id, name: competition.name, finish: 'not_qualified' };
@@ -653,6 +655,15 @@ export const getCompetitionPanelForTeam = (
       title,
       status: 'Exited',
       note: `Reached ${result.finish === 'not_qualified' ? 'qualification' : getCompetitionRoundLabel(result.finish)}`,
+      accent: getCompetitionAccent(competitionId),
+    };
+  }
+
+  if (!competition.rounds.length) {
+    return {
+      title,
+      status: 'Active',
+      note: 'Competition in progress',
       accent: getCompetitionAccent(competitionId),
     };
   }

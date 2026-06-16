@@ -19,5 +19,5 @@ export const createSeededRandomGenerator = (seed: number): RandomGenerator => {
 };
 
 export const resolveRandom = (rng?: RandomGenerator): (() => number) => {
-  return rng?.next || Math.random;
+  return typeof rng?.next === 'function' ? () => rng.next() : Math.random;
 };

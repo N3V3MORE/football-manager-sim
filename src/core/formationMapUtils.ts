@@ -87,7 +87,11 @@ export const rebuildFormationSlotPlayers = (
   slots.forEach((row, rowIdx) => {
     row.forEach((_, colIdx) => {
       if (slotPlayers[rowIdx][colIdx] || missingStarters.length === 0) return;
-      slotPlayers[rowIdx][colIdx] = missingStarters.shift() || null;
+      const fill = missingStarters.find(p => p.position !== 'GK' || slots[rowIdx][colIdx].pos === 'GK');
+      if (fill) {
+        const idx = missingStarters.indexOf(fill);
+        slotPlayers[rowIdx][colIdx] = missingStarters.splice(idx, 1)[0] || null;
+      }
     });
   });
 

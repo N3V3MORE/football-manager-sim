@@ -133,7 +133,13 @@ export const advanceSeason = (
 
     if (player.teamId === userTeamId) {
       const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId);
-      if (!destinationTeamId) return;
+      if (!destinationTeamId) {
+        contractAdjustedPlayers[player.id] = {
+          ...player,
+          contractLeft: 1,
+        };
+        return;
+      }
       contractAdjustedPlayers[player.id] = {
         ...player,
         teamId: destinationTeamId,
@@ -295,7 +301,7 @@ export const advanceSeason = (
     europeQualifiedTeamIds
   );
 
-  const boardObjectives = userTeamId && lineupSeededTeams[userTeamId] && lineupSeededTeams[userTeamId].division !== 'Continental'
+  const boardObjectives = userTeamId && lineupSeededTeams[userTeamId]
     ? buildBoardObjectives(
         lineupSeededTeams[userTeamId].clubClass || 'C',
         lineupSeededTeams[userTeamId].division as LeagueDivision,

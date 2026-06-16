@@ -35,7 +35,7 @@ export const computeWeeklyTransfers = (
     ]);
 
     const depthByPosition = squad.reduce<Record<PositionKey, number>>((acc, player) => {
-      if (!player.isTransferListed) acc[player.position] = (acc[player.position] || 0) + 1;
+      acc[player.position] = (acc[player.position] || 0) + 1;
       return acc;
     }, { GK: 0, DEF: 0, MID: 0, FWD: 0 });
     
@@ -45,7 +45,7 @@ export const computeWeeklyTransfers = (
       if (protectedPlayers.has(p.id) || p.isTransferListed) return;
 
       let shouldList = false;
-      const minutesShare = (p.minutesPlayed || 0) / (Math.max(1, team.played) * 90);
+      const minutesShare = Math.min(1, (p.minutesPlayed || 0) / (Math.max(1, team.played) * 90));
       const effectiveRating = getEffectiveRating(p);
 
       if (minutesShare > ENGINE_CONFIG.TRANSFER_LIST_MIN_MINUTES_SHARE && effectiveRating < 6.4 && random() < ENGINE_CONFIG.TRANSFER_LIST_POOR_FORM_CHANCE) {
@@ -91,7 +91,7 @@ export const computeWeeklyTransfers = (
     
     const weakestStarter = weakestPosition.weakest;
     const requiredUpgrade = weakestStarter.overallRating + 2;
-    const budgetLimit = updatedTeams[team.id].budget * 0.45;
+    const budgetLimit = Math.max(0, updatedTeams[team.id].budget) * 0.45;
 
     // Filter available targets from the global pool (ensure target team hasn't been modified heavily or isn't the buyer)
     const targets = globalListedPlayers.filter(p =>

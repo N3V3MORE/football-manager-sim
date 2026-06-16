@@ -20,7 +20,7 @@ export const isContractExpiringSoon = (player: Player) => player.contractLeft <=
 
 export const formatContractLength = (player: Player) => {
   const years = player.contractLeft;
+  if (!Number.isFinite(years) || years <= 0) return 'Expires now';
   if (years === 1) return '1y left';
-  if (years <= 0) return 'Expires now';
   return `${years}y left`;
 };

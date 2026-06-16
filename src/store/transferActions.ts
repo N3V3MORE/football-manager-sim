@@ -112,6 +112,7 @@ export const listPlayerForSaleState = (
 ): TransferActionPatch => {
   const player = state.players[playerId];
   if (!player || player.teamId !== state.userTeamId) return state;
+  if (!Number.isFinite(askingPrice) || askingPrice <= 0) return state;
   const players = updateTransferListingState(state.players, playerId, true, askingPrice);
   return players ? { players } : state;
 };
@@ -120,6 +121,8 @@ export const unlistPlayerState = (
   state: TransferActionState,
   playerId: string
 ): TransferActionPatch => {
+  const player = state.players[playerId];
+  if (!player || player.teamId !== state.userTeamId) return state;
   const players = updateTransferListingState(state.players, playerId, false, 0);
   return players ? { players } : state;
 };

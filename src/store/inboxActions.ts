@@ -70,22 +70,31 @@ export const applyInboxActionState = (
     return {
       players: nextPlayers,
       teams: nextTeams,
-      inboxMessages: clearContractWarningMessages(state.inboxMessages, playerId),
+      inboxMessages: clearContractWarningMessages(state.inboxMessages, playerId)
+        .map(item => item.id === messageId ? { ...item, isRead: true, action: undefined } : item),
     };
   } else if (message.action.type === 'accept_job_offer') {
     const { teamId } = message.action.payload;
     const nextTeam = state.teams[teamId];
-    if (!nextTeam) return state;
+    if (!nextTeam) {
+      return {
+        inboxMessages: state.inboxMessages.map(item => (
+          item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+        )),
+      };
+    }
 
     const boardObjectives = buildManagedTeamObjectives(nextTeam, state.competitions);
     const carriedMessages = pruneInboxMessagesForManagedTeam(
-      state.inboxMessages.filter(item => item.category !== 'career_job_offer'),
+      state.inboxMessages
+        .filter(item => item.category !== 'career_job_offer')
+        .map(item => item.id === messageId ? { ...item, isRead: true, action: undefined } : item),
       teamId
     );
     const nextAssistantMessages = generateAssistantWeekMessages({
       currentWeek: state.currentWeek,
       userTeamId: teamId,
-      teams: nextTeams,
+      teams: state.teams,
       players: nextPlayers,
       fixtures: state.fixtures,
     });

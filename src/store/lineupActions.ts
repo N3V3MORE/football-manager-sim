@@ -43,8 +43,8 @@ export const setFormationState = (
   const team = state.teams[teamId];
   if (!team) return state;
 
-  const baseNew = formation.split(' ')[0];
-  const baseOld = (team.activeFormation || '').split(' ')[0];
+  const baseNew = formation.split('-')[0];
+  const baseOld = (team.activeFormation || '').split('-')[0];
   const existingMap = team.formationMap || {};
   const hasExistingMap = Object.keys(existingMap).length > 0;
 

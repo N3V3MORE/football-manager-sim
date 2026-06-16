@@ -24,7 +24,14 @@ export const parsePreferredFormations = (value: string[]): Formation[] => (
 );
 
 export const calculateAgeFromDob = (dob: string) => {
-  const [day, month, year] = dob.split('/').map(Number);
+  let year: number;
+  let month: number;
+  let day: number;
+  if (dob.includes('/')) {
+    [day, month, year] = dob.split('/').map(Number);
+  } else {
+    [year, month, day] = dob.split('-').map(Number);
+  }
   const birth = new Date(year, month - 1, day);
   const today = new Date();
   let age = today.getFullYear() - birth.getFullYear();
@@ -249,6 +256,14 @@ const getGenericManagerIdentity = (division: Division, clubFit: number) => {
       transferIdentity: 'Cross-border recruitment with premium scouting',
       seasonExpectations: 'Compete deep into Europe',
       preferredFormations: clubFit >= 68 ? ['4-3-3', '4-2-3-1'] : ['4-4-2', '4-2-3-1'],
+    };
+  }
+  if (division === 'League Two') {
+    return {
+      tacticalIdentity: clubFit >= 58 ? 'High-tempo wing play with strong defensive base' : 'Compact and pragmatic football',
+      transferIdentity: 'Loans, free transfers and youth reliance',
+      seasonExpectations: clubFit >= 58 ? 'Push for promotion to League One' : 'Build stability and stay up',
+      preferredFormations: clubFit >= 58 ? ['4-4-2', '4-2-3-1'] : ['4-4-2', '3-5-2'],
     };
   }
   return {

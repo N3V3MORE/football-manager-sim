@@ -74,6 +74,9 @@ export const buildRoundRobinFixtures = (
   const circleIds: (string | null)[] = hasOddTeamCount ? [...teamIds, null] : [...teamIds];
   const numTeams = circleIds.length;
   const rounds = numTeams - 1;
+  if (weekSlots && weekSlots.length < rounds * 2) {
+    throw new RangeError(`buildRoundRobinFixtures requires weekSlots length >= ${rounds * 2} for ${teamIds.length} teams, got ${weekSlots.length}`);
+  }
   const firstHalf: { home: string; away: string; week: number }[] = [];
 
   for (let round = 0; round < rounds; round++) {

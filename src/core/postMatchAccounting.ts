@@ -1,5 +1,6 @@
 import { Player, TeamTactics } from '../models/types';
 import { addPlayerStat } from './matchUtils';
+import { clampToMatchMinutes } from './minuteMapUtils';
 import { RandomGenerator, resolveRandom } from './random';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 
@@ -67,8 +68,6 @@ type SharedPostMatchInput = {
   applyEnergyDrain?: boolean;
 };
 
-const clampToMatchMinutes = (value: number) => Math.max(0, Math.min(90, value));
-
 export const applySharedPostMatchAccounting = ({
   teamParticipants,
   teamStarterIds,
@@ -107,7 +106,7 @@ export const applySharedPostMatchAccounting = ({
     if (concededGoalsTotal === 0 && (player.position === 'DEF' || player.position === 'GK')) {
       rating += ENGINE_CONFIG.MATCH_RATING_CLEAN_SHEET_BONUS;
     }
-    rating += (player.impactCoefficient - 1.0);
+    rating += (player.impactCoefficient ?? 1.0) - 1.0;
     if (minutes < 30) rating -= ENGINE_CONFIG.MATCH_RATING_SHORT_CAMEO_PENALTY;
     rating = Math.max(1.0, Math.min(10.0, Math.round(rating * 10) / 10));
 
@@ -117,7 +116,7 @@ export const applySharedPostMatchAccounting = ({
         ? Math.max(0, updatedPlayers[player.id].energy - drain)
         : updatedPlayers[player.id].energy,
       minutesPlayed: (updatedPlayers[player.id].minutesPlayed || 0) + minutes,
-      matchRatingHistory: [...(updatedPlayers[player.id].matchRatingHistory || []), rating],
+      matchRatingHistory: [...(updatedPlayers[player.id].matchRatingHistory || []), rating].slice(-15),
     };
   });
 };

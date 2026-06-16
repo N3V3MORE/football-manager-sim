@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { CalendarFixtureRow } from '@/components/calendar/calendar-fixture-row';
 import { CalendarWindowBanner } from '@/components/calendar/calendar-window-banner';
 import { useGameStore } from '@/src/store/gameStore';
-import { formatShortDate } from '@/src/utils/calendar';
+import { formatShortDate, getWindowStatus } from '@/src/utils/calendar';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { PageHeader } from '@/components/ui/page-header';
 import { Fixture } from '@/src/models/types';
@@ -26,13 +26,6 @@ type CalendarFixtureRowData = {
   isCurrent: boolean;
   score: string | null;
   windowBanner?: WindowBanner;
-};
-
-const TRANSFER_WINDOW_BANNERS: Partial<Record<number, WindowBanner>> = {
-  1: { text: 'Summer Transfer Window Open', isOpen: true },
-  5: { text: 'Transfer Window Closed', isOpen: false },
-  19: { text: 'Winter Transfer Window Open', isOpen: true },
-  25: { text: 'Transfer Window Closed', isOpen: false },
 };
 
 export default function CalendarScreen() {
@@ -60,6 +53,13 @@ export default function CalendarScreen() {
       if (!oppTeam) return [];
 
       const theme = getTeamTheme(oppTeam.name);
+      const status = getWindowStatus(fixture.week);
+      const prevStatus = fixture.week > 1 ? getWindowStatus(fixture.week - 1) : 'closed';
+      const banner: WindowBanner | undefined = status !== 'closed'
+        ? { text: status === 'summer_open' ? 'Summer Transfer Window Open' : 'Winter Transfer Window Open', isOpen: true }
+        : prevStatus !== 'closed'
+          ? { text: 'Transfer Window Closed', isOpen: false }
+          : undefined;
 
       return [{
         id: fixture.id,
@@ -73,7 +73,7 @@ export default function CalendarScreen() {
         score: fixture.isPlayed
           ? (isHome ? `${fixture.homeScore} - ${fixture.awayScore}` : `${fixture.awayScore} - ${fixture.homeScore}`)
           : null,
-        windowBanner: TRANSFER_WINDOW_BANNERS[fixture.week],
+        windowBanner: banner,
       }];
     }),
     [currentWeek, myFixtures, teams, userTeamId]

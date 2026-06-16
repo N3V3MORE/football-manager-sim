@@ -1,25 +1,19 @@
 import { CareerRecord, CompetitionState, SeasonSummary, Team, TrophyEntry } from '../models/types';
 import { DIVISION_ORDER, PROMOTION_COUNT, RELEGATION_COUNT, sortTeamsByTable } from './leagueUtils';
 import { getCompetitionResultForTeam } from './competitionEngine';
+import { getReviewVerdict } from './boardEngine';
 
-const getBoardVerdict = (team: Team): SeasonSummary['boardVerdict'] => {
-  if (team.boardApproval < 20 || team.manager.replacementRisk >= 75 || team.manager.pressureScore >= 80) {
-    return 'critical';
-  }
-  if (team.boardApproval < 35 || team.manager.replacementRisk >= 60 || team.manager.pressureScore >= 60) {
-    return 'warning';
-  }
-  if (team.boardApproval >= 70 && team.manager.replacementRisk < 30 && team.manager.pressureScore < 35) {
-    return 'thriving';
-  }
-  return 'stable';
-};
+const getBoardVerdict = (team: Team): SeasonSummary['boardVerdict'] => (
+  getReviewVerdict(team.boardApproval, team.manager.pressureScore, team.manager.replacementRisk)
+);
 
 type CareerTrajectory = 'upward' | 'steady' | 'downward';
 
-const getDivisionIndex = (division: Team['division']) => (
-  division === 'Continental' ? 0 : DIVISION_ORDER.indexOf(division)
-);
+const getDivisionIndex = (division: Team['division']) => {
+  if (division === 'Continental') return 0;
+  const idx = DIVISION_ORDER.indexOf(division);
+  return idx >= 0 ? idx : DIVISION_ORDER.length;
+};
 
 const getTrajectoryAmbitionScore = (
   ambition: Team['boardProfile']['ambition'],
@@ -103,7 +97,8 @@ export const buildSeasonSummary = (
     Object.values(allTeams).filter(t => t.division === team.division)
   );
   const totalTeams = divisionTeams.length;
-  const position = divisionTeams.findIndex(t => t.id === team.id) + 1 || 1;
+  const idx = divisionTeams.findIndex(t => t.id === team.id);
+  const position = idx >= 0 ? idx + 1 : totalTeams;
   const leagueDivision = team.division === 'Continental' ? 'Premier League' : team.division;
   const divIndex = DIVISION_ORDER.indexOf(leagueDivision);
   const hasUpperDivision = divIndex > 0;

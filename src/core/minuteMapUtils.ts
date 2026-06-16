@@ -1,6 +1,6 @@
 import { Player } from '../models/types';
 
-const clampToMatchMinutes = (value: number) => Math.max(0, Math.min(90, value));
+export const clampToMatchMinutes = (value: number) => Math.max(0, Math.min(90, value));
 
 export const buildStarterBenchMinuteMap = (
   starters: Player[],

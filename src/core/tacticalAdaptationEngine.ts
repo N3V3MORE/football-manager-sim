@@ -72,7 +72,7 @@ const pickAdaptiveFormation = (
 
   const formationScores = modePool.map(formation => {
     let bias = 0;
-    if (team.manager?.preferredFormations.includes(formation)) bias += 16;
+    if (team.manager?.preferredFormations?.includes(formation)) bias += 16;
     if (mode === 'defense') {
       if (formation === '5-2-3') bias += 30;
       if (formation.startsWith('5')) bias += 18;

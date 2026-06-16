@@ -24,7 +24,8 @@ const getInjuryLength = (roll: number) => {
 };
 
 const getTeamInjuryChance = (participants: Player[], minuteMap: Record<string, number>) => {
-  const highLoadPlayers = participants.filter(player => (minuteMap[player.id] || 0) >= 60);
+  const healthy = participants.filter(player => (player.injuryWeeks || 0) === 0);
+  const highLoadPlayers = healthy.filter(player => (minuteMap[player.id] || 0) >= 60);
   const tiredPlayers = highLoadPlayers.filter(player => player.energy <= 55);
   return Math.min(0.22, 0.05 + highLoadPlayers.length * 0.005 + tiredPlayers.length * 0.018);
 };

@@ -12,6 +12,7 @@ export const getRenewalOffer = (player: Player) => {
 
 export const shouldRenewContract = (player: Player, team: Team) => {
   if (!isContractExpiringSoon(player)) return false;
+  if (player.age >= 33 && player.overallRating < 80) return false;
   if (player.overallRating >= 79) return true;
   if (player.isStarting && player.overallRating >= 72) return true;
   if (team.division === 'Premier League' && player.overallRating >= 75) return true;

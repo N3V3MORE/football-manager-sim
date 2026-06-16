@@ -31,8 +31,9 @@ export const computeWeeklyProgression = (
 
   const bigWins = playedFixtures.filter(f => {
     const homeTeam = teams[f.homeTeamId];
+    if (!f.isPlayed || f.homeScore === null || f.awayScore === null) return false;
     if (userDivision && homeTeam && homeTeam.division !== userDivision) return false;
-    return Math.abs((f.homeScore ?? 0) - (f.awayScore ?? 0)) >= 3;
+    return Math.abs(f.homeScore - f.awayScore) >= 3;
   });
   if (bigWins.length > 0) {
     const fixture = bigWins[Math.floor(random() * bigWins.length)];
@@ -114,6 +115,7 @@ export const computeWeeklyProgression = (
       } else if (player.age >= 32) {
         overallRating -= Math.floor(random() * 2);
       }
+      overallRating = Math.max(1, Math.min(99, overallRating));
 
       updatedPlayers[player.id] = {
         ...player,

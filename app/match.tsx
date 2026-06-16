@@ -29,11 +29,22 @@ export default function MatchScreen() {
   const minuteRef = useRef(0);
 
   useEffect(() => {
+    minuteRef.current = 0;
+    setMinute(0);
+    setIsPlaying(false);
+    setIsHalfTime(false);
+    setMatchFinished(false);
+    setLogs(['Match is ready to start!']);
+  }, [fixtureId]);
+
+  useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
+    let mounted = true;
     if (isPlaying && !isHalfTime && !matchFinished) {
       interval = setInterval(() => {
         minuteRef.current += 1;
         const nextMin = minuteRef.current;
+        if (!mounted) return;
         setMinute(nextMin);
 
         const { event } = processMatchMinute(fixtureId, nextMin);
@@ -41,16 +52,18 @@ export default function MatchScreen() {
           setLogs((l) => [event, ...l].slice(0, 8));
         }
         if (nextMin === 45) {
+          if (!mounted) return;
           setIsHalfTime(true);
           setIsPlaying(false);
         } else if (nextMin >= 90) {
+          if (!mounted) return;
           setMatchFinished(true);
           setIsPlaying(false);
           finishLiveMatch(fixtureId);
         }
-      }, 167); // 15 seconds total for 90 minutes
+      }, 167);
     }
-    return () => clearInterval(interval);
+    return () => { mounted = false; clearInterval(interval); };
   }, [isPlaying, isHalfTime, matchFinished, fixtureId, processMatchMinute, finishLiveMatch]);
 
   if (!fixture) return <Text>Loading...</Text>;

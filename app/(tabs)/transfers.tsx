@@ -58,6 +58,11 @@ export default function TransfersScreen() {
     if (!dialog) return;
 
     if (dialog.type === 'buy') {
+      if (!windowOpen) {
+        Alert.alert('Transfer Window Closed', 'The transfer window has closed.');
+        setDialog(null);
+        return;
+      }
       const fee = Number(dialog.fee);
       const wage = Number(dialog.wage);
       if (!Number.isFinite(fee) || fee <= 0 || !Number.isFinite(wage) || wage <= 0) {

@@ -127,7 +127,7 @@ export default function SquadScreen() {
   const sortedSquad = sortPlayersByPositionGroup(mySquad);
 
   const activeFormation = myTeam?.activeFormation || '4-3-3';
-  const baseFormation = activeFormation.split(' ')[0];
+  const baseFormation = activeFormation.split('-')[0];
   const slots = getSlotsForFormation(activeFormation);
 
   const starters  = sortedSquad.filter(player => player.isStarting && !isPlayerUnavailable(player));
@@ -160,10 +160,13 @@ export default function SquadScreen() {
     return arr;
   }, [slots, starters, hasMap, formationMap]);
 
+  const rebuildLockRef = useRef(false);
+
   useEffect(() => {
-    if (!userTeamId || !hasMap) return;
+    if (!userTeamId || !hasMap || rebuildLockRef.current) return;
     const rebuiltMap = rebuildFormationMap(slots, starters, formationMap);
     if (!areFormationMapsEqual(rebuiltMap, formationMap)) {
+      rebuildLockRef.current = true;
       setFormation(userTeamId, activeFormation as Formation);
     }
   }, [activeFormation, formationMap, hasMap, setFormation, slots, starters, userTeamId]);

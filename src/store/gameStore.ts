@@ -58,7 +58,7 @@ import { finishLiveMatchState, processLiveMatchMinuteState } from './liveMatchAc
 
 interface GameStore extends GameState {
   liveMatches: Record<string, LiveMatchState>;
-  boardReviewAppliedWeek: number;
+  transfersAppliedWeek: number;
   initializeGame: (userTeamId: string) => void;
   advanceWeek: () => void;
   playMatch: (fixtureId: string) => void;
@@ -92,20 +92,21 @@ export const useGameStore = create<GameStore>()(
       ...DEFAULT_GAME_STATE,
       liveMatches: {},
       boardReviewAppliedWeek: 0,
+      transfersAppliedWeek: 0,
 
       initializeGame: (userTeamId) => {
         const data = initGameData();
         
-        // Remap 'temp' to first actual team ID
         const actualTeamId = userTeamId === 'temp' ? Object.keys(data.teams)[0] : userTeamId;
         
-        // Clear starters for the user's team so they stay in reserves
-        Object.values(data.players).forEach(p => {
-          if (p.teamId === actualTeamId) {
-            p.isStarting = false;
-            p.isSub = false;
-          }
-        });
+        const players = Object.fromEntries(
+          Object.entries(data.players).map(([id, player]) => [
+            id,
+            player.teamId === actualTeamId
+              ? { ...player, isStarting: false, isSub: false }
+              : player,
+          ])
+        );
 
         const userTeam = data.teams[actualTeamId];
         const objectives = buildManagedTeamObjectives(userTeam, data.competitions);
@@ -117,7 +118,7 @@ export const useGameStore = create<GameStore>()(
               currentWeek: 1,
               userTeamId: actualTeamId,
               teams: data.teams,
-              players: data.players,
+              players,
               fixtures: data.fixtures,
             }),
             ...generateSystemInboxMessages(1, initialNews),
@@ -128,7 +129,7 @@ export const useGameStore = create<GameStore>()(
           userTeamId: actualTeamId,
           currentWeek: 1,
           teams: data.teams,
-          players: data.players,
+          players,
           fixtures: data.fixtures,
           competitions: data.competitions,
           boardObjectives: objectives,
@@ -137,6 +138,7 @@ export const useGameStore = create<GameStore>()(
           careerRecord: createDefaultCareerRecord(),
           liveMatches: {},
           boardReviewAppliedWeek: 0,
+          transfersAppliedWeek: 0,
         });
       },
 
@@ -240,11 +242,14 @@ export const useGameStore = create<GameStore>()(
 
       skipToEndOfSeason: () => {
         const maxWeek = getSeasonWeekLimit(get().fixtures, get().competitions);
-        let guard = maxWeek + 2;
-        while (get().currentWeek <= maxWeek && guard-- > 0) {
-          get().advanceWeek();
-          if (get().currentWeek === 1) break;
-        }
+        if (maxWeek <= 0) return;
+        let guard = maxWeek + 20;
+        try {
+          while (get().currentWeek <= maxWeek && guard-- > 0) {
+            get().advanceWeek();
+            if (get().currentWeek === 1) break;
+          }
+        } catch { /* advanceWeek handles partial advancement safely */ }
       },
 
       swapPlayer: (removeId: string | null, addId: string, slotKey?: string) => {
@@ -296,7 +301,11 @@ export const useGameStore = create<GameStore>()(
       },
 
       processWeeklyTransfers: () => {
-        set(state => processWeeklyTransfersState(state));
+        set(state => {
+          if (state.transfersAppliedWeek === state.currentWeek) return state;
+          const result = processWeeklyTransfersState(state);
+          return { ...result, transfersAppliedWeek: state.currentWeek };
+        });
       },
 
       checkBoardObjectives: () => {

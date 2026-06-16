@@ -382,7 +382,7 @@ export const quickSimMatch = (
   userTeamId?: string | null,
   options?: { rng?: RandomGenerator }
 ): { players: Record<string, Player>, teams: Record<string, Team>, fixture: Fixture, events: string[] } => {
-  const rng = options?.rng || defaultRandomGenerator;
+  const rng = options?.rng ?? defaultRandomGenerator;
   const random = rng.next;
   const fixture = fixtures[fixtureId];
   if (!fixture || fixture.isPlayed) return { players, teams, fixture, events: [] };

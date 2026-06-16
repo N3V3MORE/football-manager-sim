@@ -8,6 +8,7 @@ import { CareerStatsCard } from '@/components/hub/career-stats-card';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { getSeasonWeekLimit, sortTeamsByTable } from '@/src/core/leagueUtils';
 import { getCompetitionPanelForTeam, getCompetitionShortName } from '@/src/core/competitionEngine';
+import { formatShortDate } from '@/src/utils/calendar';
 import { Fixture, Player, Team } from '@/src/models/types';
 import { HubHeader } from '@/components/hub/hub-header';
 import { MiniTableCard } from '@/components/hub/mini-table-card';
@@ -17,8 +18,6 @@ import { LatestNewsCard } from '@/components/hub/latest-news-card';
 import { CompetitionPanelsCard } from '@/components/hub/competition-panels-card';
 import { UpcomingFixturesCard, UpcomingFixtureCardRow } from '@/components/hub/upcoming-fixtures-card';
 import { Ionicons } from '@expo/vector-icons';
-
-const SEASON_START = new Date(2024, 7, 10);
 
 type UpcomingFixtureRow = {
   week: number;
@@ -36,11 +35,7 @@ type CompetitionPanelItem = {
   accent: string;
 };
 
-const weekToDate = (week: number): string => {
-  const d = new Date(SEASON_START);
-  d.setDate(d.getDate() + (week - 1) * 7);
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-};
+const weekToDate = (week: number): string => formatShortDate(week);
 
 const getStatValue = (player: Player, stat: 'goals' | 'assists' | 'cleanSheets'): number => {
   if (stat === 'goals') return player.goals;
