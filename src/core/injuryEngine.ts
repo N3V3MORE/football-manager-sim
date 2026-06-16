@@ -33,6 +33,7 @@ export const applyMatchInjuries = (
   participants: Player[],
   minuteMap: Record<string, number>,
   updatedPlayers: Record<string, Player>,
+  matchWeek?: number,
   rng?: RandomGenerator
 ) => {
   const random = resolveRandom(rng);
@@ -58,6 +59,7 @@ export const applyMatchInjuries = (
     ...updatedPlayers[injuredPlayer.id],
     injuryWeeks: weeks,
     injuryType,
+    injuryAppliedWeek: matchWeek,
     isStarting: false,
     isSub: false,
   };

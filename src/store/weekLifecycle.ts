@@ -49,6 +49,7 @@ const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TSt
   let inboxMessages = state.inboxMessages;
 
   weekFixtures.forEach(fixtureToPlay => {
+    if (updatedLiveMatches[fixtureToPlay.id]) return;
     const previousPlayers = updatedPlayers;
     const { players, teams, fixture } = quickSimMatch(
       fixtureToPlay.id,
@@ -137,6 +138,7 @@ const applyBoardReview = <TState extends WeeklyLifecycleState>(state: TState, re
       },
     },
     boardObjectives: review.updatedObjectives,
+    boardReviewAppliedWeek: reviewWeek,
   };
 
   return {

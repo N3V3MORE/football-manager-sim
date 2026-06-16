@@ -16,10 +16,12 @@ export const applyMatchResult = (
   else { losses = 1; }
 
   const formToken = wins ? 'W' : draws ? 'D' : 'L';
+  const updatedManager = { ...team.manager, record: { ...team.manager.record, played: team.manager.record.played + 1, goalsFor: team.manager.record.goalsFor + goalsFor, goalsAgainst: team.manager.record.goalsAgainst + goalsAgainst, wins: team.manager.record.wins + wins, draws: team.manager.record.draws + draws, losses: team.manager.record.losses + losses } };
   if (!includeTableStats) {
     return {
       ...team,
       form: [...(team.form || []), formToken].slice(-5),
+      manager: updatedManager,
     };
   }
 
@@ -33,5 +35,6 @@ export const applyMatchResult = (
     losses: team.losses + losses,
     played: team.played + 1,
     form: [...(team.form || []), formToken].slice(-5),
+    manager: updatedManager,
   };
 };

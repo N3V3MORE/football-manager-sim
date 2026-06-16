@@ -64,7 +64,7 @@ export const computeWeeklyTransfers = (
   });
 
   // Global Listing Pool populated after all teams have registered their listings
-  const globalListedPlayers = Object.values(updatedPlayers).filter(p => p.isTransferListed && p.teamId !== userTeamId);
+  const globalListedPlayers = Object.values(updatedPlayers).filter(p => p.isTransferListed);
 
   // Phase 2: All AI Teams attempt to satisfy their weaknesses from the Global Pool
   aiTeams.forEach(team => {

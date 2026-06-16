@@ -127,7 +127,9 @@ export interface Player {
   isTransferListed: boolean; // true = listed for sale
   askingPrice: number;      // asking price in millions GBP (0 if not listed)
   matchesSuspended: number; // dynamically used for suspensions
+  suspensionAppliedWeek?: number; // week when the current suspension was applied; skips decrement in same week
   injuryWeeks: number;      // full weeks unavailable through injury
+  injuryAppliedWeek?: number; // week when the current injury was applied; skips decrement in same week
   injuryType?: string;
   wage: number;             // wage in thousands per week
   contractLeft: number;     // years remaining on contract
@@ -343,5 +345,6 @@ export interface GameState {
   news: string[];
   inboxMessages: InboxMessage[];
   boardObjectives: BoardObjective[];
+  boardReviewAppliedWeek: number;
   careerRecord: CareerRecord;
 }

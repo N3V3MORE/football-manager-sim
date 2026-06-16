@@ -46,6 +46,10 @@ export const processLiveMatchMinuteState = (
   const fixture = state.fixtures[fixtureId];
   if (!fixture || fixture.isPlayed) return { patch: state, event: eventMsg };
 
+  const storedLiveState = state.liveMatches?.[fixtureId];
+  const processedMinutes = new Set(storedLiveState?.processedMinutes || []);
+  if (processedMinutes.has(minute)) return { patch: state, event: eventMsg };
+
   const updatedPlayers = { ...state.players };
   const updatedFixture = { ...fixture };
   if (updatedFixture.homeScore === null) updatedFixture.homeScore = 0;
@@ -53,7 +57,6 @@ export const processLiveMatchMinuteState = (
 
   const homeTeam = state.teams[fixture.homeTeamId];
   const awayTeam = state.teams[fixture.awayTeamId];
-  const storedLiveState = state.liveMatches?.[fixtureId];
   const sentOffPlayers = new Set(storedLiveState?.sentOffPlayerIds || []);
   const sentOffMinutes = { ...(storedLiveState?.sentOffMinutes || {}) };
   const homeGoalMinutes = [...(storedLiveState?.homeGoalMinutes || [])];
@@ -96,6 +99,7 @@ export const processLiveMatchMinuteState = (
         ...player,
         redCards: player.redCards + 1,
         matchesSuspended: 3,
+        suspensionAppliedWeek: fixture.week,
       };
       sentOffPlayers.add(playerId);
       sentOffMinutes[playerId] = minute;
@@ -162,6 +166,7 @@ export const processLiveMatchMinuteState = (
     awayGoalMinutes,
     homeStarterIds: storedLiveState?.homeStarterIds || homeStarters.map(player => player.id),
     awayStarterIds: storedLiveState?.awayStarterIds || awayStarters.map(player => player.id),
+    processedMinutes: [...processedMinutes, minute],
   };
 
   return {
@@ -250,8 +255,8 @@ export const finishLiveMatchState = (
     rng,
     applyEnergyDrain: false,
   });
-  applyMatchInjuries(homeParticipants, homeMinuteMap, updatedPlayers, rng);
-  applyMatchInjuries(awayParticipants, awayMinuteMap, updatedPlayers, rng);
+  applyMatchInjuries(homeParticipants, homeMinuteMap, updatedPlayers, fixture.week, rng);
+  applyMatchInjuries(awayParticipants, awayMinuteMap, updatedPlayers, fixture.week, rng);
 
   let winnerTeamId: string | undefined;
   let resolution: Fixture['resolution'] | undefined;
@@ -270,6 +275,8 @@ export const finishLiveMatchState = (
 
   const updatedFixture = {
     ...fixture,
+    homeScore: hScore,
+    awayScore: aScore,
     isPlayed: true,
     winnerTeamId,
     resolution,

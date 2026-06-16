@@ -47,8 +47,10 @@ export const computeWeeklyProgression = (
   const updatedPlayers = { ...players };
   allPlayers.forEach(player => {
     const newEnergy = Math.min(100, player.energy + ENGINE_CONFIG.WEEKLY_ENERGY_RECOVERY);
-    const newSuspension = Math.max(0, player.matchesSuspended - 1);
-    const newInjuryWeeks = Math.max(0, (player.injuryWeeks || 0) - 1);
+    const shouldDecrementSuspension = !player.suspensionAppliedWeek || player.suspensionAppliedWeek < currentWeek;
+    const shouldDecrementInjury = !player.injuryAppliedWeek || player.injuryAppliedWeek < currentWeek;
+    const newSuspension = shouldDecrementSuspension ? Math.max(0, player.matchesSuspended - 1) : player.matchesSuspended;
+    const newInjuryWeeks = shouldDecrementInjury ? Math.max(0, (player.injuryWeeks || 0) - 1) : (player.injuryWeeks || 0);
     if (
       newEnergy !== player.energy ||
       newSuspension !== player.matchesSuspended ||

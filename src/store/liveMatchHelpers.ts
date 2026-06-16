@@ -14,6 +14,7 @@ export type LiveMatchState = {
   awayGoalMinutes?: number[];
   homeStarterIds: string[];
   awayStarterIds: string[];
+  processedMinutes?: number[];
 };
 
 const LIVE_MATCH_MINUTES = 90;

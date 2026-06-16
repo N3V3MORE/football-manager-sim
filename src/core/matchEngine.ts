@@ -436,6 +436,7 @@ export const quickSimMatch = (
       ...player,
       redCards: player.redCards + 1,
       matchesSuspended: 3,
+      suspensionAppliedWeek: fixture.week,
     };
     sentOffPlayers.add(playerId);
     sentOffMinutes[playerId] = minute;
@@ -572,9 +573,9 @@ export const quickSimMatch = (
     updatedPlayers,
     rng,
   });
-  applyMatchInjuries(homeParticipants, homeMinutes, updatedPlayers, rng)
+  applyMatchInjuries(homeParticipants, homeMinutes, updatedPlayers, fixture.week, rng)
     .forEach(event => matchEvents.push(`${event.playerName} suffers a ${event.injuryType} and will miss ${event.weeks} week${event.weeks === 1 ? '' : 's'}.`));
-  applyMatchInjuries(awayParticipants, awayMinutes, updatedPlayers, rng)
+  applyMatchInjuries(awayParticipants, awayMinutes, updatedPlayers, fixture.week, rng)
     .forEach(event => matchEvents.push(`${event.playerName} suffers a ${event.injuryType} and will miss ${event.weeks} week${event.weeks === 1 ? '' : 's'}.`));
 
   let winnerTeamId: string | undefined;

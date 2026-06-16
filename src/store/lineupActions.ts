@@ -200,6 +200,18 @@ export const swapPlayerState = (
 ): LineupActionResult => {
   const addPlayer = state.players[addId];
   if (!addPlayer || isPlayerUnavailable(addPlayer)) return state;
+  if (addPlayer.teamId !== state.userTeamId) return state;
+
+  const removePlayer = removeId ? state.players[removeId] : null;
+  if (removeId && !removePlayer) return state;
+  if (removePlayer && removePlayer.teamId !== state.userTeamId) return state;
+
+  if (!removeId || !removePlayer?.isStarting) {
+    const currentStarters = Object.values(state.players).filter(
+      p => p.teamId === state.userTeamId && p.isStarting && !isPlayerUnavailable(p) && p.id !== removeId
+    );
+    if (!addPlayer.isStarting && currentStarters.length >= 11) return state;
+  }
 
   const updates: Record<string, Player> = {
     [addId]: { ...addPlayer, isStarting: true, isSub: false },

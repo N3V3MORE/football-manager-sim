@@ -58,6 +58,7 @@ import { finishLiveMatchState, processLiveMatchMinuteState } from './liveMatchAc
 
 interface GameStore extends GameState {
   liveMatches: Record<string, LiveMatchState>;
+  boardReviewAppliedWeek: number;
   initializeGame: (userTeamId: string) => void;
   advanceWeek: () => void;
   playMatch: (fixtureId: string) => void;
@@ -90,6 +91,7 @@ export const useGameStore = create<GameStore>()(
     (set, get) => ({
       ...DEFAULT_GAME_STATE,
       liveMatches: {},
+      boardReviewAppliedWeek: 0,
 
       initializeGame: (userTeamId) => {
         const data = initGameData();
@@ -134,6 +136,7 @@ export const useGameStore = create<GameStore>()(
           inboxMessages,
           careerRecord: createDefaultCareerRecord(),
           liveMatches: {},
+          boardReviewAppliedWeek: 0,
         });
       },
 
@@ -299,6 +302,7 @@ export const useGameStore = create<GameStore>()(
       checkBoardObjectives: () => {
          set(state => {
             if (!state.userTeamId) return state;
+            if (state.boardReviewAppliedWeek === state.currentWeek) return state;
             const myTeam = state.teams[state.userTeamId];
             const seasonWeekLimit = getSeasonWeekLimit(state.fixtures, state.competitions);
             const review = runBoardReview(
@@ -320,7 +324,8 @@ export const useGameStore = create<GameStore>()(
                    manager: review.nextManager,
                  },
                },
-               boardObjectives: review.updatedObjectives
+               boardObjectives: review.updatedObjectives,
+               boardReviewAppliedWeek: state.currentWeek,
             };
          });
       },

@@ -37,6 +37,20 @@ export const buyPlayerState = (
     };
   }
 
+  if (player.teamId === userTeam.id) {
+    return {
+      patch: state,
+      result: { success: false, message: 'You cannot buy your own player.' },
+    };
+  }
+
+  if (!player.isTransferListed) {
+    return {
+      patch: state,
+      result: { success: false, message: 'This player is not listed for sale.' },
+    };
+  }
+
   if (userTeam.budget < fee) {
     return {
       patch: state,
@@ -96,6 +110,8 @@ export const listPlayerForSaleState = (
   playerId: string,
   askingPrice: number
 ): TransferActionPatch => {
+  const player = state.players[playerId];
+  if (!player || player.teamId !== state.userTeamId) return state;
   const players = updateTransferListingState(state.players, playerId, true, askingPrice);
   return players ? { players } : state;
 };

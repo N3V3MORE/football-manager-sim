@@ -45,6 +45,7 @@ export const DEFAULT_GAME_STATE: GameState = {
   news: [],
   inboxMessages: [],
   boardObjectives: [],
+  boardReviewAppliedWeek: 0,
   careerRecord: DEFAULT_CAREER_RECORD,
 };
 
@@ -180,6 +181,9 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
             ...typedTeam,
             boardProfile,
             manager,
+            tactics: typedTeam.tactics && typeof typedTeam.tactics === 'object'
+              ? typedTeam.tactics
+              : { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' } as Team['tactics'],
             transferSpend: Number.isFinite(typedTeam.transferSpend) ? typedTeam.transferSpend : 0,
             boardApproval: Number.isFinite(typedTeam.boardApproval)
               ? clampBoardMetric(typedTeam.boardApproval!)
@@ -200,6 +204,19 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
             ...typedPlayer,
             injuryWeeks: Number.isFinite(typedPlayer.injuryWeeks) ? typedPlayer.injuryWeeks : 0,
             injuryType: typedPlayer.injuryWeeks ? typedPlayer.injuryType : undefined,
+            injuryAppliedWeek: Number.isFinite(typedPlayer.injuryAppliedWeek) ? typedPlayer.injuryAppliedWeek : undefined,
+            matchesSuspended: Number.isFinite(typedPlayer.matchesSuspended) ? typedPlayer.matchesSuspended : 0,
+            suspensionAppliedWeek: Number.isFinite(typedPlayer.suspensionAppliedWeek) ? typedPlayer.suspensionAppliedWeek : undefined,
+            contractLeft: Number.isFinite(typedPlayer.contractLeft) ? typedPlayer.contractLeft : 1,
+            matchRatingHistory: Array.isArray(typedPlayer.matchRatingHistory) ? typedPlayer.matchRatingHistory : [],
+            goals: Number.isFinite(typedPlayer.goals) ? typedPlayer.goals : 0,
+            assists: Number.isFinite(typedPlayer.assists) ? typedPlayer.assists : 0,
+            cleanSheets: Number.isFinite(typedPlayer.cleanSheets) ? typedPlayer.cleanSheets : 0,
+            yellowCards: Number.isFinite(typedPlayer.yellowCards) ? typedPlayer.yellowCards : 0,
+            redCards: Number.isFinite(typedPlayer.redCards) ? typedPlayer.redCards : 0,
+            minutesPlayed: Number.isFinite(typedPlayer.minutesPlayed) ? typedPlayer.minutesPlayed : 0,
+            energy: Number.isFinite(typedPlayer.energy) ? typedPlayer.energy : 100,
+            morale: Number.isFinite(typedPlayer.morale) ? typedPlayer.morale : 50,
           },
         ];
       })
