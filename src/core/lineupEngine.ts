@@ -1,5 +1,6 @@
 import { getSlotsForFormation, Slot } from '../constants/formations';
 import { Player, Team } from '../models/types';
+import { isPlayerUnavailable } from './playerStatusUtils';
 
 export const autoAssignLineup = (teamId: string, players: Record<string, Player>, formation: string) => {
   const teamPlayers = Object.values(players)
@@ -16,9 +17,9 @@ export const autoAssignLineup = (teamId: string, players: Record<string, Player>
 
   slots.forEach((row) => {
     row.forEach((slot) => {
-      let candidate = teamPlayers.find(p => p.subPosition === slot.label && !assignedIds.has(p.id) && (p.matchesSuspended || 0) === 0);
-      if (!candidate) candidate = teamPlayers.find(p => p.position === slot.pos && !assignedIds.has(p.id) && (p.matchesSuspended || 0) === 0);
-      if (!candidate) candidate = teamPlayers.find(p => !assignedIds.has(p.id) && (p.matchesSuspended || 0) === 0);
+      let candidate = teamPlayers.find(p => p.subPosition === slot.label && !assignedIds.has(p.id) && !isPlayerUnavailable(p));
+      if (!candidate) candidate = teamPlayers.find(p => p.position === slot.pos && !assignedIds.has(p.id) && !isPlayerUnavailable(p));
+      if (!candidate) candidate = teamPlayers.find(p => !assignedIds.has(p.id) && !isPlayerUnavailable(p));
 
       if (candidate) {
         updates[candidate.id] = { isStarting: true, isSub: false };
@@ -57,12 +58,14 @@ export const buildQuickSimLineup = (
   players: Record<string, Player>,
   formation: string
 ) => {
-  const teamPlayers = Object.values(players)
-    .filter(p => p.teamId === teamId && p.matchesSuspended === 0)
+  const allTeamPlayers = Object.values(players)
+    .filter(p => p.teamId === teamId);
+  const teamPlayers = allTeamPlayers
+    .filter(p => !isPlayerUnavailable(p))
     .sort((a, b) => b.overallRating - a.overallRating);
 
   const updates: Record<string, Partial<Player>> = {};
-  teamPlayers.forEach(player => {
+  allTeamPlayers.forEach(player => {
     updates[player.id] = { isStarting: false, isSub: false };
   });
 
@@ -165,6 +168,9 @@ export const getTeamMatchStarters = (
         .filter(player => !player.isStarting)
         .sort((a, b) => (b.overallRating + b.energy * 0.1) - (a.overallRating + a.energy * 0.1))
         .slice(0, 11 - starters.length);
+      fillCandidates.forEach(player => {
+        updatedPlayers[player.id] = { ...updatedPlayers[player.id], isStarting: true, isSub: false };
+      });
       starters = [...starters, ...fillCandidates];
     }
     return starters.slice(0, 11);
@@ -204,6 +210,18 @@ export const getTeamMatchBench = (
       !isPlayerUnavailable(p) &&
       !starterIds.has(p.id)
     ));
+  }
+  if (bench.length > 7) {
+    const keptBench = [...bench]
+      .sort((a, b) => b.overallRating - a.overallRating)
+      .slice(0, 7);
+    const keptIds = new Set(keptBench.map(player => player.id));
+    bench.forEach(player => {
+      if (!keptIds.has(player.id)) {
+        updatedPlayers[player.id] = { ...updatedPlayers[player.id], isSub: false };
+      }
+    });
+    bench = keptBench;
   }
   return bench.slice(0, 7);
 };

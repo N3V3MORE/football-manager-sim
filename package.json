@@ -17,6 +17,7 @@
     "test:regression": "tsx -r ./scripts/mock-env.js scripts/regression_checks.ts",
     "check:save": "tsx -r ./scripts/mock-env.js scripts/save_integrity_check.ts",
     "check:agent": "tsx -r ./scripts/mock-env.js scripts/agent_game_check.ts",
+    "check:season": "tsx -r ./scripts/mock-env.js scripts/agent_season_playthrough.ts",
     "test:ci": "tsx -r ./scripts/mock-env.js scripts/ci_regression.ts",
     "test:news": "tsx -r ./scripts/mock-env.js scripts/test_news_output.ts",
     "ci": "npm run -s typecheck && npm run -s lint && npm run -s test:ci && npm run -s test:regression && npm run -s check:save && npm run -s check:agent",

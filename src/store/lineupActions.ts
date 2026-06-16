@@ -13,18 +13,24 @@ export const applyLineupSuggestionToTeam = (
   subIds: string[]
 ) => {
   const nextPlayers = { ...allPlayers };
-  const startingSet = new Set(startingIds);
-  const subSet = new Set(subIds);
+  const teamPlayers = Object.values(allPlayers).filter(player => player.teamId === teamId);
+  const eligibleIds = new Set(teamPlayers
+    .filter(player => !isPlayerUnavailable(player))
+    .map(player => player.id));
+  const startingSet = new Set(startingIds
+    .filter(playerId => eligibleIds.has(playerId))
+    .slice(0, 11));
+  const subSet = new Set(subIds
+    .filter(playerId => eligibleIds.has(playerId) && !startingSet.has(playerId))
+    .slice(0, 7));
 
-  Object.values(allPlayers)
-    .filter(player => player.teamId === teamId)
-    .forEach(player => {
-      nextPlayers[player.id] = {
-        ...player,
-        isStarting: startingSet.has(player.id),
-        isSub: !startingSet.has(player.id) && subSet.has(player.id),
-      };
-    });
+  teamPlayers.forEach(player => {
+    nextPlayers[player.id] = {
+      ...player,
+      isStarting: startingSet.has(player.id),
+      isSub: subSet.has(player.id),
+    };
+  });
 
   return nextPlayers;
 };

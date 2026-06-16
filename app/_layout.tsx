@@ -5,6 +5,7 @@ import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { installAgentGameHandler } from '@/src/dev/agentGameHandler';
 import { useGameStore } from '@/src/store/gameStore';
 
 export const unstable_settings = {
@@ -22,6 +23,11 @@ export default function RootLayout() {
       setHasHydrated(true);
     });
     return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!__DEV__) return undefined;
+    return installAgentGameHandler();
   }, []);
 
   useEffect(() => {

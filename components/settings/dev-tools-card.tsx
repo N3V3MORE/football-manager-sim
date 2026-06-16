@@ -17,6 +17,7 @@ export function DevToolsCard({
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Dev Tools</Text>
       <Text style={styles.note}>Temporary controls live here until proper settings are added.</Text>
+      <Text style={styles.note}>LLM bridge: call {"globalThis.__FM_AGENT__.run('summary')"} from the dev JS runtime.</Text>
       <TouchableOpacity style={[styles.devBtn, styles.warningBtn]} onPress={onAdvanceFiveWeeks}>
         <Text style={[styles.devBtnText, styles.warningText]}>+5 Weeks</Text>
       </TouchableOpacity>

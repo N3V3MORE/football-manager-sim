@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { Fixture } from '../src/models/types';
 import { getSeasonWeekLimit } from '../src/core/leagueUtils';
+import { installAgentGameHandler } from '../src/dev/agentGameHandler';
 import { useGameStore } from '../src/store/gameStore';
 import { initGameData } from '../src/utils/initGame';
 
@@ -194,6 +195,16 @@ try {
   });
 
   record('reference integrity', assertReferenceIntegrity);
+
+  record('runtime handler bridge', () => {
+    const cleanup = installAgentGameHandler();
+    const handler = globalThis.__FM_AGENT__;
+    assert.ok(handler, 'Runtime handler should be installed');
+    const smokeResult = handler.run('smokeCheck');
+    assert.equal(smokeResult.ok, true, smokeResult.error || 'Runtime handler smoke check failed');
+    cleanup();
+    assert.equal(globalThis.__FM_AGENT__, undefined, 'Runtime handler cleanup should remove global hook');
+  });
 
   printReport('pass');
   process.exit(0);
