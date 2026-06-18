@@ -1462,7 +1462,7 @@ const runThresholdChecks = () => {
     { back3: 0, back4: 0, back5: 0 }
   );
 
-  assert.ok(avgGoals >= 2.3 && avgGoals <= 4.8, `Expected avg goals between 2.3 and 4.8, got ${avgGoals.toFixed(2)}`);
+  assert.ok(avgGoals >= 2.4 && avgGoals <= 3.1, `Expected avg goals between 2.4 and 3.1, got ${avgGoals.toFixed(2)}`);
   assert.ok(totalYellow > 0, 'Expected at least one yellow card across threshold runs');
   assert.ok(totalRed > 0, 'Expected at least one red card across threshold runs');
   assert.equal(redCardLogMismatches, 0, 'Red cards should always produce an explicit red-card event message');

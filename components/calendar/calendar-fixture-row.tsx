@@ -4,6 +4,8 @@ import { StyleSheet, Text, View } from 'react-native';
 type CalendarFixtureRowProps = {
   week: number;
   dateLabel: string;
+  competitionLabel: string;
+  roundLabel: string;
   isHome: boolean;
   opponentName: string;
   opponentColor: string;
@@ -15,6 +17,8 @@ type CalendarFixtureRowProps = {
 export function CalendarFixtureRow({
   week,
   dateLabel,
+  competitionLabel,
+  roundLabel,
   isHome,
   opponentName,
   opponentColor,
@@ -27,6 +31,7 @@ export function CalendarFixtureRow({
       <View style={styles.dateCol}>
         <Text style={styles.weekLabel}>WK {week}</Text>
         <Text style={styles.dateLabel}>{dateLabel}</Text>
+        <Text style={styles.competitionLabel} numberOfLines={1}>{competitionLabel}</Text>
       </View>
 
       <View style={styles.badgeCol}>
@@ -37,9 +42,12 @@ export function CalendarFixtureRow({
 
       <View style={styles.oppCol}>
         <View style={[styles.kitDot, { backgroundColor: opponentColor }]} />
-        <Text style={[styles.oppName, isPast && styles.oppNamePast]} numberOfLines={1}>
-          {opponentName}
-        </Text>
+        <View style={styles.opponentTextCol}>
+          <Text style={[styles.oppName, isPast && styles.oppNamePast]} numberOfLines={1}>
+            {opponentName}
+          </Text>
+          <Text style={styles.roundLabel} numberOfLines={1}>{roundLabel}</Text>
+        </View>
       </View>
 
       <View style={styles.scoreCol}>
@@ -67,13 +75,16 @@ const styles = StyleSheet.create({
   dateCol: { width: 60 },
   weekLabel: { color: '#64748b', fontSize: 10, fontWeight: '900' },
   dateLabel: { color: '#e2e8f0', fontSize: 13, fontWeight: '600', marginTop: 2 },
+  competitionLabel: { color: '#38bdf8', fontSize: 9, fontWeight: '800', marginTop: 2 },
   badgeCol: { width: 30, alignItems: 'center' },
   haBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 0 },
   haText: { color: '#0f172a', fontWeight: '900', fontSize: 10 },
   oppCol: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 10 },
   kitDot: { width: 10, height: 10, borderRadius: 0 },
+  opponentTextCol: { flex: 1 },
   oppName: { color: '#f8fafc', fontSize: 15, fontWeight: '700' },
   oppNamePast: { color: '#94a3b8' },
+  roundLabel: { color: '#64748b', fontSize: 10, fontWeight: '700', marginTop: 2, textTransform: 'capitalize' },
   scoreCol: { width: 60, alignItems: 'flex-end' },
   vsText: { color: '#475569', fontWeight: '900', fontSize: 12 },
   scoreText: { color: '#38bdf8', fontWeight: '900', fontSize: 16, letterSpacing: 1 },

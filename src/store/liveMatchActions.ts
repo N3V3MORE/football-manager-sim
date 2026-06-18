@@ -14,6 +14,7 @@ import { applySharedPostMatchAccounting, PlayerMatchContribution } from '../core
 import { applyMatchInjuries } from '../core/injuryEngine';
 import { isPlayerUnavailable } from '../core/playerStatusUtils';
 import { resolveCompetitionProgression } from '../core/competitionEngine';
+import { removePlayerFromTeamSelections } from '../core/formationMapUtils';
 import {
   LiveMatchState,
   drainLiveMatchEnergy,
@@ -278,8 +279,10 @@ export const finishLiveMatchState = (
     applyEnergyDrain: false,
     playerMatchContributions: liveMatchState?.matchContributions,
   });
-  applyMatchInjuries(homeParticipants, homeMinuteMap, updatedPlayers, fixture.week, rng);
-  applyMatchInjuries(awayParticipants, awayMinuteMap, updatedPlayers, fixture.week, rng);
+  const injuryEvents = [
+    ...applyMatchInjuries(homeParticipants, homeMinuteMap, updatedPlayers, fixture.week, rng),
+    ...applyMatchInjuries(awayParticipants, awayMinuteMap, updatedPlayers, fixture.week, rng),
+  ];
 
   let winnerTeamId: string | undefined;
   let resolution: Fixture['resolution'] | undefined;
@@ -316,6 +319,13 @@ export const finishLiveMatchState = (
       lastStartingXI: awayTeamStarters.map(player => player.id),
     },
   };
+  injuryEvents.forEach(event => {
+    const injuredPlayer = updatedPlayers[event.playerId];
+    const injuredTeam = injuredPlayer ? updatedTeams[injuredPlayer.teamId] : undefined;
+    if (injuredTeam) {
+      updatedTeams[injuredTeam.id] = removePlayerFromTeamSelections(injuredTeam, event.playerId);
+    }
+  });
   const nextFixtures = { ...state.fixtures, [fixtureId]: updatedFixture };
   const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, updatedTeams);
   const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);

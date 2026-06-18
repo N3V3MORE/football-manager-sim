@@ -5,7 +5,7 @@ import { getTeamMatchBench, getTeamMatchStarters } from './lineupEngine';
 import { buildFallbackShapeProfile, buildTeamShapeProfile } from './shapeEngine';
 import { applySubstitutions } from './substitutionEngine';
 import { applySharedPostMatchAccounting, PlayerMatchContribution } from './postMatchAccounting';
-import { rebuildFormationMap } from './formationMapUtils';
+import { rebuildFormationMap, removePlayerFromTeamSelections } from './formationMapUtils';
 import { applyMinuteCaps, buildStarterBenchMinuteMap } from './minuteMapUtils';
 import { applyMatchInjuries } from './injuryEngine';
 import { isPlayerUnavailable } from './playerStatusUtils';
@@ -599,10 +599,17 @@ export const quickSimMatch = (
     rng,
     playerMatchContributions: matchContributions,
   });
-  applyMatchInjuries(homeParticipants, homeMinutes, updatedPlayers, fixture.week, rng)
-    .forEach(event => matchEvents.push(`${event.playerName} suffers a ${event.injuryType} and will miss ${event.weeks} week${event.weeks === 1 ? '' : 's'}.`));
-  applyMatchInjuries(awayParticipants, awayMinutes, updatedPlayers, fixture.week, rng)
-    .forEach(event => matchEvents.push(`${event.playerName} suffers a ${event.injuryType} and will miss ${event.weeks} week${event.weeks === 1 ? '' : 's'}.`));
+  [
+    ...applyMatchInjuries(homeParticipants, homeMinutes, updatedPlayers, fixture.week, rng),
+    ...applyMatchInjuries(awayParticipants, awayMinutes, updatedPlayers, fixture.week, rng),
+  ].forEach(event => {
+    const injuredPlayer = updatedPlayers[event.playerId];
+    const injuredTeam = injuredPlayer ? updatedTeams[injuredPlayer.teamId] : undefined;
+    if (injuredTeam) {
+      updatedTeams[injuredTeam.id] = removePlayerFromTeamSelections(injuredTeam, event.playerId);
+    }
+    matchEvents.push(`${event.playerName} suffers a ${event.injuryType} and will miss ${event.weeks} week${event.weeks === 1 ? '' : 's'}.`);
+  });
 
   let winnerTeamId: string | undefined;
   let resolution: Fixture['resolution'] | undefined;

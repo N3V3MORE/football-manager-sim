@@ -165,7 +165,10 @@ export default function HubScreen() {
   }, [players, teams, myDivision]);
   const topScorer = useMemo(() => getTopPlayerByStat(allPlayers, 'goals'), [allPlayers]);
   const topAssister = useMemo(() => getTopPlayerByStat(allPlayers, 'assists'), [allPlayers]);
-  const topCS = useMemo(() => getTopPlayerByStat(allPlayers, 'cleanSheets'), [allPlayers]);
+  const topCS = useMemo(
+    () => getTopPlayerByStat(allPlayers.filter(player => player.position === 'GK'), 'cleanSheets'),
+    [allPlayers]
+  );
   const unreadInboxCount = useMemo(
     () => inboxMessages.filter(message => !message.isRead).length,
     [inboxMessages]

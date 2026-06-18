@@ -1,6 +1,7 @@
 import { Formation, Player, Team } from '../models/types';
 import { getSlotsForFormation } from '../constants/formations';
 import { RandomGenerator, resolveRandom } from './random';
+import { isPlayerUnavailable } from './playerStatusUtils';
 
 const ADAPTIVE_FORMATIONS: Formation[] = [
   '4-3-3',
@@ -52,7 +53,7 @@ const scoreFormationFit = (players: Player[], formation: Formation) => {
     return raw.includes('WB') || raw === 'LM' || raw === 'RM' || raw === 'LB' || raw === 'RB';
   }).length;
 
-  if (formation.startsWith('3') && cbDepth < 3) score -= 24;
+  if ((formation.startsWith('3') || formation.startsWith('5')) && cbDepth < 3) score -= 80;
   if (formation.startsWith('5') && wbDepth < 2) score -= 10;
   return score;
 };
@@ -211,7 +212,7 @@ export const applyTacticalAdaptation = (
     );
     if (shouldTryFormationChange) {
       const teamPlayers = Object.values(updatedPlayers)
-        .filter(player => player.teamId === team.id && player.matchesSuspended === 0);
+        .filter(player => player.teamId === team.id && !isPlayerUnavailable(player));
       const candidate = pickAdaptiveFormation(nextTeam, teamPlayers, formationMode!, rng);
       if (candidate && candidate !== nextTeam.activeFormation) {
         nextTeam = { ...nextTeam, activeFormation: candidate };
@@ -221,7 +222,7 @@ export const applyTacticalAdaptation = (
 
     if (!teamChanged && pressureScore >= 68 && team.played % 4 === 0 && random() < 0.24) {
       const teamPlayers = Object.values(updatedPlayers)
-        .filter(player => player.teamId === team.id && player.matchesSuspended === 0);
+        .filter(player => player.teamId === team.id && !isPlayerUnavailable(player));
       const pressureMode: 'attack' | 'defense' = goalsAgainstPerGame >= goalsForPerGame ? 'defense' : 'attack';
       const candidate = pickAdaptiveFormation(nextTeam, teamPlayers, pressureMode, rng);
       if (candidate && candidate !== nextTeam.activeFormation) {

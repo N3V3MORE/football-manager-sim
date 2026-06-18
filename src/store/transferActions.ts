@@ -59,6 +59,22 @@ export const buyPlayerState = (
     };
   }
 
+  if (
+    !Number.isFinite(fee) ||
+    fee <= 0 ||
+    !Number.isFinite(wageOffered) ||
+    wageOffered < 0 ||
+    !Number.isFinite(player.askingPrice) ||
+    player.askingPrice <= 0 ||
+    !Number.isFinite(userTeam.budget) ||
+    !Number.isFinite(userTeam.transferSpend)
+  ) {
+    return {
+      patch: state,
+      result: { success: false, message: 'Invalid transfer finances.' },
+    };
+  }
+
   if (userTeam.budget < fee) {
     return {
       patch: state,

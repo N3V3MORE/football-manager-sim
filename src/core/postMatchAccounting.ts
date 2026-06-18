@@ -112,7 +112,16 @@ export const applySharedPostMatchAccounting = ({
     if (isWin) rating += ENGINE_CONFIG.MATCH_RATING_WIN_BONUS;
     if (isDraw) rating += ENGINE_CONFIG.MATCH_RATING_DRAW_BONUS;
     if (!isWin && !isDraw) rating -= ENGINE_CONFIG.MATCH_RATING_LOSS_PENALTY;
-    if (concededGoalsTotal === 0 && (player.position === 'DEF' || player.position === 'GK')) {
+    const isStarter = teamStarterIds.has(player.id);
+    const windowStart = isStarter ? 0 : Math.max(0, 90 - minutes);
+    const windowEnd = isStarter ? minutes : 90;
+    const hasCleanSheetWindow = qualifiesForWindowedCleanSheet(
+      concededGoalMinutes,
+      windowStart,
+      windowEnd,
+      concededGoalsTotal
+    );
+    if ((player.position === 'DEF' || player.position === 'GK') && hasCleanSheetWindow) {
       rating += ENGINE_CONFIG.MATCH_RATING_CLEAN_SHEET_BONUS;
     }
     const contribution = playerMatchContributions[player.id] || {};

@@ -69,11 +69,18 @@ export const setFormationState = (
   const hasExistingMap = Object.keys(existingMap).length > 0;
 
   if (baseNew === baseOld && hasExistingMap) {
-    const teamStarters = Object.values(state.players)
+    const updatedPlayers = { ...state.players };
+    Object.values(updatedPlayers)
+      .filter(player => player.teamId === teamId && isPlayerUnavailable(player) && (player.isStarting || player.isSub))
+      .forEach(player => {
+        updatedPlayers[player.id] = { ...player, isStarting: false, isSub: false };
+      });
+    const teamStarters = Object.values(updatedPlayers)
       .filter(player => player.teamId === teamId && player.isStarting && !isPlayerUnavailable(player));
     const formationMap = rebuildFormationMap(getSlotsForFormation(formation), teamStarters, existingMap);
     return {
       teams: { ...state.teams, [teamId]: { ...team, activeFormation: formation, formationMap } },
+      players: updatedPlayers,
     };
   }
 

@@ -38,11 +38,17 @@ export const applyInboxActionState = (
     if (!team) return state;
 
     nextPlayers = applyLineupSuggestionToTeam(state.players, teamId, startingIds, subIds);
+    const eligibleFormationMap = Object.fromEntries(
+      Object.entries(formationMap).filter(([, playerId]) => {
+        const player = nextPlayers[playerId];
+        return player?.teamId === teamId && player.isStarting;
+      })
+    );
     nextTeams = {
       ...state.teams,
       [teamId]: {
         ...team,
-        formationMap,
+        formationMap: eligibleFormationMap,
       },
     };
   } else if (message.action.type === 'apply_tactics') {

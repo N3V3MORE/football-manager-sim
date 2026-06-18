@@ -16,11 +16,13 @@ import {
 } from '../src/core/postMatchAccounting';
 import { advanceSeason } from '../src/core/seasonTransition';
 import { applyTacticalAdaptation } from '../src/core/tacticalAdaptationEngine';
-import { Player, Team } from '../src/models/types';
+import { InboxMessage, Player, Team } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
 import { markAsSubState, toggleStartingState } from '../src/store/lineupActions';
 import { buyPlayerState } from '../src/store/transferActions';
 import { computeMarketValue } from '../src/utils/calendar';
+import { applyInboxActionState } from '../src/store/inboxActions';
+import { advanceWeekState } from '../src/store/weekLifecycle';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) {
@@ -130,6 +132,55 @@ const checkLiveSentOffMinutes = () => {
     (after.minutesPlayed || 0) - beforeMinutes === 42,
     `Sent-off live player should receive 42 minutes, got ${(after.minutesPlayed || 0) - beforeMinutes}`
   );
+};
+
+const checkActiveLiveMatchBlocksWeekAdvance = () => {
+  const data = initGameData('Arsenal');
+  const userTeam = Object.values(data.teams).find(team => team.name === 'Arsenal');
+  assert(userTeam, 'Expected Arsenal for active live match regression');
+  const fixture = Object.values(data.fixtures).find(item => (
+    item.week === 1 &&
+    (item.homeTeamId === userTeam!.id || item.awayTeamId === userTeam!.id)
+  ));
+  assert(fixture, 'Expected week-one Arsenal fixture for active live match regression');
+
+  const state = {
+    currentWeek: 1,
+    userTeamId: userTeam!.id,
+    teams: data.teams,
+    players: data.players,
+    fixtures: data.fixtures,
+    competitions: data.competitions,
+    news: [],
+    inboxMessages: [],
+    boardObjectives: [],
+    boardReviewAppliedWeek: 0,
+    careerRecord: {
+      seasonsManaged: 0,
+      totalWins: 0,
+      totalDraws: 0,
+      totalLosses: 0,
+      totalGoalsFor: 0,
+      totalGoalsAgainst: 0,
+      reputation: 50,
+      trophies: [],
+      seasonHistory: [],
+      consecutiveLowApprovalWeeks: 0,
+    },
+    liveMatches: {
+      [fixture!.id]: {
+        initialized: true,
+        yellowCardPlayerIds: [],
+        sentOffPlayerIds: [],
+        homeStarterIds: [],
+        awayStarterIds: [],
+      },
+    },
+  };
+
+  const result = advanceWeekState(state);
+  assert(result.currentWeek === 1, 'Week advance should not skip past an active live match');
+  assert(!result.fixtures[fixture!.id].isPlayed, 'Active live fixture should remain unplayed until resolved');
 };
 
 const checkBranchGuards = () => {
@@ -593,6 +644,48 @@ const checkManualTransfersRespectWindow = () => {
   );
 };
 
+const checkManualTransfersRejectNonFiniteMoney = () => {
+  const data = initGameData();
+  const userTeam = Object.values(data.teams).find(team => team.division === 'Premier League');
+  const sellerTeam = Object.values(data.teams)
+    .find(team => team.id !== userTeam?.id && team.division === userTeam?.division);
+  assert(userTeam && sellerTeam, 'Expected teams for non-finite transfer regression');
+  const target = Object.values(data.players).find(player => player.teamId === sellerTeam!.id && !player.isStarting);
+  assert(target, 'Expected target player for non-finite transfer regression');
+
+  const players = {
+    ...data.players,
+    [target!.id]: {
+      ...target!,
+      isTransferListed: true,
+      askingPrice: 5,
+    },
+  };
+  const teams = {
+    ...data.teams,
+    [userTeam!.id]: {
+      ...userTeam!,
+      budget: 100,
+      transferSpend: 0,
+    },
+  };
+  const result = buyPlayerState(
+    {
+      currentWeek: 2,
+      players,
+      teams,
+      userTeamId: userTeam!.id,
+    },
+    target!.id,
+    Number.NaN,
+    target!.wage
+  );
+  const nextTeams = result.patch.teams || teams;
+
+  assert(!result.result.success, 'Manual transfer purchase should reject NaN fees');
+  assert(nextTeams[userTeam!.id].budget === 100, 'Rejected NaN transfer should not corrupt buyer budget');
+};
+
 const checkUnavailableBenchPlayersCanBeRemoved = () => {
   const data = initGameData();
   const userTeam = Object.values(data.teams).find(team => team.division === 'Premier League');
@@ -664,6 +757,63 @@ const checkLineupActionsPreserveBenchLimit = () => {
     .filter(player => player.teamId === userTeam!.id && player.isSub && !player.isStarting);
 
   assert(activeBench.length <= 7, 'Removing a starter should not create an eighth active substitute');
+};
+
+const checkLineupInboxActionFiltersStaleFormationMap = () => {
+  const data = initGameData('Arsenal');
+  const userTeam = Object.values(data.teams).find(team => team.name === 'Arsenal');
+  assert(userTeam, 'Expected Arsenal for stale lineup action regression');
+  const teamPlayers = Object.values(data.players)
+    .filter(player => player.teamId === userTeam!.id)
+    .sort((a, b) => b.overallRating - a.overallRating);
+  const startingIds = teamPlayers.slice(0, 11).map(player => player.id);
+  const staleStarterId = startingIds[0];
+  const subIds = teamPlayers.slice(11, 18).map(player => player.id);
+  assert(staleStarterId && subIds.length > 0, 'Expected enough players for stale lineup action regression');
+
+  const message: InboxMessage = {
+    id: 'stale-lineup-action',
+    week: 1,
+    source: 'assistant',
+    category: 'lineup_suggestion',
+    title: 'Lineup',
+    body: 'Lineup',
+    isRead: false,
+    teamId: userTeam!.id,
+    action: {
+      type: 'apply_lineup',
+      payload: {
+        teamId: userTeam!.id,
+        startingIds,
+        subIds,
+        formationMap: Object.fromEntries(startingIds.map((playerId, index) => [`0-${index}`, playerId])),
+      },
+    },
+  };
+
+  const players = {
+    ...data.players,
+    [staleStarterId]: {
+      ...data.players[staleStarterId],
+      injuryWeeks: 2,
+    },
+  };
+  const result = applyInboxActionState({
+    currentWeek: 1,
+    userTeamId: userTeam!.id,
+    teams: data.teams,
+    players,
+    fixtures: data.fixtures,
+    competitions: data.competitions,
+    inboxMessages: [message],
+    boardObjectives: [],
+  }, message.id);
+  const nextTeams = result.teams || data.teams;
+  const nextPlayers = result.players || players;
+  const mappedIds = Object.values(nextTeams[userTeam!.id].formationMap || {});
+
+  assert(!nextPlayers[staleStarterId].isStarting, 'Unavailable stale lineup player should not be selected');
+  assert(!mappedIds.includes(staleStarterId), 'Applied lineup map should not retain unavailable non-starters');
 };
 
 const checkSeasonReportsUseCompetitionLifecycleAndLeagueTables = () => {
@@ -805,14 +955,21 @@ const checkContractDeparturesPreferViableDestinations = () => {
 
 const checkUiContractsMatchEngineState = () => {
   const statsScreen = readSource('app/stats.tsx');
+  const hubScreen = readSource('app/(tabs)/index.tsx');
   const settingsScreen = readSource('app/(tabs)/settings.tsx');
   const calendarScreen = readSource('app/calendar.tsx');
+  const calendarRow = readSource('components/calendar/calendar-fixture-row.tsx');
   const calendarUtils = readSource('src/utils/calendar.ts');
+  const squadScreen = readSource('app/(tabs)/squad.tsx');
   const tacticsScreen = readSource('app/(tabs)/tactics.tsx');
 
   assert(
-    /userTeamId/.test(statsScreen) && /playerTeam\.division === userTeam\.division/.test(statsScreen),
-    'Stats screen should scope leaderboards to the managed division'
+    /All-Competition Stats/.test(statsScreen) && /playerTeam\.division === userTeam\.division/.test(statsScreen),
+    'Stats screen should honestly label aggregate all-competition leaderboards for the managed division'
+  );
+  assert(
+    /position === 'GK'/.test(hubScreen),
+    'Hub clean-sheet leader should use the same goalkeeper filter as Golden Glove stats'
   );
   assert(
     /filter\(team => !team\.isExternal\)/.test(settingsScreen),
@@ -827,8 +984,28 @@ const checkUiContractsMatchEngineState = () => {
     'Calendar utilities should expose a season label helper'
   );
   assert(
+    /competitionLabel/.test(calendarScreen) && /roundLabel/.test(calendarScreen) && /competitionLabel/.test(calendarRow),
+    'Calendar rows should show competition context for cup and Europe fixtures'
+  );
+  assert(
+    /Tap a reserve to designate as sub/.test(squadScreen),
+    'Squad empty-bench instruction should match the tap interaction'
+  );
+  assert(
     !/Conserves 25%|35% more energy|astronomical energy drain|30% better tackling/.test(tacticsScreen),
     'Tactics copy should not claim effects the engine does not implement'
+  );
+};
+
+const checkValidationCatchesPastUnplayedFixturesAndNonFiniteFinances = () => {
+  const validator = readSource('src/dev/agentGameHandler.ts');
+  assert(
+    /fixture\.week < current\.currentWeek[\s\S]*!fixture\.isPlayed/.test(validator),
+    'Agent validation should catch unplayed fixtures left in past weeks'
+  );
+  assert(
+    /Number\.isFinite\(team\.budget\)/.test(validator) && /Number\.isFinite\(team\.transferSpend\)/.test(validator),
+    'Agent validation should catch non-finite team finance values'
   );
 };
 
@@ -924,6 +1101,61 @@ const checkTacticalAdaptationRunsOncePerPlayedCount = () => {
   assert(afterSecond === afterFirst, 'Tactical adaptation should not repeatedly react to the same played count');
 };
 
+const checkTacticalAdaptationIgnoresUnavailablePlayers = () => {
+  const data = initGameData();
+  const team = Object.values(data.teams).find(candidate => (
+    candidate.division === 'Premier League' &&
+    candidate.id !== 'T1'
+  ));
+  assert(team, 'Expected AI team for unavailable tactical adaptation regression');
+  const defenders = Object.values(data.players)
+    .filter(player => player.teamId === team!.id && player.position === 'DEF')
+    .sort((a, b) => b.overallRating - a.overallRating);
+  assert(defenders.length >= 3, 'Expected defenders for unavailable tactical adaptation regression');
+
+  const injuredIds = defenders.slice(0, Math.max(1, defenders.length - 2)).map(player => player.id);
+  const players = {
+    ...data.players,
+    ...Object.fromEntries(injuredIds.map(playerId => [
+      playerId,
+      {
+        ...data.players[playerId],
+        injuryWeeks: 4,
+      },
+    ])),
+  };
+  const teams: Record<string, Team> = {
+    ...data.teams,
+    [team!.id]: {
+      ...team!,
+      played: 4,
+      goalsFor: 7,
+      goalsAgainst: 10,
+      losses: 3,
+      form: ['L', 'L', 'D', 'L'],
+      activeFormation: '4-3-3',
+      tactics: {
+        mentality: 'Attacking',
+        passingStyle: 'Direct',
+        tempo: 'Fast',
+        defensiveLine: 'High',
+        pressing: 'High',
+      },
+      manager: {
+        ...team!.manager,
+        pressureScore: 80,
+        preferredFormations: ['5-2-3'],
+      },
+    },
+  };
+
+  applyTacticalAdaptation(players, teams, new Set(), { next: () => 0 });
+  assert(
+    !teams[team!.id].activeFormation.startsWith('5'),
+    'AI formation adaptation should not choose a back five using injured defensive depth'
+  );
+};
+
 const checkMatchRatingsIncludeIndividualOutput = () => {
   const base = Object.values(initGameData().players).find(player => player.position === 'FWD');
   assert(base, 'Expected a forward for rating contribution regression');
@@ -979,6 +1211,43 @@ const checkMatchRatingsIncludeIndividualOutput = () => {
   assert(scorerRating > teammateRating, 'A goalscorer should receive a better match rating than a similar teammate');
 };
 
+const checkCleanSheetRatingsUsePlayerWindow = () => {
+  const base = Object.values(initGameData().players).find(player => player.position === 'DEF');
+  assert(base, 'Expected defender for clean-sheet rating regression');
+  const defender: Player = {
+    ...base!,
+    id: 'rating-clean-window',
+    cleanSheets: 0,
+    matchRatingHistory: [],
+  };
+  const players = { [defender.id]: defender };
+
+  applySharedPostMatchAccounting({
+    teamParticipants: [defender],
+    teamStarterIds: new Set([defender.id]),
+    minuteMap: { [defender.id]: 60 },
+    concededGoalMinutes: [80],
+    concededGoalsTotal: 1,
+    isWin: false,
+    isDraw: true,
+    teamTactics: {
+      mentality: 'Balanced',
+      passingStyle: 'Mixed',
+      tempo: 'Normal',
+      defensiveLine: 'Standard',
+      pressing: 'Medium',
+    },
+    updatedPlayers: players,
+    rng: { next: () => 0.5 },
+  });
+
+  assert(players[defender.id].cleanSheets === 1, 'Defender should receive windowed clean-sheet stat');
+  assert(
+    (players[defender.id].matchRatingHistory.at(-1) || 0) >= 7.0,
+    'Windowed clean sheet should also contribute to defender match rating'
+  );
+};
+
 
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
@@ -988,6 +1257,8 @@ const runRegressionChecks = () => {
   console.log('[OK] Clean-sheet window checks passed');
   checkLiveSentOffMinutes();
   console.log('[OK] Live sent-off minute check passed');
+  checkActiveLiveMatchBlocksWeekAdvance();
+  console.log('[OK] Active live match week-advance guard passed');
   checkBranchGuards();
   console.log('[OK] Second-yellow and shape parity guards passed');
   checkUserTeamProgressionDoesNotAdaptFormation();
@@ -1022,10 +1293,14 @@ const runRegressionChecks = () => {
 
   checkManualTransfersRespectWindow();
   console.log('[OK] Manual transfer window guard passed');
+  checkManualTransfersRejectNonFiniteMoney();
+  console.log('[OK] Manual transfer finite money guard passed');
   checkUnavailableBenchPlayersCanBeRemoved();
   console.log('[OK] Unavailable bench player cleanup passed');
   checkLineupActionsPreserveBenchLimit();
   console.log('[OK] Lineup action bench limit passed');
+  checkLineupInboxActionFiltersStaleFormationMap();
+  console.log('[OK] Lineup inbox stale formation map check passed');
   checkSeasonReportsUseCompetitionLifecycleAndLeagueTables();
   console.log('[OK] Season reporting lifecycle guards passed');
   checkAiTransferListingsExpireOutsideWindow();
@@ -1042,8 +1317,14 @@ const runRegressionChecks = () => {
   console.log('[OK] Selected team initialization defaults passed');
   checkTacticalAdaptationRunsOncePerPlayedCount();
   console.log('[OK] Tactical adaptation repeat guard passed');
+  checkTacticalAdaptationIgnoresUnavailablePlayers();
+  console.log('[OK] Tactical adaptation availability check passed');
   checkMatchRatingsIncludeIndividualOutput();
   console.log('[OK] Match rating contribution checks passed');
+  checkCleanSheetRatingsUsePlayerWindow();
+  console.log('[OK] Windowed clean-sheet rating check passed');
+  checkValidationCatchesPastUnplayedFixturesAndNonFiniteFinances();
+  console.log('[OK] Agent validation coverage checks passed');
 
   console.log('--- REGRESSION CHECKS COMPLETE ---');
 };

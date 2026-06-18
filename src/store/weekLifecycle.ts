@@ -105,6 +105,26 @@ const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TSt
   };
 };
 
+const sanitizeFormationMaps = <TState extends WeeklyLifecycleState>(state: TState): TState => {
+  let changed = false;
+  const teams = Object.fromEntries(Object.entries(state.teams).map(([teamId, team]) => {
+    if (!team.formationMap) return [teamId, team];
+    const formationMap = Object.fromEntries(
+      Object.entries(team.formationMap).filter(([, playerId]) => {
+        const player = state.players[playerId];
+        return player?.teamId === team.id && player.isStarting;
+      })
+    );
+    if (Object.keys(formationMap).length !== Object.keys(team.formationMap).length) {
+      changed = true;
+      return [teamId, { ...team, formationMap }];
+    }
+    return [teamId, team];
+  })) as TState['teams'];
+
+  return changed ? { ...state, teams } : state;
+};
+
 const applyBoardReview = <TState extends WeeklyLifecycleState>(state: TState, reviewWeek: number) => {
   if (!state.userTeamId) {
     return { nextState: state, boardMessages: [] as InboxMessage[] };
@@ -305,6 +325,13 @@ const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
 
 export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TState): TState => {
   const initialWeek = state.currentWeek;
+  const hasActiveCurrentLiveMatch = Object.values(state.fixtures).some(fixture => (
+    fixture.week <= state.currentWeek &&
+    !fixture.isPlayed &&
+    Boolean((state.liveMatches || {})[fixture.id])
+  ));
+  if (hasActiveCurrentLiveMatch) return state;
+
   let nextState = playCurrentWeekFixtures(state);
 
   const beforeProgressionPlayers = nextState.players;
@@ -339,6 +366,7 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
     teams: transferState.teams,
     transfersAppliedWeek: nextState.currentWeek,
   };
+  nextState = sanitizeFormationMaps(nextState);
 
   const boardReview = applyBoardReview(nextState, initialWeek);
   nextState = boardReview.nextState;

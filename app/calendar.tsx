@@ -19,6 +19,8 @@ type CalendarFixtureRowData = {
   id: string;
   week: number;
   dateLabel: string;
+  competitionLabel: string;
+  roundLabel: string;
   isHome: boolean;
   opponentName: string;
   opponentColor: string;
@@ -59,6 +61,8 @@ export default function CalendarScreen() {
       const theme = getTeamTheme(oppTeam.name);
       const status = getWindowStatus(fixture.week);
       const prevStatus = fixture.week > 1 ? getWindowStatus(fixture.week - 1) : 'closed';
+      const competition = competitions[fixture.competitionId];
+      const roundLabel = competition?.rounds.find(round => round.key === fixture.round)?.label || fixture.round.replace(/_/g, ' ');
       const banner: WindowBanner | undefined = status !== 'closed'
         ? { text: status === 'summer_open' ? 'Summer Transfer Window Open' : 'Winter Transfer Window Open', isOpen: true }
         : prevStatus !== 'closed'
@@ -69,6 +73,8 @@ export default function CalendarScreen() {
         id: fixture.id,
         week: fixture.week,
         dateLabel: formatShortDate(fixture.week, seasonNumber),
+        competitionLabel: competition?.shortName || fixture.competitionId,
+        roundLabel,
         isHome,
         opponentName: oppTeam.name,
         opponentColor: theme.primary,
@@ -80,7 +86,7 @@ export default function CalendarScreen() {
         windowBanner: banner,
       }];
     }),
-    [currentWeek, myFixtures, seasonNumber, teams, userTeamId]
+    [competitions, currentWeek, myFixtures, seasonNumber, teams, userTeamId]
   );
 
   if (!userTeamId) return <View style={styles.container} />;
@@ -106,6 +112,8 @@ export default function CalendarScreen() {
             <CalendarFixtureRow
               week={fixture.week}
               dateLabel={fixture.dateLabel}
+              competitionLabel={fixture.competitionLabel}
+              roundLabel={fixture.roundLabel}
               isHome={fixture.isHome}
               opponentName={fixture.opponentName}
               opponentColor={fixture.opponentColor}

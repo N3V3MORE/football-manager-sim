@@ -229,6 +229,8 @@ export const validateAgentGameState = (): AgentValidationReport => {
   });
 
   Object.values(current.teams).forEach(team => {
+    if (!Number.isFinite(team.budget)) addIssue('error', `Team budget is not finite: ${team.budget}`, team.id);
+    if (!Number.isFinite(team.transferSpend)) addIssue('error', `Team transfer spend is not finite: ${team.transferSpend}`, team.id);
     if (team.boardApproval < 0 || team.boardApproval > 100) {
       addIssue('warning', `Board approval outside 0-100: ${team.boardApproval}`, team.id);
     }
@@ -260,7 +262,7 @@ export const validateAgentGameState = (): AgentValidationReport => {
       }
       seenSlotPlayers.add(playerId);
       if (!player.isStarting) {
-        addIssue('warning', `Formation slot ${slotKey} player is not marked starting`, player.id);
+        addIssue('error', `Formation slot ${slotKey} player is not marked starting`, player.id);
       }
     });
   });
@@ -268,6 +270,9 @@ export const validateAgentGameState = (): AgentValidationReport => {
   Object.values(current.fixtures).forEach(fixture => {
     if (!current.teams[fixture.homeTeamId]) addIssue('error', 'Fixture references missing home team', fixture.id);
     if (!current.teams[fixture.awayTeamId]) addIssue('error', 'Fixture references missing away team', fixture.id);
+    if (fixture.week < current.currentWeek && !fixture.isPlayed) {
+      addIssue('error', 'Fixture from a past week is still unplayed', fixture.id);
+    }
     if (fixture.isPlayed) {
       if (typeof fixture.homeScore !== 'number') addIssue('error', 'Played fixture is missing home score', fixture.id);
       if (typeof fixture.awayScore !== 'number') addIssue('error', 'Played fixture is missing away score', fixture.id);
@@ -276,7 +281,11 @@ export const validateAgentGameState = (): AgentValidationReport => {
   });
 
   Object.entries(current.liveMatches || {}).forEach(([fixtureId, liveMatch]) => {
-    if (!current.fixtures[fixtureId]) addIssue('error', 'Live match references missing fixture', fixtureId);
+    const fixture = current.fixtures[fixtureId];
+    if (!fixture) addIssue('error', 'Live match references missing fixture', fixtureId);
+    if (fixture && (fixture.isPlayed || fixture.week < current.currentWeek)) {
+      addIssue('error', 'Live match references a resolved or past fixture', fixtureId);
+    }
     [...liveMatch.homeStarterIds, ...liveMatch.awayStarterIds].forEach(playerId => {
       if (!current.players[playerId]) addIssue('error', `Live match starter ${playerId} is missing`, fixtureId);
     });

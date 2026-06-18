@@ -321,7 +321,7 @@ export default function SquadScreen() {
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Substitutes ({bench.length}/7)</Text>
-              {bench.length === 0 && <Text style={styles.emptyNote}>Long-press a reserve to designate as sub</Text>}
+              {bench.length === 0 && <Text style={styles.emptyNote}>Tap a reserve to designate as sub</Text>}
               {bench.map((player) => {
                 const isExpanded = expandedCardId === player.id;
                 return (

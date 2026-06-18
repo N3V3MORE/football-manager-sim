@@ -87,7 +87,7 @@ export default function StatsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <PageHeader title="League Stats" backLabel="< Hub" onBack={() => router.replace('/')} />
+      <PageHeader title="All-Competition Stats" backLabel="< Hub" onBack={() => router.replace('/')} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {paneConfigs.map((pane) => {
