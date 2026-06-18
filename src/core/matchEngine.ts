@@ -30,6 +30,35 @@ export { getFormModifier, getMoraleModifier, runDuel } from './matchUtils';
 
 const LOW_INTENSITY_COMMENTARY_CHANCE = 0.04;
 
+const getPossessionControlScore = (
+  team: Team,
+  players: Player[],
+  shape: TeamShapeProfile
+) => {
+  const passing = avgStat(players, player => player.stats.passing || 60, 60);
+  const dribbling = avgStat(players, player => player.stats.dribbling || 55, 55);
+  const midfieldLoad = shape.lineLoad.mid + (shape.lineLoad.fwd * 0.35);
+  const mentalityBonus = team.tactics.mentality === 'Attacking'
+    ? 2.5
+    : (team.tactics.mentality === 'Defensive' ? -1.5 : 0);
+  return Math.max(1, (passing * 0.68) + (dribbling * 0.22) + (midfieldLoad * 1.8) + mentalityBonus);
+};
+
+export const selectPossessionAttacker = (
+  homeTeam: Team,
+  awayTeam: Team,
+  homePlayers: Player[],
+  awayPlayers: Player[],
+  homeShape: TeamShapeProfile,
+  awayShape: TeamShapeProfile,
+  rng: RandomGenerator
+) => {
+  const homeControl = getPossessionControlScore(homeTeam, homePlayers, homeShape);
+  const awayControl = getPossessionControlScore(awayTeam, awayPlayers, awayShape);
+  const homeShare = clamp(homeControl / Math.max(1, homeControl + awayControl), 0.42, 0.58);
+  return rng.next() < homeShare;
+};
+
 const pickCommentary = (random: () => number, options: string[]) => (
   options[Math.floor(random() * options.length)] || options[0] || null
 );
@@ -435,7 +464,6 @@ export const quickSimMatch = (
   const awaySubEntryMinutes: Record<string, number> = {};
   const substitutionCheckpoints = [56, 66, 76, 84];
   let appliedCheckpointIndex = 0;
-  const firstAttackIsHome = random() < 0.5;
 
   const matchYellowCards = new Set<string>();
   const sentOffPlayers = new Set<string>();
@@ -512,7 +540,15 @@ export const quickSimMatch = (
       });
       appliedCheckpointIndex += 1;
     }
-    const isHomeAttacking = ((i + (firstAttackIsHome ? 0 : 1)) % 2) === 0;
+    const isHomeAttacking = selectPossessionAttacker(
+      homeTeam,
+      awayTeam,
+      scaledHome,
+      scaledAway,
+      homeShape,
+      awayShape,
+      rng
+    );
     const attTeam = isHomeAttacking ? homeTeam : awayTeam;
     const defTeam = isHomeAttacking ? awayTeam : homeTeam;
     const attPlayers = isHomeAttacking ? scaledHome : scaledAway;

@@ -4,14 +4,16 @@ import {
   buildTeamShapeProfile,
   getFormModifier,
   getMoraleModifier,
+  selectPossessionAttacker,
   simulatePossession,
 } from '../core/matchEngine';
 import { addPlayerStat, scaleLineupForMatch } from '../core/matchUtils';
 import { RandomGenerator, defaultRandomGenerator } from '../core/random';
 import { applySubstitutions } from '../core/substitutionEngine';
-import { buildStarterMinuteMap } from '../core/minuteMapUtils';
+import { buildStarterBenchMinuteMap, buildStarterMinuteMap } from '../core/minuteMapUtils';
 import { applySharedPostMatchAccounting, PlayerMatchContribution } from '../core/postMatchAccounting';
 import { applyMatchInjuries } from '../core/injuryEngine';
+import { getTeamMatchBench } from '../core/lineupEngine';
 import { isPlayerUnavailable } from '../core/playerStatusUtils';
 import { resolveCompetitionProgression } from '../core/competitionEngine';
 import { removePlayerFromTeamSelections } from '../core/formationMapUtils';
@@ -35,6 +37,8 @@ type LiveMatchActionState = GameState & {
 };
 
 type LiveMatchActionPatch = LiveMatchActionState | Partial<LiveMatchActionState>;
+
+const LIVE_SUBSTITUTION_CHECKPOINTS = [56, 66, 76, 84];
 
 export const processLiveMatchMinuteState = (
   state: LiveMatchActionState,
@@ -73,14 +77,61 @@ export const processLiveMatchMinuteState = (
   };
   const matchYellowCards = new Set(storedLiveState?.yellowCardPlayerIds || []);
   const allowAutoAssign = !storedLiveState?.initialized;
-  const firstAttackIsHome = storedLiveState?.firstAttackIsHome ?? (random() < 0.5);
 
-  const homeStarters = ensureLiveTeamStarters(homeTeam.id, state.teams, updatedPlayers, sentOffPlayers, allowAutoAssign);
-  const awayStarters = ensureLiveTeamStarters(awayTeam.id, state.teams, updatedPlayers, sentOffPlayers, allowAutoAssign);
+  let homeStarters = storedLiveState?.currentHomePlayerIds
+    ? getPlayersByIds(updatedPlayers, storedLiveState.currentHomePlayerIds).filter(player => !sentOffPlayers.has(player.id))
+    : ensureLiveTeamStarters(homeTeam.id, state.teams, updatedPlayers, sentOffPlayers, allowAutoAssign);
+  let awayStarters = storedLiveState?.currentAwayPlayerIds
+    ? getPlayersByIds(updatedPlayers, storedLiveState.currentAwayPlayerIds).filter(player => !sentOffPlayers.has(player.id))
+    : ensureLiveTeamStarters(awayTeam.id, state.teams, updatedPlayers, sentOffPlayers, allowAutoAssign);
 
   if (homeStarters.length === 0 || awayStarters.length === 0) {
     return { patch: state, event: eventMsg };
   }
+
+  const homeStarterIds = storedLiveState?.homeStarterIds || homeStarters.map(player => player.id);
+  const awayStarterIds = storedLiveState?.awayStarterIds || awayStarters.map(player => player.id);
+  const homeBench = storedLiveState?.homeBenchIds
+    ? getPlayersByIds(updatedPlayers, storedLiveState.homeBenchIds)
+    : getLiveMatchBench(updatedPlayers, homeTeam.id, homeStarters);
+  const awayBench = storedLiveState?.awayBenchIds
+    ? getPlayersByIds(updatedPlayers, storedLiveState.awayBenchIds)
+    : getLiveMatchBench(updatedPlayers, awayTeam.id, awayStarters);
+  let availableHomeBench = homeBench.filter(player => !isPlayerUnavailable(player) && !homeStarters.some(starter => starter.id === player.id));
+  let availableAwayBench = awayBench.filter(player => !isPlayerUnavailable(player) && !awayStarters.some(starter => starter.id === player.id));
+  const homeMinuteMap = storedLiveState?.homeMinuteMap
+    ? { ...storedLiveState.homeMinuteMap }
+    : buildStarterBenchMinuteMap(homeStarters, homeBench);
+  const awayMinuteMap = storedLiveState?.awayMinuteMap
+    ? { ...storedLiveState.awayMinuteMap }
+    : buildStarterBenchMinuteMap(awayStarters, awayBench);
+  const homeSubEntryMinutes = { ...(storedLiveState?.homeSubEntryMinutes || {}) };
+  const awaySubEntryMinutes = { ...(storedLiveState?.awaySubEntryMinutes || {}) };
+  const appliedSubstitutionCheckpoints = new Set(storedLiveState?.appliedSubstitutionCheckpoints || []);
+
+  LIVE_SUBSTITUTION_CHECKPOINTS
+    .filter(checkpoint => checkpoint <= minute && !appliedSubstitutionCheckpoints.has(checkpoint))
+    .forEach(checkpoint => {
+      applySubstitutions(homeStarters, availableHomeBench, sentOffPlayers, homeMinuteMap, homeTeam, updatedFixture.homeScore!, updatedFixture.awayScore!, rng, {
+        maxSubsOverride: 1,
+        minuteOverride: checkpoint,
+        playerEntryMinutes: homeSubEntryMinutes,
+        onSubstitution: (offPlayer, onPlayer) => {
+          homeStarters = homeStarters.map(player => (player.id === offPlayer.id ? onPlayer : player));
+          availableHomeBench = availableHomeBench.filter(player => player.id !== onPlayer.id);
+        },
+      });
+      applySubstitutions(awayStarters, availableAwayBench, sentOffPlayers, awayMinuteMap, awayTeam, updatedFixture.awayScore!, updatedFixture.homeScore!, rng, {
+        maxSubsOverride: 1,
+        minuteOverride: checkpoint,
+        playerEntryMinutes: awaySubEntryMinutes,
+        onSubstitution: (offPlayer, onPlayer) => {
+          awayStarters = awayStarters.map(player => (player.id === offPlayer.id ? onPlayer : player));
+          availableAwayBench = availableAwayBench.filter(player => player.id !== onPlayer.id);
+        },
+      });
+      appliedSubstitutionCheckpoints.add(checkpoint);
+    });
 
   drainLiveMatchEnergy(updatedPlayers, [...homeStarters, ...awayStarters]);
 
@@ -98,13 +149,21 @@ export const processLiveMatchMinuteState = (
       homeTeam.clubClass
     );
     const scaledAway = scaleLineupForMatch(awayStarters, awayFormMult, awayMoraleMult, 1, awayTeam.clubClass);
-    const isHomeAttacking = ((possessionIndex + (firstAttackIsHome ? 0 : 1)) % 2) === 0;
+    const homeShape = buildTeamShapeProfile(homeTeam, homeStarters);
+    const awayShape = buildTeamShapeProfile(awayTeam, awayStarters);
+    const isHomeAttacking = selectPossessionAttacker(
+      homeTeam,
+      awayTeam,
+      scaledHome,
+      scaledAway,
+      homeShape,
+      awayShape,
+      rng
+    );
     const attacker = isHomeAttacking ? homeTeam : awayTeam;
     const defender = isHomeAttacking ? awayTeam : homeTeam;
     const attPlayers = isHomeAttacking ? scaledHome : scaledAway;
     const defPlayers = isHomeAttacking ? scaledAway : scaledHome;
-    const homeShape = buildTeamShapeProfile(homeTeam, homeStarters);
-    const awayShape = buildTeamShapeProfile(awayTeam, awayStarters);
     const attShape = isHomeAttacking ? homeShape : awayShape;
     const defShape = isHomeAttacking ? awayShape : homeShape;
 
@@ -120,6 +179,22 @@ export const processLiveMatchMinuteState = (
       addContribution(playerId, 'redCards');
       sentOffPlayers.add(playerId);
       sentOffMinutes[playerId] = minute;
+      if (homeMinuteMap[playerId] !== undefined) {
+        const entryMinute = homeSubEntryMinutes[playerId];
+        homeMinuteMap[playerId] = entryMinute !== undefined
+          ? Math.max(0, minute - entryMinute)
+          : Math.min(homeMinuteMap[playerId] || 90, minute);
+        delete homeSubEntryMinutes[playerId];
+        homeStarters = homeStarters.filter(starter => starter.id !== playerId);
+      }
+      if (awayMinuteMap[playerId] !== undefined) {
+        const entryMinute = awaySubEntryMinutes[playerId];
+        awayMinuteMap[playerId] = entryMinute !== undefined
+          ? Math.max(0, minute - entryMinute)
+          : Math.min(awayMinuteMap[playerId] || 90, minute);
+        delete awaySubEntryMinutes[playerId];
+        awayStarters = awayStarters.filter(starter => starter.id !== playerId);
+      }
       eventMsg = message;
     };
 
@@ -181,13 +256,22 @@ export const processLiveMatchMinuteState = (
     initialized: true,
     yellowCardPlayerIds: Array.from(matchYellowCards),
     sentOffPlayerIds: Array.from(sentOffPlayers),
-    firstAttackIsHome,
+    firstAttackIsHome: storedLiveState?.firstAttackIsHome,
     sentOffMinutes,
     homeGoalMinutes,
     awayGoalMinutes,
     matchContributions,
-    homeStarterIds: storedLiveState?.homeStarterIds || homeStarters.map(player => player.id),
-    awayStarterIds: storedLiveState?.awayStarterIds || awayStarters.map(player => player.id),
+    homeStarterIds,
+    awayStarterIds,
+    currentHomePlayerIds: homeStarters.map(player => player.id),
+    currentAwayPlayerIds: awayStarters.map(player => player.id),
+    homeBenchIds: storedLiveState?.homeBenchIds || homeBench.map(player => player.id),
+    awayBenchIds: storedLiveState?.awayBenchIds || awayBench.map(player => player.id),
+    homeMinuteMap,
+    awayMinuteMap,
+    homeSubEntryMinutes,
+    awaySubEntryMinutes,
+    appliedSubstitutionCheckpoints: Array.from(appliedSubstitutionCheckpoints),
     processedMinutes: [...processedMinutes, minute],
   };
 
@@ -206,13 +290,7 @@ const getLiveMatchBench = (
   teamId: string,
   starters: Player[]
 ) => {
-  const starterIds = new Set(starters.map(player => player.id));
-  return Object.values(players).filter(player => (
-    player.teamId === teamId &&
-    player.isSub &&
-    !isPlayerUnavailable(player) &&
-    !starterIds.has(player.id)
-  )).slice(0, 7);
+  return getTeamMatchBench(teamId, starters, players, isPlayerUnavailable);
 };
 
 export const finishLiveMatchState = (
@@ -241,13 +319,25 @@ export const finishLiveMatchState = (
   const updatedPlayers = { ...state.players };
   const hScore = fixture.homeScore || 0;
   const aScore = fixture.awayScore || 0;
-  const homeBench = getLiveMatchBench(state.players, homeTeam.id, homeTeamStarters);
-  const awayBench = getLiveMatchBench(state.players, awayTeam.id, awayTeamStarters);
-  const homeMinuteMap = buildStarterMinuteMap(homeTeamStarters, sentOffMinutes);
-  const awayMinuteMap = buildStarterMinuteMap(awayTeamStarters, sentOffMinutes);
+  const homeBench = liveMatchState?.homeBenchIds
+    ? getPlayersByIds(state.players, liveMatchState.homeBenchIds)
+    : getLiveMatchBench(state.players, homeTeam.id, homeTeamStarters);
+  const awayBench = liveMatchState?.awayBenchIds
+    ? getPlayersByIds(state.players, liveMatchState.awayBenchIds)
+    : getLiveMatchBench(state.players, awayTeam.id, awayTeamStarters);
+  const homeMinuteMap = liveMatchState?.homeMinuteMap
+    ? { ...liveMatchState.homeMinuteMap }
+    : buildStarterMinuteMap(homeTeamStarters, sentOffMinutes);
+  const awayMinuteMap = liveMatchState?.awayMinuteMap
+    ? { ...liveMatchState.awayMinuteMap }
+    : buildStarterMinuteMap(awayTeamStarters, sentOffMinutes);
 
-  applySubstitutions(homeTeamStarters, homeBench, sentOffPlayers, homeMinuteMap, homeTeam, hScore, aScore, rng);
-  applySubstitutions(awayTeamStarters, awayBench, sentOffPlayers, awayMinuteMap, awayTeam, aScore, hScore, rng);
+  if (!liveMatchState?.homeMinuteMap) {
+    applySubstitutions(homeTeamStarters, homeBench, sentOffPlayers, homeMinuteMap, homeTeam, hScore, aScore, rng);
+  }
+  if (!liveMatchState?.awayMinuteMap) {
+    applySubstitutions(awayTeamStarters, awayBench, sentOffPlayers, awayMinuteMap, awayTeam, aScore, hScore, rng);
+  }
 
   const homeParticipants = [...homeTeamStarters, ...homeBench];
   const awayParticipants = [...awayTeamStarters, ...awayBench];

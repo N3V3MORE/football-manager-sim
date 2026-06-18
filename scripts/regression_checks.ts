@@ -23,6 +23,7 @@ import { buyPlayerState } from '../src/store/transferActions';
 import { computeMarketValue } from '../src/utils/calendar';
 import { applyInboxActionState } from '../src/store/inboxActions';
 import { advanceWeekState } from '../src/store/weekLifecycle';
+import { processLiveMatchMinuteState } from '../src/store/liveMatchActions';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) {
@@ -131,6 +132,69 @@ const checkLiveSentOffMinutes = () => {
   assert(
     (after.minutesPlayed || 0) - beforeMinutes === 42,
     `Sent-off live player should receive 42 minutes, got ${(after.minutesPlayed || 0) - beforeMinutes}`
+  );
+};
+
+const checkPossessionFlowIsNotStrictAlternation = () => {
+  const matchEngine = readSource('src/core/matchEngine.ts');
+  const liveMatchActions = readSource('src/store/liveMatchActions.ts');
+
+  assert(
+    !/const isHomeAttacking = \(\(i \+ \(firstAttackIsHome \? 0 : 1\)\) % 2\) === 0;/.test(matchEngine),
+    'Quick sim should not use fixed home/away alternating attacks'
+  );
+  assert(
+    !/const isHomeAttacking = \(\(possessionIndex \+ \(firstAttackIsHome \? 0 : 1\)\) % 2\) === 0;/.test(liveMatchActions),
+    'Live sim should not use fixed home/away alternating attacks'
+  );
+};
+
+const checkLiveSubstitutionsApplyBeforeFullTime = () => {
+  useGameStore.getState().initializeGame('T1');
+  let current = useGameStore.getState();
+  const fixture = Object.values(current.fixtures)
+    .find(item => item.homeTeamId !== 'T1' && item.awayTeamId !== 'T1');
+  assert(fixture, 'Regression setup needs a non-user live fixture');
+
+  const rng = { next: createSeededRandom(20260619) };
+  const firstMinute = processLiveMatchMinuteState(current, fixture!.id, 1, rng);
+  current = { ...current, ...firstMinute.patch };
+  const initializedLiveMatch = current.liveMatches[fixture!.id];
+  assert(initializedLiveMatch, 'Live match should initialize lineups');
+
+  const initialHomeStarterIds = initializedLiveMatch.homeStarterIds;
+  const initialAwayStarterIds = initializedLiveMatch.awayStarterIds;
+  assert(initialHomeStarterIds.length === 11 && initialAwayStarterIds.length === 11, 'Live substitution regression needs full starting XIs');
+
+  for (let minute = 2; minute <= 66; minute += 1) {
+    const result = processLiveMatchMinuteState(current, fixture!.id, minute, rng);
+    current = { ...current, ...result.patch };
+  }
+
+  const liveMatch = current.liveMatches[fixture!.id];
+  assert(liveMatch, 'Live match state should exist after minute processing');
+  const inspectableLiveMatch = liveMatch as typeof liveMatch & {
+    currentHomePlayerIds?: string[];
+    currentAwayPlayerIds?: string[];
+    homeMinuteMap?: Record<string, number>;
+    awayMinuteMap?: Record<string, number>;
+  };
+  const homeMinuteMap = inspectableLiveMatch.homeMinuteMap || {};
+  const awayMinuteMap = inspectableLiveMatch.awayMinuteMap || {};
+  const activeIds = [
+    ...(inspectableLiveMatch.currentHomePlayerIds || []),
+    ...(inspectableLiveMatch.currentAwayPlayerIds || []),
+  ];
+  const initialStarterIds = new Set([...initialHomeStarterIds, ...initialAwayStarterIds]);
+
+  assert(
+    Object.values(homeMinuteMap).some(minutes => minutes > 0 && minutes < 90) ||
+      Object.values(awayMinuteMap).some(minutes => minutes > 0 && minutes < 90),
+    'Live substitutions should update player minute maps before full time'
+  );
+  assert(
+    activeIds.some(playerId => !initialStarterIds.has(playerId)),
+    'Live active XIs should include substitutes before full time'
   );
 };
 
@@ -506,7 +570,7 @@ const checkDisciplineRatesArePlausible = () => {
       teams: data.teams,
       fixtures: data.fixtures,
     };
-    const fixturesToPlay = Object.values(state.fixtures).slice(0, 300);
+    const fixturesToPlay = Object.values(state.fixtures).slice(0, 900);
     let yellowCards = 0;
     let redCards = 0;
 
@@ -1257,6 +1321,10 @@ const runRegressionChecks = () => {
   console.log('[OK] Clean-sheet window checks passed');
   checkLiveSentOffMinutes();
   console.log('[OK] Live sent-off minute check passed');
+  checkPossessionFlowIsNotStrictAlternation();
+  console.log('[OK] Possession flow variability guard passed');
+  checkLiveSubstitutionsApplyBeforeFullTime();
+  console.log('[OK] Live in-match substitution check passed');
   checkActiveLiveMatchBlocksWeekAdvance();
   console.log('[OK] Active live match week-advance guard passed');
   checkBranchGuards();

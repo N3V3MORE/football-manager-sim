@@ -16,6 +16,15 @@ export type LiveMatchState = {
   matchContributions?: Record<string, PlayerMatchContribution>;
   homeStarterIds: string[];
   awayStarterIds: string[];
+  currentHomePlayerIds?: string[];
+  currentAwayPlayerIds?: string[];
+  homeBenchIds?: string[];
+  awayBenchIds?: string[];
+  homeMinuteMap?: Record<string, number>;
+  awayMinuteMap?: Record<string, number>;
+  homeSubEntryMinutes?: Record<string, number>;
+  awaySubEntryMinutes?: Record<string, number>;
+  appliedSubstitutionCheckpoints?: number[];
   processedMinutes?: number[];
 };
 
