@@ -25,7 +25,10 @@ export default function SettingsScreen() {
   const [showChangeTeam, setShowChangeTeam] = useState(false);
 
   const userTeam = userTeamId ? teams[userTeamId] : null;
-  const sortedTeams = useMemo(() => sortTeamsByDivisionAndName(Object.values(teams)), [teams]);
+  const sortedTeams = useMemo(
+    () => sortTeamsByDivisionAndName(Object.values(teams).filter(team => !team.isExternal)),
+    [teams]
+  );
   const userSquad = useMemo(
     () => userTeamId ? Object.values(players).filter(player => player.teamId === userTeamId) : [],
     [players, userTeamId]

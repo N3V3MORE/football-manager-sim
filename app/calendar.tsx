@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { CalendarFixtureRow } from '@/components/calendar/calendar-fixture-row';
 import { CalendarWindowBanner } from '@/components/calendar/calendar-window-banner';
 import { useGameStore } from '@/src/store/gameStore';
-import { formatShortDate, getWindowStatus } from '@/src/utils/calendar';
+import { formatSeasonLabel, formatShortDate, getWindowStatus } from '@/src/utils/calendar';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { PageHeader } from '@/components/ui/page-header';
 import { Fixture } from '@/src/models/types';
@@ -33,6 +33,10 @@ export default function CalendarScreen() {
   const userTeamId = useGameStore(s => s.userTeamId);
   const teams = useGameStore(s => s.teams);
   const allFixtures = useGameStore(s => s.fixtures);
+  const competitions = useGameStore(s => s.competitions);
+  const seasonNumber = useMemo(() => (
+    Math.max(1, ...Object.values(competitions).map(competition => competition.season || 1))
+  ), [competitions]);
 
   const myFixtures = useMemo<Fixture[]>(
     () => {
@@ -64,7 +68,7 @@ export default function CalendarScreen() {
       return [{
         id: fixture.id,
         week: fixture.week,
-        dateLabel: formatShortDate(fixture.week),
+        dateLabel: formatShortDate(fixture.week, seasonNumber),
         isHome,
         opponentName: oppTeam.name,
         opponentColor: theme.primary,
@@ -76,7 +80,7 @@ export default function CalendarScreen() {
         windowBanner: banner,
       }];
     }),
-    [currentWeek, myFixtures, teams, userTeamId]
+    [currentWeek, myFixtures, seasonNumber, teams, userTeamId]
   );
 
   if (!userTeamId) return <View style={styles.container} />;
@@ -85,7 +89,7 @@ export default function CalendarScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <PageHeader
         title="Season Calendar"
-        subtitle="2024/25 Fixtures"
+        subtitle={formatSeasonLabel(seasonNumber)}
         backLabel="< Hub"
         onBack={() => router.replace('/')}
       />

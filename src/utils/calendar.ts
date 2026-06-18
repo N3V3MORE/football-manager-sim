@@ -4,11 +4,18 @@
 
 export const SEASON_START = new Date(2024, 7, 10); // Aug 10 2024
 
+const getSeasonStart = (season = 1) => new Date(2024 + Math.max(0, season - 1), 7, 10);
+
+export const formatSeasonLabel = (season = 1): string => {
+  const startYear = 2024 + Math.max(0, season - 1);
+  return `${startYear}/${String((startYear + 1) % 100).padStart(2, '0')} Fixtures`;
+};
+
 /**
  * Returns a JS Date for the given matchweek.
  */
-export const weekToDate = (week: number): Date => {
-  const d = new Date(SEASON_START);
+export const weekToDate = (week: number, season = 1): Date => {
+  const d = getSeasonStart(season);
   d.setDate(d.getDate() + (week - 1) * 7);
   return d;
 };
@@ -16,8 +23,8 @@ export const weekToDate = (week: number): Date => {
 /**
  * Returns a short human-readable date string e.g. "Sat 10 Aug"
  */
-export const formatMatchDate = (week: number): string => {
-  return weekToDate(week).toLocaleDateString('en-GB', {
+export const formatMatchDate = (week: number, season = 1): string => {
+  return weekToDate(week, season).toLocaleDateString('en-GB', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -27,8 +34,8 @@ export const formatMatchDate = (week: number): string => {
 /**
  * Returns just the date portion e.g. "10 Aug"
  */
-export const formatShortDate = (week: number): string => {
-  return weekToDate(week).toLocaleDateString('en-GB', {
+export const formatShortDate = (week: number, season = 1): string => {
+  return weekToDate(week, season).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
   });
@@ -37,8 +44,8 @@ export const formatShortDate = (week: number): string => {
 /**
  * Returns the full month/year for section headers e.g. "August 2024"
  */
-export const formatMonthYear = (week: number): string => {
-  return weekToDate(week).toLocaleDateString('en-GB', {
+export const formatMonthYear = (week: number, season = 1): string => {
+  return weekToDate(week, season).toLocaleDateString('en-GB', {
     month: 'long',
     year: 'numeric',
   });
@@ -79,18 +86,18 @@ export const isTransferWindowOpen = (week: number): boolean =>
  * Returns a human-readable banner string for the window status.
  * e.g. "Summer Window Open — Closes 1 Sep" or "Transfer Window Closed"
  */
-export const getTransferWindowLabel = (week: number): string => {
+export const getTransferWindowLabel = (week: number, season = 1): string => {
   const status = getWindowStatus(week);
   if (status === 'summer_open') {
     const weeksLeft = SUMMER_WINDOW_CLOSE_WEEK - week;
-    const closeDate = formatShortDate(SUMMER_WINDOW_CLOSE_WEEK + 1);
+    const closeDate = formatShortDate(SUMMER_WINDOW_CLOSE_WEEK + 1, season);
     return weeksLeft === 0
       ? `Summer Window — Closes ${closeDate}`
       : `Summer Window Open — ${weeksLeft} week${weeksLeft !== 1 ? 's' : ''} left`;
   }
   if (status === 'winter_open') {
     const weeksLeft = WINTER_WINDOW_CLOSE_WEEK - week;
-    const closeDate = formatShortDate(WINTER_WINDOW_CLOSE_WEEK + 1);
+    const closeDate = formatShortDate(WINTER_WINDOW_CLOSE_WEEK + 1, season);
     return weeksLeft === 0
       ? `Winter Window — Closes ${closeDate}`
       : `Winter Window Open — ${weeksLeft} week${weeksLeft !== 1 ? 's' : ''} left`;
@@ -98,7 +105,7 @@ export const getTransferWindowLabel = (week: number): string => {
   // Next window
   if (week < WINTER_WINDOW_OPEN_WEEK) {
     const weeksUntil = WINTER_WINDOW_OPEN_WEEK - week;
-    const openDate = formatShortDate(WINTER_WINDOW_OPEN_WEEK);
+    const openDate = formatShortDate(WINTER_WINDOW_OPEN_WEEK, season);
     return `Window Closed — Opens ${openDate} (${weeksUntil}w)`;
   }
   return 'Transfer Window Closed';

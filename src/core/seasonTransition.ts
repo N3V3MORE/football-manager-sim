@@ -72,7 +72,11 @@ const findContractDestinationTeamId = (
     .sort((a, b) => {
       if (a.division === currentDivision && b.division !== currentDivision) return -1;
       if (b.division === currentDivision && a.division !== currentDivision) return 1;
-      return a.budget - b.budget;
+      const aBudgetFit = a.budget - player.marketValue;
+      const bBudgetFit = b.budget - player.marketValue;
+      if ((bBudgetFit >= 0) !== (aBudgetFit >= 0)) return bBudgetFit >= 0 ? 1 : -1;
+      if (b.budget !== a.budget) return b.budget - a.budget;
+      return a.name.localeCompare(b.name);
     })[0]?.id || null;
 };
 

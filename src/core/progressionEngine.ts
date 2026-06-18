@@ -3,8 +3,33 @@ import { ENGINE_CONFIG } from '../config/engineConfig';
 import { applyTacticalAdaptation } from './tacticalAdaptationEngine';
 import { getSeasonWeekLimit } from './leagueUtils';
 import { RandomGenerator, resolveRandom } from './random';
+import { computeMarketValue } from '../utils/calendar';
 
 export { computeWeeklyTransfers } from './transferEngine';
+
+const clampRating = (value: number) => Math.max(1, Math.min(99, Math.round(value)));
+
+const calculateImpactCoefficient = (overallRating: number) => {
+  if (overallRating >= 88) return 1.5 + ((overallRating - 88) * 0.15);
+  if (overallRating >= 84) return 1.1 + ((overallRating - 84) * 0.08);
+  return 0.9 + ((overallRating - 70) * 0.01);
+};
+
+const applyRatingDeltaToMatchStats = (player: Player, ratingDelta: number): Player['stats'] => {
+  if (ratingDelta === 0) return player.stats;
+
+  const keys = player.position === 'GK'
+    ? ['gk_diving', 'gk_handling', 'gk_kicking', 'gk_reflexes', 'gk_speed', 'gk_positioning'] as const
+    : ['pace', 'shooting', 'passing', 'dribbling', 'defending', 'physical'] as const;
+  const nextStats = { ...player.stats };
+
+  keys.forEach(key => {
+    const value = nextStats[key];
+    if (typeof value === 'number') nextStats[key] = clampRating(value + ratingDelta);
+  });
+
+  return nextStats;
+};
 
 export const computeWeeklyProgression = (
   currentWeek: number,
@@ -117,11 +142,17 @@ export const computeWeeklyProgression = (
       }
       overallRating = Math.max(1, Math.min(99, overallRating));
 
+      const nextAge = player.age + 1;
+      const ratingDelta = overallRating - player.overallRating;
+
       updatedPlayers[player.id] = {
         ...player,
         overallRating,
-        age: player.age + 1,
+        age: nextAge,
         contractLeft: Math.max(0, player.contractLeft - 1),
+        stats: applyRatingDeltaToMatchStats(player, ratingDelta),
+        marketValue: computeMarketValue(overallRating, nextAge),
+        impactCoefficient: calculateImpactCoefficient(overallRating),
       };
     });
     newNews.push('The season has concluded! Check your squad for player growth and updates.');

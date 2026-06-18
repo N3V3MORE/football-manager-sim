@@ -86,9 +86,9 @@ export default function TacticsScreen() {
           'tempo', 
           ['Slow', 'Normal', 'Fast'],
           {
-            Slow: 'Control the game. Conserves 25% more player energy.',
+            Slow: 'Control the game with lower-risk buildup.',
             Normal: 'Standard frequency of play.',
-            Fast: 'Intense speed. Better for catching defenses off guard, but uses 35% more energy.',
+            Fast: 'Higher tempo. More aggressive rhythm with heavier post-match energy drain.',
           }
         )}
 
@@ -108,9 +108,9 @@ export default function TacticsScreen() {
           'pressing', 
           ['None', 'Medium', 'High'],
           {
-            None: 'Sit back. Conserves energy massively.',
+            None: 'Sit back. Lower pressure and baseline energy drain.',
             Medium: 'Press selectively.',
-            High: 'Full-court relentless pressure. 30% better tackling, but astronomical energy drain.',
+            High: 'Aggressive pressure. More defensive disruption with heavier energy drain.',
           }
         )}
       </ScrollView>

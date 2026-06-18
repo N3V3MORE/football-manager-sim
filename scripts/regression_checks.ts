@@ -18,6 +18,7 @@ import { Player } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
 import { markAsSubState } from '../src/store/lineupActions';
 import { buyPlayerState } from '../src/store/transferActions';
+import { computeMarketValue } from '../src/utils/calendar';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) {
@@ -688,6 +689,113 @@ const checkAiTransferListingsExpireOutsideWindow = () => {
   );
 };
 
+const checkSeasonEndProgressionUpdatesMatchAbility = () => {
+  const data = initGameData();
+  const seasonWeekLimit = getSeasonWeekLimit(data.fixtures, data.competitions);
+  const player = Object.values(data.players).find(item => item.age <= 22 && item.position !== 'GK');
+  assert(player, 'Expected a young outfield player for progression regression');
+
+  const result = computeWeeklyProgression(
+    seasonWeekLimit,
+    {
+      ...data.players,
+      [player!.id]: {
+        ...player!,
+        overallRating: 70,
+        marketValue: 1,
+        age: 21,
+        stats: {
+          ...player!.stats,
+          pace: 70,
+          shooting: 70,
+          passing: 70,
+          dribbling: 70,
+          defending: 70,
+          physical: 70,
+        },
+      },
+    },
+    data.teams,
+    data.fixtures,
+    [],
+    null,
+    { next: () => 0 }
+  );
+  const progressed = result.players[player!.id];
+
+  assert(progressed.overallRating === 71, 'Young player should gain overall at season end with seeded progression');
+  assert(progressed.stats.passing > 70, 'Season-end progression should improve detailed match stats, not just overall');
+  assert(
+    progressed.marketValue === computeMarketValue(progressed.overallRating, progressed.age),
+    'Season-end progression should refresh market value from new rating and age'
+  );
+};
+
+const checkContractDeparturesPreferViableDestinations = () => {
+  const data = initGameData();
+  const userTeam = Object.values(data.teams).find(team => team.division === 'Premier League');
+  assert(userTeam, 'Expected a user team for contract destination regression');
+  const departurePlayer = Object.values(data.players).find(player => player.teamId === userTeam!.id);
+  assert(departurePlayer, 'Expected a departing player for contract destination regression');
+
+  const sameDivisionTeams = Object.values(data.teams)
+    .filter(team => team.id !== userTeam!.id && team.division === userTeam!.division);
+  assert(sameDivisionTeams.length >= 2, 'Expected same-division destination teams for contract destination regression');
+  const lowBudgetTeam = sameDivisionTeams[0];
+  const highBudgetTeam = sameDivisionTeams[1];
+  const teams = Object.fromEntries(Object.entries(data.teams).map(([teamId, team]) => [
+    teamId,
+    {
+      ...team,
+      budget: team.id === highBudgetTeam.id ? 200 : team.id === lowBudgetTeam.id ? 1 : 20,
+    },
+  ]));
+  const players = {
+    ...data.players,
+    [departurePlayer!.id]: {
+      ...departurePlayer!,
+      contractLeft: 0,
+      overallRating: 82,
+      marketValue: 35,
+    },
+  };
+
+  const nextSeason = advanceSeason(players, teams, data.competitions, userTeam!.id, []);
+  assert(
+    nextSeason.players[departurePlayer!.id].teamId === highBudgetTeam.id,
+    'Contract-expired player should prefer a viable higher-budget same-division destination'
+  );
+};
+
+const checkUiContractsMatchEngineState = () => {
+  const statsScreen = readSource('app/stats.tsx');
+  const settingsScreen = readSource('app/(tabs)/settings.tsx');
+  const calendarScreen = readSource('app/calendar.tsx');
+  const calendarUtils = readSource('src/utils/calendar.ts');
+  const tacticsScreen = readSource('app/(tabs)/tactics.tsx');
+
+  assert(
+    /userTeamId/.test(statsScreen) && /playerTeam\.division === userTeam\.division/.test(statsScreen),
+    'Stats screen should scope leaderboards to the managed division'
+  );
+  assert(
+    /filter\(team => !team\.isExternal\)/.test(settingsScreen),
+    'Team picker should exclude external Continental clubs'
+  );
+  assert(
+    !/2024\/25 Fixtures/.test(calendarScreen) && /formatSeasonLabel/.test(calendarScreen),
+    'Calendar screen should render a dynamic season label'
+  );
+  assert(
+    /formatSeasonLabel/.test(calendarUtils),
+    'Calendar utilities should expose a season label helper'
+  );
+  assert(
+    !/Conserves 25%|35% more energy|astronomical energy drain|30% better tackling/.test(tacticsScreen),
+    'Tactics copy should not claim effects the engine does not implement'
+  );
+};
+
 
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
@@ -737,6 +845,12 @@ const runRegressionChecks = () => {
   console.log('[OK] Season reporting lifecycle guards passed');
   checkAiTransferListingsExpireOutsideWindow();
   console.log('[OK] AI transfer listing expiry passed');
+  checkSeasonEndProgressionUpdatesMatchAbility();
+  console.log('[OK] Season-end player progression ability update passed');
+  checkContractDeparturesPreferViableDestinations();
+  console.log('[OK] Contract departure destination quality passed');
+  checkUiContractsMatchEngineState();
+  console.log('[OK] UI data contract checks passed');
 
   console.log('--- REGRESSION CHECKS COMPLETE ---');
 };

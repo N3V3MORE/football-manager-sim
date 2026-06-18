@@ -57,11 +57,17 @@ const toLeaderboardRows = (
 );
 
 export default function StatsScreen() {
+  const userTeamId = useGameStore(state => state.userTeamId);
   const players = useGameStore(state => state.players);
   const teams = useGameStore(state => state.teams);
   const [expandedPane, setExpandedPane] = useState<PlayerStatKey | null>(null);
 
-  const allPlayers = useMemo(() => Object.values(players), [players]);
+  const userTeam = userTeamId ? teams[userTeamId] : null;
+  const allPlayers = useMemo(() => Object.values(players).filter(player => {
+    if (!userTeam) return false;
+    const playerTeam = teams[player.teamId];
+    return playerTeam && playerTeam.division === userTeam.division;
+  }), [players, teams, userTeam]);
   const topScorers = useMemo(() => buildLeaderboard(allPlayers, 'goals'), [allPlayers]);
   const topAssisters = useMemo(() => buildLeaderboard(allPlayers, 'assists'), [allPlayers]);
   const topCleanSheets = useMemo(
