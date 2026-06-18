@@ -293,11 +293,41 @@ const getLiveMatchBench = (
   return getTeamMatchBench(teamId, starters, players, isPlayerUnavailable);
 };
 
+const completeLiveMatchMinutes = (
+  state: LiveMatchActionState,
+  fixtureId: string,
+  rng: RandomGenerator
+) => {
+  const storedLiveState = state.liveMatches?.[fixtureId];
+  if (storedLiveState && !storedLiveState.processedMinutes) {
+    const fixture = state.fixtures[fixtureId];
+    const hasLegacyProgress = Boolean(fixture && (
+      fixture.homeScore !== null ||
+      fixture.awayScore !== null ||
+      Boolean(storedLiveState.sentOffPlayerIds.length) ||
+      Boolean(storedLiveState.yellowCardPlayerIds.length) ||
+      Boolean(storedLiveState.homeGoalMinutes?.length) ||
+      Boolean(storedLiveState.awayGoalMinutes?.length)
+    ));
+    if (hasLegacyProgress) return state;
+  }
+
+  let nextState = state;
+  for (let minute = 1; minute <= 90; minute += 1) {
+    const processedMinutes = new Set(nextState.liveMatches?.[fixtureId]?.processedMinutes || []);
+    if (processedMinutes.has(minute)) continue;
+    const update = processLiveMatchMinuteState(nextState, fixtureId, minute, rng);
+    nextState = { ...nextState, ...update.patch };
+  }
+  return nextState;
+};
+
 export const finishLiveMatchState = (
   state: LiveMatchActionState,
   fixtureId: string,
   rng: RandomGenerator = defaultRandomGenerator
 ): LiveMatchActionPatch => {
+  state = completeLiveMatchMinutes(state, fixtureId, rng);
   const fixture = state.fixtures[fixtureId];
   if (!fixture || fixture.isPlayed) return state;
   const previousPlayers = state.players;

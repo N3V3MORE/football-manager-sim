@@ -1,4 +1,4 @@
-import { Player, Team } from '../models/types';
+import { Fixture, Player, Team } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { autoAssignLineup } from '../core/lineupEngine';
 import { applyMatchResult } from '../core/teamUtils';
@@ -88,6 +88,47 @@ export const removeLiveMatchFixture = (
   delete nextLiveMatches[fixtureId];
   return nextLiveMatches;
 };
+
+type LiveMatchRecoveryContext = {
+  currentWeek: number;
+  fixtures: Record<string, Fixture>;
+  teams: Record<string, Team>;
+  players: Record<string, Player>;
+};
+
+const liveMatchIdsBelongToTeam = (
+  ids: unknown,
+  teamId: string,
+  players: Record<string, Player>
+) => (
+  Array.isArray(ids) &&
+  ids.length > 0 &&
+  ids.every(id => typeof id === 'string' && players[id]?.teamId === teamId)
+);
+
+export const isRecoverableLiveMatch = (
+  fixtureId: string,
+  liveState: Partial<LiveMatchState> | undefined,
+  context: LiveMatchRecoveryContext
+) => {
+  const fixture = context.fixtures[fixtureId];
+  if (!fixture || fixture.isPlayed || fixture.week !== context.currentWeek) return false;
+  if (!context.teams[fixture.homeTeamId] || !context.teams[fixture.awayTeamId]) return false;
+
+  return Boolean(liveState) &&
+    typeof liveState === 'object' &&
+    liveMatchIdsBelongToTeam(liveState.homeStarterIds, fixture.homeTeamId, context.players) &&
+    liveMatchIdsBelongToTeam(liveState.awayStarterIds, fixture.awayTeamId, context.players);
+};
+
+export const pruneInvalidLiveMatches = (
+  liveMatches: Record<string, LiveMatchState>,
+  context: LiveMatchRecoveryContext
+) => Object.fromEntries(
+  Object.entries(liveMatches).filter(([fixtureId, liveState]) => (
+    isRecoverableLiveMatch(fixtureId, liveState, context)
+  ))
+) as Record<string, LiveMatchState>;
 
 export const updateTeamStats = (
   team: Team,

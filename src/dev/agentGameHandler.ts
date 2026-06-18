@@ -18,6 +18,7 @@ type AgentCommand =
   | 'dismissInbox'
   | 'advanceWeek'
   | 'skipSeason'
+  | 'clearStuckLiveMatch'
   | 'quickSimNext'
   | 'liveSimNext'
   | 'processLiveMinute'
@@ -112,6 +113,8 @@ const listAgentCommands = () => ([
   { command: 'applyAssistantActions', payload: { types: ['apply_lineup', 'apply_tactics'] }, description: 'Apply assistant inbox setup actions.' },
   { command: 'applyInboxAction', payload: { messageId: 'message-id' }, description: 'Apply one inbox action.' },
   { command: 'advanceWeek', payload: { count: 1 }, description: 'Advance one or more weeks. Counts over 26 require allowLargeCount.' },
+  { command: 'skipSeason', payload: null, description: 'Advance to season rollover with failure warning in development.' },
+  { command: 'clearStuckLiveMatch', payload: null, description: 'Clear invalid persisted live-match recovery blockers.' },
   { command: 'quickSimNext', payload: { fixtureId: 'optional' }, description: 'Quick sim a fixture, defaulting to the next managed-team fixture.' },
   { command: 'liveSimNext', payload: { fixtureId: 'optional', finish: true }, description: 'Run a full 90-minute live sim and optionally finish it.' },
   { command: 'processLiveMinute', payload: { fixtureId: 'fixture-id', minute: 15 }, description: 'Run a specific live-match minute.' },
@@ -564,6 +567,7 @@ const runAgentCommand = (command: AgentCommand, payload?: AgentPayload): AgentCo
       for (let i = 0; i < count; i += 1) state().advanceWeek();
       data = { advancedWeeks: count };
     } else if (command === 'skipSeason') state().skipToEndOfSeason();
+    else if (command === 'clearStuckLiveMatch') data = { cleared: state().clearStuckLiveMatches() };
     else if (command === 'quickSimNext') data = quickSimNext(payload);
     else if (command === 'liveSimNext') data = liveSimNext(payload);
     else if (command === 'processLiveMinute') {

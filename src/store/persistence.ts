@@ -15,7 +15,7 @@ import { buildBoardProfile, clampBoardMetric } from '../core/boardEngine';
 import { DIVISION_ORDER, LEAGUE_COMPETITION_BY_DIVISION } from '../core/leagueUtils';
 import { buildGenericManager, deriveInitialBoardApproval, hydrateManagerContext } from '../core/managerUtils';
 import { buildLegacyInboxMessages } from './inboxHelpers';
-import { LiveMatchState } from './liveMatchHelpers';
+import { LiveMatchState, pruneInvalidLiveMatches } from './liveMatchHelpers';
 import { buildManagedTeamObjectives } from './managedTeamObjectives';
 
 export type PersistedStoreState = Partial<GameState & {
@@ -284,9 +284,24 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
       )
     : [];
 
+  const currentWeek = Number.isFinite(state.currentWeek) && (state.currentWeek || 0) > 0 ? state.currentWeek! : 1;
+  const liveMatches = state.liveMatches && typeof state.liveMatches === 'object'
+    ? pruneInvalidLiveMatches(
+        Object.fromEntries(
+          Object.entries(state.liveMatches).filter(([, liveState]) => {
+            const ls = liveState as Partial<LiveMatchState>;
+            return Boolean(ls) && typeof ls === 'object' &&
+              Array.isArray(ls.homeStarterIds) && ls.homeStarterIds.length > 0 &&
+              Array.isArray(ls.awayStarterIds) && ls.awayStarterIds.length > 0;
+          })
+        ) as Record<string, LiveMatchState>,
+        { currentWeek, fixtures, teams, players }
+      )
+    : {};
+
   return {
     ...state,
-    currentWeek: Number.isFinite(state.currentWeek) && (state.currentWeek || 0) > 0 ? state.currentWeek : 1,
+    currentWeek,
     userTeamId,
     teams,
     players,
@@ -300,16 +315,7 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
         Number.isFinite(state.currentWeek) && (state.currentWeek || 0) > 0 ? state.currentWeek || 1 : 1
       ),
     boardObjectives: migratedBoardObjectives,
-    liveMatches: state.liveMatches && typeof state.liveMatches === 'object'
-      ? Object.fromEntries(
-          Object.entries(state.liveMatches).filter(([, liveState]) => {
-            const ls = liveState as Partial<LiveMatchState>;
-            return Boolean(ls) && typeof ls === 'object' &&
-              Array.isArray(ls.homeStarterIds) && ls.homeStarterIds.length > 0 &&
-              Array.isArray(ls.awayStarterIds) && ls.awayStarterIds.length > 0;
-          })
-        )
-      : {},
+    liveMatches,
     careerRecord,
     boardReviewAppliedWeek: Number.isFinite(state.boardReviewAppliedWeek) ? state.boardReviewAppliedWeek : 0,
     transfersAppliedWeek: Number.isFinite(state.transfersAppliedWeek) ? state.transfersAppliedWeek : 0,

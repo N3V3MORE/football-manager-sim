@@ -6,8 +6,9 @@ The project is England-first and backend-first. The simulation covers league pla
 
 ## Status
 
-- Current tagged release: `v4.0.1`
-- Active development: `v4.1` (competitions backend) and `v4.2` (board/manager depth) — foundation complete, nearing release
+- Current release: `v4.3.0` stable freeze
+- Release gate: `npm run ci` and `npm run gate:release`
+- Next tracks: `v4.4` and `v4.5` are paused/not started
 - Full version history: [CHANGELOG.md](./CHANGELOG.md)
 - Detailed plan: [ROADMAP.md](./ROADMAP.md)
 
@@ -41,17 +42,18 @@ npm run check:agent        # Agent-driven init, live match, quick sim, and weekl
 npm run check:season       # Full-season agent playthrough
 npm run test:news          # News-generation output test
 npm run ci                 # Full CI: typecheck + lint + test:ci + test:regression + check:save + check:agent
-npm run gate:release       # Alias for ci
+npm run gate:release       # Release gate: ci + full-season agent playthrough
 ```
 
 ### Analysis and tracking
 
 - `turbo` defaults to 500 seasons. Override with `TURBO_SEASONS=50`.
 - `track:season` defaults to 1 season. Override with `SEASON_TRACKER_SEASONS=10`.
-- `gate:release` runs the full release gate before tagging a version.
+- `gate:release` runs `ci` and then `check:season`.
+- Pull requests and `v*` tag pushes run `npm ci`, `npm run ci`, and `npm run gate:release` in GitHub Actions.
 
 ## Versioning
 
-- `package.json` and `app.json` version numbers only move when a release is cut.
-- In-progress work is tracked in [CHANGELOG.md](./CHANGELOG.md) under `Unreleased`.
+- `package.json` and `app.json` are aligned on `4.3.0`.
+- Post-freeze work is tracked in [CHANGELOG.md](./CHANGELOG.md) under `Unreleased`.
 - Implementation goals and exit criteria live in [ROADMAP.md](./ROADMAP.md).

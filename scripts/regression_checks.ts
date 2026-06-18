@@ -6,7 +6,7 @@ import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/pr
 import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../src/constants/formations';
 import { rebuildFormationMap, rebuildFormationSlotPlayers } from '../src/core/formationMapUtils';
-import { hasReachedCompetitionRound } from '../src/core/competitionEngine';
+import { getCompetitionPanelForTeam, hasReachedCompetitionRound } from '../src/core/competitionEngine';
 import { buildBoardObjectives, buildBoardProfile } from '../src/core/boardEngine';
 import {
   applySharedPostMatchAccounting,
@@ -23,7 +23,9 @@ import { buyPlayerState } from '../src/store/transferActions';
 import { computeMarketValue } from '../src/utils/calendar';
 import { applyInboxActionState } from '../src/store/inboxActions';
 import { advanceWeekState } from '../src/store/weekLifecycle';
-import { processLiveMatchMinuteState } from '../src/store/liveMatchActions';
+import { finishLiveMatchState, processLiveMatchMinuteState } from '../src/store/liveMatchActions';
+import { sanitizePersistedState } from '../src/store/persistence';
+import { isPlayerUnavailable } from '../src/core/playerStatusUtils';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) {
@@ -207,6 +209,15 @@ const checkActiveLiveMatchBlocksWeekAdvance = () => {
     (item.homeTeamId === userTeam!.id || item.awayTeamId === userTeam!.id)
   ));
   assert(fixture, 'Expected week-one Arsenal fixture for active live match regression');
+  const homeStarterIds = Object.values(data.players)
+    .filter(player => player.teamId === fixture!.homeTeamId)
+    .slice(0, 11)
+    .map(player => player.id);
+  const awayStarterIds = Object.values(data.players)
+    .filter(player => player.teamId === fixture!.awayTeamId)
+    .slice(0, 11)
+    .map(player => player.id);
+  assert(homeStarterIds.length === 11 && awayStarterIds.length === 11, 'Active live match regression needs full XIs');
 
   const state = {
     currentWeek: 1,
@@ -236,8 +247,8 @@ const checkActiveLiveMatchBlocksWeekAdvance = () => {
         initialized: true,
         yellowCardPlayerIds: [],
         sentOffPlayerIds: [],
-        homeStarterIds: [],
-        awayStarterIds: [],
+        homeStarterIds,
+        awayStarterIds,
       },
     },
   };
@@ -245,6 +256,229 @@ const checkActiveLiveMatchBlocksWeekAdvance = () => {
   const result = advanceWeekState(state);
   assert(result.currentWeek === 1, 'Week advance should not skip past an active live match');
   assert(!result.fixtures[fixture!.id].isPlayed, 'Active live fixture should remain unplayed until resolved');
+};
+
+const checkStaleLiveMatchRecovery = () => {
+  const data = initGameData('Arsenal');
+  const userTeam = Object.values(data.teams).find(team => team.name === 'Arsenal');
+  assert(userTeam, 'Expected Arsenal for stale live match recovery');
+  const currentFixture = Object.values(data.fixtures).find(item => (
+    item.week === 1 &&
+    !item.isPlayed &&
+    item.homeTeamId !== userTeam!.id &&
+    item.awayTeamId !== userTeam!.id
+  ));
+  const futureFixture = Object.values(data.fixtures).find(item => item.week > 1 && !item.isPlayed);
+  const playedFixture = Object.values(data.fixtures).find(item => (
+    item.id !== currentFixture?.id &&
+    item.week === 1
+  ));
+  assert(currentFixture && futureFixture && playedFixture, 'Expected fixtures for stale live match recovery');
+
+  const homeStarterIds = Object.values(data.players)
+    .filter(player => player.teamId === currentFixture!.homeTeamId)
+    .slice(0, 11)
+    .map(player => player.id);
+  const awayStarterIds = Object.values(data.players)
+    .filter(player => player.teamId === currentFixture!.awayTeamId)
+    .slice(0, 11)
+    .map(player => player.id);
+  const wrongHomeStarterIds = Object.values(data.players)
+    .filter(player => player.teamId !== currentFixture!.homeTeamId)
+    .slice(0, 11)
+    .map(player => player.id);
+  assert(homeStarterIds.length === 11 && awayStarterIds.length === 11, 'Expected full XIs for stale recovery');
+  assert(wrongHomeStarterIds.length === 11, 'Expected wrong-team XI for stale recovery');
+
+  const liveMatch = {
+    initialized: true,
+    yellowCardPlayerIds: [],
+    sentOffPlayerIds: [],
+    homeStarterIds,
+    awayStarterIds,
+  };
+  const persisted = sanitizePersistedState({
+    currentWeek: 1,
+    userTeamId: userTeam!.id,
+    teams: data.teams,
+    players: data.players,
+    fixtures: {
+      ...data.fixtures,
+      [playedFixture!.id]: { ...playedFixture!, isPlayed: true },
+    },
+    competitions: data.competitions,
+    news: [],
+    inboxMessages: [],
+    boardObjectives: [],
+    liveMatches: {
+      [currentFixture!.id]: liveMatch,
+      missing_fixture: liveMatch,
+      [futureFixture!.id]: liveMatch,
+      [playedFixture!.id]: liveMatch,
+      wrong_team_fixture: {
+        ...liveMatch,
+        homeStarterIds: wrongHomeStarterIds,
+      },
+    },
+  } as any);
+
+  const persistedLiveMatches = persisted.liveMatches || {};
+  assert(persistedLiveMatches[currentFixture!.id], 'Valid current live match should survive rehydration');
+  assert(!persistedLiveMatches.missing_fixture, 'Missing-fixture live match should be cleared on rehydration');
+  assert(!persistedLiveMatches[futureFixture!.id], 'Wrong-week live match should be cleared on rehydration');
+  assert(!persistedLiveMatches[playedFixture!.id], 'Played-fixture live match should be cleared on rehydration');
+  assert(!persistedLiveMatches.wrong_team_fixture, 'Invalid-team live match should be cleared on rehydration');
+
+  const advanced = advanceWeekState({
+    currentWeek: 1,
+    userTeamId: userTeam!.id,
+    teams: data.teams,
+    players: data.players,
+    fixtures: data.fixtures,
+    competitions: data.competitions,
+    news: [],
+    inboxMessages: [],
+    boardObjectives: [],
+    boardReviewAppliedWeek: 0,
+    transfersAppliedWeek: 0,
+    careerRecord: {
+      seasonsManaged: 0,
+      totalWins: 0,
+      totalDraws: 0,
+      totalLosses: 0,
+      totalGoalsFor: 0,
+      totalGoalsAgainst: 0,
+      reputation: 50,
+      trophies: [],
+      seasonHistory: [],
+      consecutiveLowApprovalWeeks: 0,
+    },
+    liveMatches: {
+      [currentFixture!.id]: {
+        ...liveMatch,
+        homeStarterIds: wrongHomeStarterIds,
+      },
+    },
+  });
+  assert(advanced.currentWeek > 1, 'Invalid stale live match should not block week advance');
+  assert(!advanced.liveMatches[currentFixture!.id], 'Invalid stale live match should be cleared during week advance');
+
+  useGameStore.setState({
+    currentWeek: 1,
+    userTeamId: userTeam!.id,
+    teams: data.teams,
+    players: data.players,
+    fixtures: {
+      ...data.fixtures,
+      [currentFixture!.id]: { ...currentFixture!, homeScore: null, awayScore: null, isPlayed: false },
+    },
+    competitions: data.competitions,
+    news: [],
+    inboxMessages: [],
+    boardObjectives: [],
+    liveMatches: {
+      [currentFixture!.id]: liveMatch,
+      missing_fixture: liveMatch,
+    },
+  });
+  const recoveredCount = useGameStore.getState().clearStuckLiveMatches();
+  assert(recoveredCount === 2, 'Recovery action should finish valid blockers and clear invalid live matches');
+  assert(!useGameStore.getState().liveMatches[currentFixture!.id], 'Recovery action should clear finished live match');
+  assert(useGameStore.getState().fixtures[currentFixture!.id].isPlayed, 'Recovery action should finish valid active fixture');
+};
+
+const checkDirectFinishCompletesUnprocessedLiveMatch = () => {
+  const data = initGameData('Arsenal');
+  const fixture = Object.values(data.fixtures).find(item => item.homeTeamId !== 'T1' && item.awayTeamId !== 'T1');
+  assert(fixture, 'Expected a non-user fixture for direct finish regression');
+
+  const buildState = () => ({
+    currentWeek: 1,
+    userTeamId: 'T1',
+    teams: data.teams,
+    players: data.players,
+    fixtures: {
+      ...data.fixtures,
+      [fixture!.id]: { ...fixture!, homeScore: null, awayScore: null, isPlayed: false },
+    },
+    competitions: data.competitions,
+    news: [],
+    inboxMessages: [],
+    boardObjectives: [],
+    boardReviewAppliedWeek: 0,
+    transfersAppliedWeek: 0,
+    careerRecord: {
+      seasonsManaged: 0,
+      totalWins: 0,
+      totalDraws: 0,
+      totalLosses: 0,
+      totalGoalsFor: 0,
+      totalGoalsAgainst: 0,
+      reputation: 50,
+      trophies: [],
+      seasonHistory: [],
+      consecutiveLowApprovalWeeks: 0,
+    },
+    liveMatches: {},
+  });
+
+  let minuteState: any = buildState();
+  const minuteRng = { next: createSeededRandom(20260601) };
+  for (let minute = 1; minute <= 90; minute += 1) {
+    const result = processLiveMatchMinuteState(minuteState, fixture!.id, minute, minuteRng);
+    minuteState = { ...minuteState, ...result.patch };
+  }
+  const expected: any = finishLiveMatchState(minuteState, fixture!.id, minuteRng);
+  const direct: any = finishLiveMatchState(buildState(), fixture!.id, { next: createSeededRandom(20260601) });
+
+  assert(direct.fixtures[fixture!.id].isPlayed, 'Direct finish should mark fixture played');
+  assert(!direct.liveMatches[fixture!.id], 'Direct finish should clear live-match state');
+  assert(
+    direct.fixtures[fixture!.id].homeScore === expected.fixtures[fixture!.id].homeScore &&
+      direct.fixtures[fixture!.id].awayScore === expected.fixtures[fixture!.id].awayScore,
+    'Direct finish should simulate unprocessed minutes before final accounting'
+  );
+};
+
+const checkCompetitionPanelHandlesMissingTeam = () => {
+  const data = initGameData('Arsenal');
+  const team = Object.values(data.teams).find(item => item.name === 'Arsenal');
+  assert(team, 'Expected Arsenal for competition panel missing-team regression');
+
+  const panel = getCompetitionPanelForTeam(
+    'fa-cup',
+    {
+      ...data.competitions,
+      'fa-cup': {
+        ...data.competitions['fa-cup'],
+        championTeamId: team!.id,
+      },
+    },
+    data.fixtures,
+    {},
+    team!.id,
+    60
+  );
+
+  assert(panel.status === 'Winner', 'Missing-team panel should still report winner status');
+  assert(panel.note === 'Your club lifted the trophy', 'Missing-team winner note should use fallback club name');
+};
+
+const checkFreezeRecoveryControlsAreVisible = () => {
+  const gameStore = readSource('src/store/gameStore.ts');
+  const devTools = readSource('components/settings/dev-tools-card.tsx');
+  const settings = readSource('app/(tabs)/settings.tsx');
+
+  assert(
+    /catch \(error\)[\s\S]*console\.warn/.test(gameStore),
+    'skipToEndOfSeason should warn when week advancement fails'
+  );
+  assert(
+    /clearStuckLiveMatches/.test(gameStore) &&
+      /Clear Stuck Live Match/.test(devTools) &&
+      /clearStuckLiveMatches/.test(settings),
+    'Dev tools should expose a stuck live-match recovery action'
+  );
 };
 
 const checkBranchGuards = () => {
@@ -789,6 +1023,54 @@ const checkUnavailableBenchPlayersCanBeRemoved = () => {
   );
 };
 
+const checkRecoveredSelectedBenchDoesNotOverflow = () => {
+  const data = initGameData('Arsenal');
+  const userTeam = Object.values(data.teams).find(team => team.name === 'Arsenal');
+  assert(userTeam, 'Expected Arsenal for recovered bench overflow regression');
+  const squad = Object.values(data.players)
+    .filter(player => player.teamId === userTeam!.id)
+    .sort((a, b) => b.overallRating - a.overallRating);
+  assert(squad.length >= 19, 'Recovered bench overflow regression needs a deep squad');
+
+  const starterIds = new Set(squad.slice(0, 11).map(player => player.id));
+  const activeSubIds = new Set(squad.slice(11, 18).map(player => player.id));
+  const recoveringSub = squad[18];
+  const seededPlayers = Object.fromEntries(
+    Object.entries(data.players).map(([id, player]) => {
+      if (starterIds.has(id)) return [id, { ...player, isStarting: true, isSub: false }];
+      if (activeSubIds.has(id)) return [id, { ...player, isStarting: false, isSub: true }];
+      if (id === recoveringSub.id) {
+        return [id, {
+          ...player,
+          isStarting: false,
+          isSub: true,
+          injuryWeeks: 1,
+          injuryType: 'ankle knock',
+          injuryAppliedWeek: 3,
+        }];
+      }
+      return [id, { ...player, isStarting: false, isSub: false }];
+    })
+  );
+
+  const progressed = computeWeeklyProgression(
+    5,
+    seededPlayers,
+    data.teams,
+    data.fixtures,
+    [],
+    userTeam!.id,
+    { next: createSeededRandom(20260618) }
+  );
+  const activeSubs = Object.values(progressed.players).filter(player => (
+    player.teamId === userTeam!.id &&
+    player.isSub &&
+    !isPlayerUnavailable(player)
+  ));
+
+  assert(activeSubs.length <= 7, `Recovered selected substitute should not create ${activeSubs.length} active bench players`);
+};
+
 const checkLineupActionsPreserveBenchLimit = () => {
   const data = initGameData('Arsenal');
   const userTeam = Object.values(data.teams).find(team => team.name === 'Arsenal');
@@ -1327,6 +1609,14 @@ const runRegressionChecks = () => {
   console.log('[OK] Live in-match substitution check passed');
   checkActiveLiveMatchBlocksWeekAdvance();
   console.log('[OK] Active live match week-advance guard passed');
+  checkStaleLiveMatchRecovery();
+  console.log('[OK] Stale live-match recovery passed');
+  checkDirectFinishCompletesUnprocessedLiveMatch();
+  console.log('[OK] Direct live-match finish completion passed');
+  checkCompetitionPanelHandlesMissingTeam();
+  console.log('[OK] Competition panel missing-team fallback passed');
+  checkFreezeRecoveryControlsAreVisible();
+  console.log('[OK] Freeze recovery controls passed');
   checkBranchGuards();
   console.log('[OK] Second-yellow and shape parity guards passed');
   checkUserTeamProgressionDoesNotAdaptFormation();
@@ -1365,6 +1655,8 @@ const runRegressionChecks = () => {
   console.log('[OK] Manual transfer finite money guard passed');
   checkUnavailableBenchPlayersCanBeRemoved();
   console.log('[OK] Unavailable bench player cleanup passed');
+  checkRecoveredSelectedBenchDoesNotOverflow();
+  console.log('[OK] Recovered selected bench overflow guard passed');
   checkLineupActionsPreserveBenchLimit();
   console.log('[OK] Lineup action bench limit passed');
   checkLineupInboxActionFiltersStaleFormationMap();

@@ -1,6 +1,6 @@
 # v4 Roadmap
 
-Updated: 2026-06-16
+Updated: 2026-06-18
 
 This roadmap is England-first and backend-first.
 
@@ -18,12 +18,12 @@ Primary source files for roadmap work:
 
 | Track | Status | Notes |
 | --- | --- | --- |
-| `v4.0.x` stabilization | Active patch lane | Released `v4.0.1` |
-| `v4.1.0` competitions backend | Release-ready | Backend complete; UI, persistence, and inbox audit done |
-| `v4.2.0` board / manager / club depth | Release-ready | Backend complete; audit pass done across all three layers |
-| `v4.3.0` transfers / contracts / squad planning | Started | Pure planning engine and first AI/assistant wiring in place |
-| `v4.4.0` matchday and live sim depth | Not started | Depends on clearer event/state model |
-| `v4.5.0` world-ready architecture | Not started | Depends on stable competition and board layers |
+| `v4.0.x` stabilization | Stable patch lane | Released `v4.0.1`; superseded by the `v4.3.0` freeze |
+| `v4.1.0` competitions backend | Stable | Backend, UI, persistence, and inbox checks satisfied |
+| `v4.2.0` board / manager / club depth | Stable | Stability satisfied after the `v4.3.0` freeze checks |
+| `v4.3.0` transfers / contracts / squad planning | Stable/frozen | Squad planning, transfer-window behavior, and release hygiene locked |
+| `v4.4.0` matchday and live sim depth | Paused/not started | Depends on a clean `v4.3.0` release |
+| `v4.5.0` world-ready architecture | Paused/not started | Depends on stable competition, board, and squad-planning layers |
 
 ## Principles
 
@@ -59,8 +59,8 @@ Progress already in workspace:
 - Deterministic regression checks cover competition bootstrap, progression, Europe qualification, and fixture collisions.
 
 Completed (June 2026):
-- Full UI audit — no screen falls back to old placeholder wording for competitions.
-- Persistence audit — mid-competition state survives save/load and older save migration.
+- Full UI audit - no screen falls back to old placeholder wording for competitions.
+- Persistence audit - mid-competition state survives save/load and older save migration.
 - Competition-driven inbox and board phrasing verified.
 
 Exit criteria:
@@ -91,10 +91,11 @@ Completed (June 2026):
 - Comprehensive engine and store audit including board-review idempotency, form approval deltas, squad-context NaN guards, and `getReviewVerdict` deduplication.
 - Persistence and UI audit covering board/career surfaces.
 - Structured board signal telemetry added for squad age, wage posture, and registration pressure.
+- Stability satisfied after the `v4.3.0` freeze checks.
 
-Still required before release:
-- Stronger differentiation between big-club, promotion-club, and survival-club job-market behavior over multiple seasons.
-- Tune board signal weights now that squad age, wage posture, and registration pressure are inspectable.
+Freeze monitoring:
+- Multi-season board and job-market checks must stay explainable across big-club, promotion-club, and survival-club contexts.
+- If those checks drift, tune constants only; do not add new board or job-market systems during the stable freeze.
 
 Exit criteria:
 - Different clubs produce meaningfully different objective sets and pressure curves.
@@ -107,32 +108,44 @@ Exit criteria:
 Goal:
 - Add real squad-planning pressure and smarter recruitment behavior.
 
-Planned scope:
+Status:
+- Stable/frozen for `v4.3.0`.
+
+Stable scope:
 - Positional need and depth evaluation.
 - Wage structure and board wage posture.
 - Contract renewal and expiry logic tied to role, value, and club ambition.
 - Transfer-window behavior that respects squad size, wage budget, and role redundancy.
 - Assistant and board messaging that points to concrete transfer or contract actions.
 
-Progress already in workspace:
+Completed for stable freeze:
 - Added a pure squad-planning engine with `SquadNeed`, `ContractDecision`, and `SquadPlan` outputs.
 - Assistant contract warnings and recruitment notes now trace back to squad-planning output.
 - AI weekly transfer movement now respects transfer windows and uses squad needs/contract decisions for first-pass listing and buying.
 - AI transfer listing and buying now emits explainable decision logs with squad need, contract risk, board ambition, transfer discipline, and manager transfer identity.
 - Strict and aggressive boards now diverge in wage-heavy backup contract decisions.
 
+Transfer listing design:
+- The managed club can list owned players anytime as sale intent.
+- AI listing pools are refreshed by the weekly transfer engine; stale AI listings expire when the transfer window is closed.
+- Player movement only happens inside transfer windows.
+
 Dependencies:
-- `v4.2` board and club context must be stable first.
+- `v4.2` board and club context are stable for this freeze.
 
 Exit criteria:
 - AI teams stop making obviously irrational transfer choices.
 - Contract behavior reflects role, wage structure, and club ambition.
 - Squad-planning state stays consistent across transfers, season rollover, and job changes.
+- Managed-club listings can update outside transfer windows; buying and selling players cannot.
 
 ## `v4.4.0` Matchday and Live Simulation Depth
 
 Goal:
 - Make matchday more legible and tactically responsive without splitting the simulation model in two.
+
+Status:
+- Paused/not started.
 
 Planned scope:
 - Typed match-event taxonomy for commentary and reporting.
@@ -153,6 +166,9 @@ Exit criteria:
 Goal:
 - Remove hardcoded England assumptions from the core architecture without shipping full multi-country gameplay yet.
 
+Status:
+- Paused/not started.
+
 Planned scope:
 - Typed competition and league-rule configs.
 - Config-driven seasonal bootstrap.
@@ -169,13 +185,10 @@ Exit criteria:
 
 ## Release Gates
 
-Required checks for every release candidate:
-- `npx tsc --noEmit`
-- `npm run -s lint`
-- `npm run -s test:ci`
-- `npm run -s test:regression`
-- `npm run -s check:save`
-- `npm run -s check:agent`
+Required commands for every release candidate:
+- `npm ci`
+- `npm run ci`
+- `npm run gate:release`
 
 Required scenario coverage by phase:
 - `v4.1.0`: cup draw, cup progression, Europe qualification, season rollover, save/load mid-competition
@@ -186,11 +199,11 @@ Required scenario coverage by phase:
 
 ## Immediate Next Steps
 
-- Cut `v4.1.1` or `v4.2.0` release after final save/load verification on real device.
-- Begin `v4.3.0` transfers and squad-planning work: positional need evaluation, wage structure, squad-size enforcement.
+- Hold the `v4.3.0` stable freeze and run the release gate before tagging.
+- Keep `v4.4` and `v4.5` paused until the `v4.3.0` release is clean.
 - Keep patch-lane fixes separate from new subsystem work.
 
 What should not happen next:
 - No fake cup or Europe UI.
-- No version bump until the release criteria are actually met.
+- No version bump beyond `v4.3.0` during the stable freeze.
 - No multi-country expansion before the England-first backend work is stable.

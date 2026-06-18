@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-### v4.3 foundation - Board telemetry and squad planning
+- No unreleased changes.
+
+## v4.3.0 - Stable freeze
+
+### Board telemetry and squad planning
 
 What changed:
 - Added structured `BoardSignalBreakdown` telemetry for squad age profile, wage posture, and registration depth while preserving existing board-review approval/pressure behavior.
@@ -13,11 +17,14 @@ What changed:
 - Tuned squad planning so strict boards react earlier to wage-heavy backups while aggressive boards tolerate higher wage load.
 - Added deterministic regression coverage for board signal breakdowns, squad-planning severity, contract renewal decisions, board-discipline wage behavior, transfer-window no-op/open-window need-led purchases, and transfer-decision rationale.
 
-### Recent fixes — Comprehensive audit pass
+### Comprehensive audit pass
 
 What changed:
 - Fixed live-match idempotency: processed minutes are tracked so replaying a minute does not double-drain energy or replay possessions.
 - Fixed live-match score safety: `finishLiveMatchState` now explicitly writes `homeScore` and `awayScore` on the fixture so post-match reports and persistence never see null scores.
+- Fixed stale live-match recovery: persisted live matches are dropped when they point to missing, played, wrong-week, or invalid-team fixtures.
+- Fixed direct live-match finish safety: direct `finishLiveMatchState` calls now process unprocessed minutes before final accounting instead of creating artificial 0-0 finishes.
+- Added a dev recovery action to clear invalid stuck live-match state from settings and the agent bridge.
 - Fixed formation-map preservation: `setFormationState` now uses `split('-')` instead of `split(' ')` so switching between formations with the same defender count preserves player assignments.
 - Fixed board-review idempotency: `boardReviewAppliedWeek` guard prevents double-evaluation from manual `checkBoardObjectives` after the weekly lifecycle already ran.
 - Fixed injury/suspension off-by-one: `suspensionAppliedWeek` and `injuryAppliedWeek` track the week of application so durations are not decremented in the same week the card/injury was handed out.
@@ -43,6 +50,7 @@ What changed:
 - Fixed hardcoded season dates: Hub and Calendar now import `SEASON_START` and `getWindowStatus` from `calendar.ts`.
 - Fixed transfer-window guard: `handleSubmitDialog` re-checks window status at submit time, not just on tap.
 - Fixed `skipToEndOfSeason` guard: increased iteration margin from `+2` to `+20` and wrapped in try/catch.
+- Fixed `skipToEndOfSeason` failure visibility: development failures now warn instead of being silently swallowed.
 - Fixed `renew_contract` inbox action: triggering message is now marked as read and its action cleared, consistent with other action branches.
 - Fixed persistence migration: `suspensionAppliedWeek`, `injuryAppliedWeek`, `tactics`, `matchRatingHistory`, `contractLeft`, and stat fields now receive safe defaults during sanitization.
 - Fixed `safeStorage`: save/remove errors now logged via `console.warn` instead of silently swallowed.
@@ -60,8 +68,9 @@ What changed:
 - Updated `getFormApprovalDelta`: considers last 3 form tokens (W/D/L), returning `wins - losses` instead of a single-match delta.
 
 Notes:
-- All changes verified with `typecheck`, `lint`, `test:ci`, `test:regression`, `check:save`, and `check:agent`.
-- Package and app versions remain `v4.0.1` until a release is cut.
+- Added GitHub Actions release-gate enforcement for pull requests and `v*` tag pushes.
+- Release gate coverage is `npm run ci` followed by `npm run gate:release`.
+- Package and app versions are aligned on `4.3.0`.
 
 ### v4.1 foundation - Real competitions backend
 

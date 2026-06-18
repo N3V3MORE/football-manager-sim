@@ -18,6 +18,7 @@ export default function SettingsScreen() {
   const players = useGameStore(state => state.players);
   const advanceWeek = useGameStore(state => state.advanceWeek);
   const skipToEndOfSeason = useGameStore(state => state.skipToEndOfSeason);
+  const clearStuckLiveMatches = useGameStore(state => state.clearStuckLiveMatches);
   const changeTeam = useGameStore(state => state.changeTeam);
   const initializeGame = useGameStore(state => state.initializeGame);
   const renewPlayerContract = useGameStore(state => state.renewPlayerContract);
@@ -91,6 +92,7 @@ export default function SettingsScreen() {
           <DevToolsCard
             onAdvanceFiveWeeks={() => advanceWeeks(5)}
             onSkipSeason={skipToEndOfSeason}
+            onClearStuckLiveMatch={clearStuckLiveMatches}
             onResetSeason={handleResetSeason}
           />
         ) : null}

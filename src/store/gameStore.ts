@@ -23,6 +23,7 @@ import {
 } from '../core/careerEngine';
 import {
   LiveMatchState,
+  pruneInvalidLiveMatches,
   removeLiveMatchFixture,
 } from './liveMatchHelpers';
 import {
@@ -73,6 +74,7 @@ interface GameStore extends GameState {
   swapPlayer: (removeId: string | null, addId: string, slotKey?: string) => void;
   swapStartingSlots: (teamId: string, slotA: string, slotB: string) => void;
   skipToEndOfSeason: () => void;
+  clearStuckLiveMatches: () => number;
   changeTeam: (teamId: string) => void;
   // Transfer System
   buyPlayer: (playerId: string, fee: number, wageOffered: number) => { success: boolean; message: string };
@@ -249,7 +251,33 @@ export const useGameStore = create<GameStore>()(
             get().advanceWeek();
             if (get().currentWeek === 1) break;
           }
-        } catch { /* advanceWeek handles partial advancement safely */ }
+        } catch (error) {
+          console.warn('skipToEndOfSeason failed before season rollover', error);
+        }
+      },
+
+      clearStuckLiveMatches: () => {
+        let clearedCount = 0;
+        set(state => {
+          const prunedLiveMatches = pruneInvalidLiveMatches(state.liveMatches || {}, {
+            currentWeek: state.currentWeek,
+            fixtures: state.fixtures,
+            teams: state.teams,
+            players: state.players,
+          });
+          const invalidCount = Object.keys(state.liveMatches || {}).length - Object.keys(prunedLiveMatches).length;
+          let nextState = { ...state, liveMatches: prunedLiveMatches };
+          Object.keys(prunedLiveMatches).forEach(fixtureId => {
+            const fixture = nextState.fixtures[fixtureId];
+            if (fixture && !fixture.isPlayed && fixture.week <= nextState.currentWeek) {
+              nextState = { ...nextState, ...finishLiveMatchState(nextState, fixtureId) };
+              clearedCount += 1;
+            }
+          });
+          clearedCount += invalidCount;
+          return nextState;
+        });
+        return clearedCount;
       },
 
       swapPlayer: (removeId: string | null, addId: string, slotKey?: string) => {

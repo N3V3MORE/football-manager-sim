@@ -603,6 +603,7 @@ export const getCompetitionPanelForTeam = (
 ) => {
   const competition = competitions[competitionId];
   const team = teams[teamId];
+  const teamName = team?.name || 'Your club';
   const title = competitionId === 'carabao-cup'
     ? 'Carabao'
     : competitionId === 'fa-cup'
@@ -636,7 +637,7 @@ export const getCompetitionPanelForTeam = (
     return {
       title,
       status: 'Winner',
-      note: `${team.name} lifted the trophy`,
+      note: `${teamName} lifted the trophy`,
       accent: getCompetitionAccent(competitionId),
     };
   }

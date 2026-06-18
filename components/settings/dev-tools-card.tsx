@@ -5,12 +5,14 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 type DevToolsCardProps = {
   onAdvanceFiveWeeks: () => void;
   onSkipSeason: () => void;
+  onClearStuckLiveMatch: () => void;
   onResetSeason: () => void;
 };
 
 export function DevToolsCard({
   onAdvanceFiveWeeks,
   onSkipSeason,
+  onClearStuckLiveMatch,
   onResetSeason,
 }: DevToolsCardProps) {
   return (
@@ -23,6 +25,9 @@ export function DevToolsCard({
       </TouchableOpacity>
       <TouchableOpacity style={[styles.devBtn, styles.warningBtn]} onPress={onSkipSeason}>
         <Text style={[styles.devBtnText, styles.warningText]}>Skip Season</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={[styles.devBtn, styles.warningBtn]} onPress={onClearStuckLiveMatch}>
+        <Text style={[styles.devBtnText, styles.warningText]}>Finish/Clear Stuck Live Match</Text>
       </TouchableOpacity>
       <TouchableOpacity style={[styles.devBtn, styles.dangerBtn]} onPress={onResetSeason}>
         <Text style={[styles.devBtnText, styles.dangerText]}>Reset Season</Text>

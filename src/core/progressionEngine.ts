@@ -4,10 +4,12 @@ import { applyTacticalAdaptation } from './tacticalAdaptationEngine';
 import { getSeasonWeekLimit } from './leagueUtils';
 import { RandomGenerator, resolveRandom } from './random';
 import { computeMarketValue } from '../utils/calendar';
+import { isPlayerUnavailable } from './playerStatusUtils';
 
 export { computeWeeklyTransfers } from './transferEngine';
 
 const clampRating = (value: number) => Math.max(1, Math.min(99, Math.round(value)));
+const MAX_ACTIVE_SUBS = 7;
 
 const calculateImpactCoefficient = (overallRating: number) => {
   if (overallRating >= 88) return 1.5 + ((overallRating - 88) * 0.15);
@@ -29,6 +31,31 @@ const applyRatingDeltaToMatchStats = (player: Player, ratingDelta: number): Play
   });
 
   return nextStats;
+};
+
+const trimActiveSubstitutes = (
+  players: Record<string, Player>,
+  teams: Record<string, Team>
+) => {
+  Object.keys(teams).forEach(teamId => {
+    Object.values(players)
+      .filter(player => player.teamId === teamId && player.isStarting && player.isSub)
+      .forEach(player => {
+        players[player.id] = { ...players[player.id], isSub: false };
+      });
+
+    const activeSubs = Object.values(players)
+      .filter(player => player.teamId === teamId && player.isSub && !isPlayerUnavailable(player))
+      .sort((a, b) => {
+        const scoreDelta = (b.overallRating + b.energy * 0.1) - (a.overallRating + a.energy * 0.1);
+        if (scoreDelta !== 0) return scoreDelta;
+        return a.name.localeCompare(b.name);
+      });
+
+    activeSubs.slice(MAX_ACTIVE_SUBS).forEach(player => {
+      players[player.id] = { ...players[player.id], isSub: false };
+    });
+  });
 };
 
 export const computeWeeklyProgression = (
@@ -91,6 +118,7 @@ export const computeWeeklyProgression = (
       };
     }
   });
+  trimActiveSubstitutes(updatedPlayers, teams);
 
   const updatedTeams = { ...teams };
   Object.values(updatedTeams).forEach(team => {

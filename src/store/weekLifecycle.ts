@@ -11,7 +11,7 @@ import {
   evaluateSackingRisk,
   generateJobOfferCandidates,
 } from '../core/careerEngine';
-import { LiveMatchState, removeLiveMatchFixture } from './liveMatchHelpers';
+import { LiveMatchState, pruneInvalidLiveMatches, removeLiveMatchFixture } from './liveMatchHelpers';
 import {
   generateAssistantWeekMessages,
   generateBoardInboxMessages,
@@ -325,14 +325,21 @@ const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
 
 export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TState): TState => {
   const initialWeek = state.currentWeek;
-  const hasActiveCurrentLiveMatch = Object.values(state.fixtures).some(fixture => (
-    fixture.week <= state.currentWeek &&
+  const liveMatches = pruneInvalidLiveMatches(state.liveMatches || {}, {
+    currentWeek: state.currentWeek,
+    fixtures: state.fixtures,
+    teams: state.teams,
+    players: state.players,
+  });
+  const recoveredState = { ...state, liveMatches } as TState;
+  const hasActiveCurrentLiveMatch = Object.values(recoveredState.fixtures).some(fixture => (
+    fixture.week <= recoveredState.currentWeek &&
     !fixture.isPlayed &&
-    Boolean((state.liveMatches || {})[fixture.id])
+    Boolean((recoveredState.liveMatches || {})[fixture.id])
   ));
-  if (hasActiveCurrentLiveMatch) return state;
+  if (hasActiveCurrentLiveMatch) return recoveredState;
 
-  let nextState = playCurrentWeekFixtures(state);
+  let nextState = playCurrentWeekFixtures(recoveredState);
 
   const beforeProgressionPlayers = nextState.players;
   const progression = computeWeeklyProgression(
