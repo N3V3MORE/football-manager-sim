@@ -1,9 +1,10 @@
 import { initGameData } from '../src/utils/initGame';
 import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
-import { getSeasonWeekLimit } from '../src/core/leagueUtils';
+import { DIVISION_ORDER, getSeasonWeekLimit, isLeagueDivision, sortTeamsByTable } from '../src/core/leagueUtils';
+import { resolveCompetitionProgression } from '../src/core/competitionEngine';
 import { ENGINE_CONFIG } from '../src/config/engineConfig';
-import { Player, Team } from '../src/models/types';
+import { LeagueDivision, Player, Team } from '../src/models/types';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -67,6 +68,7 @@ type TableRow = {
   position: number;
   teamId: string;
   team: string;
+  division: Team['division'];
   played: number;
   wins: number;
   draws: number;
@@ -250,19 +252,14 @@ const getTransferActivity = (
   return { moves, newlyListed, unlisted, budgetDeltas };
 };
 
-const buildTable = (teams: Record<string, Team>): TableRow[] => (
-  Object.values(teams)
-    .sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points;
-      const gdA = a.goalsFor - a.goalsAgainst;
-      const gdB = b.goalsFor - b.goalsAgainst;
-      if (gdB !== gdA) return gdB - gdA;
-      return b.goalsFor - a.goalsFor;
-    })
+const buildTable = (teams: Record<string, Team>, division?: LeagueDivision): TableRow[] => (
+  sortTeamsByTable(Object.values(teams)
+    .filter(team => (division ? team.division === division : isLeagueDivision(team.division))))
     .map((team, index) => ({
       position: index + 1,
       teamId: team.id,
       team: team.name,
+      division: team.division,
       played: team.played,
       wins: team.wins,
       draws: team.draws,
@@ -275,6 +272,10 @@ const buildTable = (teams: Record<string, Team>): TableRow[] => (
       budget: round(team.budget, 2),
     }))
 );
+
+const buildTablesByDivision = (teams: Record<string, Team>) => (
+  Object.fromEntries(DIVISION_ORDER.map(division => [division, buildTable(teams, division)]))
+) as Record<LeagueDivision, TableRow[]>;
 
 const toTacticsKey = (team: Team) => (
   [
@@ -410,6 +411,7 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
     players: data.players,
     teams: data.teams,
     fixtures: data.fixtures,
+    competitions: data.competitions,
     currentWeek: 1,
     news: [] as string[],
   };
@@ -428,7 +430,7 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
   );
   const tacticalChangeLog: TacticalChange[] = [];
   const formationUsage = { back3: 0, back4: 0, back5: 0, other: 0 };
-  const seasonWeeks = getSeasonWeekLimit(state.fixtures);
+  const seasonWeeks = getSeasonWeekLimit(state.fixtures, state.competitions);
 
   for (let week = 1; week <= seasonWeeks; week++) {
     const weekMatches: MatchReport[] = [];
@@ -459,6 +461,17 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
       );
       weekMatches.push(matchReport);
       allMatches.push(matchReport);
+    }
+
+    const competitionProgression = resolveCompetitionProgression(
+      state.fixtures,
+      state.competitions,
+      state.teams
+    );
+    state.fixtures = competitionProgression.fixtures;
+    state.competitions = competitionProgression.competitions;
+    if (competitionProgression.generatedNews.length > 0) {
+      state.news = [...competitionProgression.generatedNews, ...state.news].slice(0, 20);
     }
 
     const progression = computeWeeklyProgression(state.currentWeek, state.players, state.teams, state.fixtures, state.news);
@@ -499,7 +512,8 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
     });
   }
 
-  const finalTable = buildTable(state.teams);
+  const finalTablesByDivision = buildTablesByDivision(state.teams);
+  const finalTable = DIVISION_ORDER.flatMap(division => finalTablesByDivision[division]);
   const totalGoals = allMatches.reduce((sum, match) => sum + match.totalGoals, 0);
   const yellowCards = allMatches.reduce((sum, match) => (
     sum + match.cards.reduce((cardSum, card) => cardSum + card.yellowCards, 0)
@@ -507,8 +521,8 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
   const redCards = allMatches.reduce((sum, match) => (
     sum + match.cards.reduce((cardSum, card) => cardSum + card.redCards, 0)
   ), 0);
-  const lowScoringTeams = finalTable.filter(team => team.goalsFor < 20);
-  const highScoringTeams = finalTable.filter(team => team.goalsFor > 90);
+  const lowScoringTeams = finalTable.filter(team => team.played > 0 && team.goalsFor < 20);
+  const highScoringTeams = finalTable.filter(team => team.played > 0 && team.goalsFor > 90);
   const totalTacticalChanges = Object.values(tacticalChangeCounts).reduce((sum, count) => sum + count, 0);
   const teamsWithNoTacticalChanges = Object.values(tacticalChangeCounts).filter(count => count === 0).length;
   const teamsWithFrequentTacticalChanges = Object.values(tacticalChangeCounts).filter(count => count >= 8).length;
@@ -573,6 +587,7 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
       },
     },
     finalTable,
+    finalTablesByDivision,
     leaderboards: buildLeaderboards(state.players, state.teams),
     auditDetails: {
       highGoalMatches: allMatches.filter(match => match.auditFlags.includes('high_goal_match')),

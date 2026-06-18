@@ -2,6 +2,7 @@ import { GameState, Player } from '../models/types';
 import { removePlayerFromTeamSelections } from '../core/formationMapUtils';
 import { computeWeeklyTransfers } from '../core/progressionEngine';
 import { StoreActionResult } from './contractActions';
+import { isTransferWindowOpen } from '../utils/calendar';
 
 type TransferActionState = Pick<GameState, 'currentWeek' | 'players' | 'teams' | 'userTeamId'>;
 type TransferActionPatch = Partial<Pick<GameState, 'players' | 'teams'>> | TransferActionState;
@@ -34,6 +35,13 @@ export const buyPlayerState = (
     return {
       patch: state,
       result: { success: false, message: 'Invalid team or player.' },
+    };
+  }
+
+  if (!isTransferWindowOpen(state.currentWeek)) {
+    return {
+      patch: state,
+      result: { success: false, message: 'You cannot buy players outside of the transfer window.' },
     };
   }
 

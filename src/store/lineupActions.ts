@@ -182,7 +182,8 @@ export const markAsSubState = (
   playerId: string
 ): LineupActionResult => {
   const player = state.players[playerId];
-  if (!player || player.isStarting || isPlayerUnavailable(player)) return state;
+  if (!player || player.isStarting) return state;
+  if (isPlayerUnavailable(player) && !player.isSub) return state;
 
   return {
     players: {

@@ -123,6 +123,30 @@ const getEffectiveRating = (player: Player) => {
   return recentRatings.reduce((sum, rating) => sum + rating, 0) / recentRatings.length;
 };
 
+const expireAiTransferListings = (
+  players: Record<string, Player>,
+  teams: Record<string, Team>,
+  userTeamId: string | null
+) => {
+  const aiTeamIds = new Set(Object.values(teams)
+    .filter(team => team.id !== userTeamId)
+    .map(team => team.id));
+  let changed = false;
+  const updatedPlayers = { ...players };
+
+  Object.values(players).forEach(player => {
+    if (!player.isTransferListed || !aiTeamIds.has(player.teamId)) return;
+    updatedPlayers[player.id] = {
+      ...player,
+      isTransferListed: false,
+      askingPrice: 0,
+    };
+    changed = true;
+  });
+
+  return changed ? updatedPlayers : players;
+};
+
 export const computeWeeklyTransfers = (
   players: Record<string, Player>,
   teams: Record<string, Team>,
@@ -131,7 +155,11 @@ export const computeWeeklyTransfers = (
   currentWeek?: number
 ): WeeklyTransferResult => {
   if (currentWeek !== undefined && !isTransferWindowOpen(currentWeek)) {
-    return { players, teams, decisions: [] };
+    return {
+      players: expireAiTransferListings(players, teams, userTeamId),
+      teams,
+      decisions: [],
+    };
   }
 
   const random = resolveRandom(rng);

@@ -130,8 +130,8 @@ export default function SquadScreen() {
   const slots = getSlotsForFormation(activeFormation);
 
   const starters  = sortedSquad.filter(player => player.isStarting && !isPlayerUnavailable(player));
-  const bench     = sortedSquad.filter(p => p.isSub);
-  const reserves  = sortedSquad.filter(p => !p.isStarting && !p.isSub);
+  const bench     = sortedSquad.filter(p => p.isSub && !isPlayerUnavailable(p));
+  const reserves  = sortedSquad.filter(p => !p.isStarting && (!p.isSub || isPlayerUnavailable(p)));
 
   const formationMap = useMemo(() => myTeam?.formationMap || {}, [myTeam?.formationMap]);
   const hasMap = Object.keys(formationMap).length > 0;
@@ -236,6 +236,11 @@ export default function SquadScreen() {
       // Long-press on bench player removes them from sub designation
       markAsSub(playerId);
     } else {
+      const player = players[playerId];
+      if (player?.isSub && isPlayerUnavailable(player)) {
+        markAsSub(playerId);
+        return;
+      }
       // Single tap on reserve adds to subs (if space)
       if (bench.length >= 7) return;
       markAsSub(playerId);

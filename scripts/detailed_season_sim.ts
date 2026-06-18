@@ -1,7 +1,8 @@
 import { initGameData } from '../src/utils/initGame';
 import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
-import { getSeasonWeekLimit } from '../src/core/leagueUtils';
+import { DIVISION_ORDER, getSeasonWeekLimit, sortTeamsByTable } from '../src/core/leagueUtils';
+import { resolveCompetitionProgression } from '../src/core/competitionEngine';
 import * as fs from 'fs';
 
 type StatSnapshot = {
@@ -54,6 +55,7 @@ async function runDetailedSim() {
       players: data.players,
       teams: data.teams,
       fixtures: data.fixtures,
+      competitions: data.competitions,
       currentWeek: 1,
       news: [] as string[],
     };
@@ -71,7 +73,7 @@ async function runDetailedSim() {
   let redCards = 0;
   let yellowCards = 0;
   let redCardLogMismatches = 0;
-  const seasonWeeks = getSeasonWeekLimit(state.fixtures);
+  const seasonWeeks = getSeasonWeekLimit(state.fixtures, state.competitions);
 
   for (let w = 1; w <= seasonWeeks; w++) {
     outputLog.push(`\n--- WEEK ${w} ---`);
@@ -142,7 +144,7 @@ async function runDetailedSim() {
         }
       });
 
-      const redCardEventCount = result.events.filter(event => /red card|sent off/i.test(event)).length;
+      const redCardEventCount = result.events.filter(event => /red card|sent off|straight red|reaches for red/i.test(event)).length;
       const redCardLogMismatch = matchRedCards > 0 && redCardEventCount === 0;
       if (redCardLogMismatch) {
         redCardLogMismatches++;
@@ -163,6 +165,17 @@ async function runDetailedSim() {
       });
     }
 
+    const competitionProgression = resolveCompetitionProgression(
+      state.fixtures,
+      state.competitions,
+      state.teams
+    );
+    state.fixtures = competitionProgression.fixtures;
+    state.competitions = competitionProgression.competitions;
+    if (competitionProgression.generatedNews.length > 0) {
+      state.news = [...competitionProgression.generatedNews, ...state.news].slice(0, 20);
+    }
+
     const prog = computeWeeklyProgression(state.currentWeek, state.players, state.teams, state.fixtures, state.news);
     state.players = prog.players;
     state.teams = prog.teams;
@@ -175,13 +188,12 @@ async function runDetailedSim() {
   }
 
   outputLog.push('\n=== FINAL PREMIER LEAGUE TABLE ===');
-  const sortedTeams = Object.values(state.teams).sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points;
-    const gdA = a.goalsFor - a.goalsAgainst;
-    const gdB = b.goalsFor - b.goalsAgainst;
-    if (gdB !== gdA) return gdB - gdA;
-    return b.goalsFor - a.goalsFor;
-  });
+  const sortedTeams = sortTeamsByTable(
+    Object.values(state.teams).filter(team => team.division === 'Premier League')
+  );
+  const allLeagueTeams = DIVISION_ORDER.flatMap(division => (
+    sortTeamsByTable(Object.values(state.teams).filter(team => team.division === division))
+  ));
 
   outputLog.push('Pos | Team | Pld | W | D | L | GF | GA | GD | Pts');
   sortedTeams.forEach((t, i) => {
@@ -212,9 +224,9 @@ async function runDetailedSim() {
       .filter(([, goals]) => goals >= 4)
       .map(([player, goals]) => ({ match: a, player, goals }))
   ));
-  const lowScoringTeams = sortedTeams.filter(t => t.goalsFor < 20);
-  const highScoringTeams = sortedTeams.filter(t => t.goalsFor > 90);
-  const tableIntegrityIssues = sortedTeams.filter(t => (
+  const lowScoringTeams = allLeagueTeams.filter(t => t.played > 0 && t.goalsFor < 20);
+  const highScoringTeams = allLeagueTeams.filter(t => t.played > 0 && t.goalsFor > 90);
+  const tableIntegrityIssues = allLeagueTeams.filter(t => (
     t.wins + t.draws + t.losses !== t.played ||
     t.wins * 3 + t.draws !== t.points
   ));

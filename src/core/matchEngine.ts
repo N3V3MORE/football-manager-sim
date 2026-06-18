@@ -257,6 +257,17 @@ export const simulatePossession = (
   const phaseOneAttack = activeMid.stats.passing * passBonus * 1.1 * (1 + clamp(buildOutEdge * 0.02, -0.1, 0.16));
   const phase1Success = runDuel(phaseOneAttack, phaseOneDefense * interceptBonus, ENGINE_CONFIG.DUEL_LUCK_MIDFIELD, rng);
   if (!phase1Success && random() > ENGINE_CONFIG.PHASE_ONE_FAIL_ESCAPE_CHANCE) {
+    const midfieldFoulMultiplier = dTac.pressing === 'High'
+      ? 1.15
+      : dTac.pressing === 'None'
+        ? 0.85
+        : 1;
+    if (random() < clamp(ENGINE_CONFIG.MIDFIELD_FOUL_CHANCE * midfieldFoulMultiplier, 0, 0.75)) {
+      const foulPool = defensiveWall.length > 0 ? defensiveWall : defPlayers;
+      const fouler = weightedPick(foulPool, p => (p.stats.defending || 50) + p.stats.physical * 0.25, rng);
+      const type = random() < ENGINE_CONFIG.RED_CARD_CHANCE ? 'R' : 'Y';
+      return { goal: false, event: buildFoulEvent(fouler, type, random), foul: { player: fouler, type } };
+    }
     return { goal: false, event: buildPhaseOneStopEvent(defender, activeMid, random) };
   }
 

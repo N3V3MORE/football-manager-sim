@@ -16,6 +16,8 @@ import {
 import { advanceSeason } from '../src/core/seasonTransition';
 import { Player } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
+import { markAsSubState } from '../src/store/lineupActions';
+import { buyPlayerState } from '../src/store/transferActions';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) {
@@ -439,6 +441,59 @@ const checkSanityMatchScores = () => {
   assert(highScores <= 15, `Too many high scoring games (7+ goals) detected in 100 matches: ${highScores}%`);
 };
 
+const checkDisciplineRatesArePlausible = () => {
+  const originalRandom = Math.random;
+  Math.random = createSeededRandom(20260618);
+
+  try {
+    const data = initGameData();
+    const state = {
+      players: data.players,
+      teams: data.teams,
+      fixtures: data.fixtures,
+    };
+    const fixturesToPlay = Object.values(state.fixtures).slice(0, 300);
+    let yellowCards = 0;
+    let redCards = 0;
+
+    fixturesToPlay.forEach(fixture => {
+      const beforeCards = Object.values(state.players).reduce(
+        (acc, player) => ({
+          yellow: acc.yellow + player.yellowCards,
+          red: acc.red + player.redCards,
+        }),
+        { yellow: 0, red: 0 }
+      );
+      const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures);
+      state.players = result.players;
+      state.teams = result.teams;
+      state.fixtures[fixture.id] = result.fixture;
+      const afterCards = Object.values(state.players).reduce(
+        (acc, player) => ({
+          yellow: acc.yellow + player.yellowCards,
+          red: acc.red + player.redCards,
+        }),
+        { yellow: 0, red: 0 }
+      );
+      yellowCards += afterCards.yellow - beforeCards.yellow;
+      redCards += afterCards.red - beforeCards.red;
+    });
+
+    const yellowRate = yellowCards / fixturesToPlay.length;
+    const redRate = redCards / fixturesToPlay.length;
+    assert(
+      yellowRate >= 2.5 && yellowRate <= 5.5,
+      `Expected plausible yellow-card rate, got ${yellowRate.toFixed(2)} per match`
+    );
+    assert(
+      redRate >= 0.06 && redRate <= 0.35,
+      `Expected plausible red-card rate, got ${redRate.toFixed(2)} per match`
+    );
+  } finally {
+    Math.random = originalRandom;
+  }
+};
+
 const checkZustandStoreLiveMatchCleanup = () => {
   useGameStore.getState().initializeGame('T1');
   const store = useGameStore.getState();
@@ -487,6 +542,152 @@ const checkRosterSizeConstraints = () => {
   });
 };
 
+const checkManualTransfersRespectWindow = () => {
+  const data = initGameData();
+  const userTeam = Object.values(data.teams).find(team => team.division === 'Premier League');
+  const sellerTeam = Object.values(data.teams)
+    .find(team => team.id !== userTeam?.id && team.division === userTeam?.division);
+  assert(userTeam && sellerTeam, 'Expected user and seller teams for manual transfer window regression');
+
+  const target = Object.values(data.players).find(player => player.teamId === sellerTeam!.id && !player.isStarting);
+  assert(target, 'Expected a seller player for manual transfer window regression');
+
+  const askingPrice = Math.max(1, Math.min(5, target!.marketValue || 1));
+  const players = {
+    ...data.players,
+    [target!.id]: {
+      ...target!,
+      isTransferListed: true,
+      askingPrice,
+    },
+  };
+  const teams = {
+    ...data.teams,
+    [userTeam!.id]: {
+      ...userTeam!,
+      budget: 100,
+      transferSpend: 0,
+    },
+  };
+
+  const result = buyPlayerState(
+    {
+      currentWeek: 10,
+      players,
+      teams,
+      userTeamId: userTeam!.id,
+    },
+    target!.id,
+    askingPrice,
+    target!.wage
+  );
+  const resultingPlayers = result.patch.players || players;
+
+  assert(!result.result.success, 'Manual transfer purchase should fail outside the transfer window');
+  assert(
+    resultingPlayers[target!.id].teamId === sellerTeam!.id,
+    'Rejected manual transfer should leave the player at the selling club'
+  );
+};
+
+const checkUnavailableBenchPlayersCanBeRemoved = () => {
+  const data = initGameData();
+  const userTeam = Object.values(data.teams).find(team => team.division === 'Premier League');
+  assert(userTeam, 'Expected a user team for unavailable bench regression');
+
+  const benchPlayer = Object.values(data.players)
+    .find(player => player.teamId === userTeam!.id && !player.isStarting);
+  assert(benchPlayer, 'Expected a bench candidate for unavailable bench regression');
+
+  const players = {
+    ...data.players,
+    [benchPlayer!.id]: {
+      ...benchPlayer!,
+      isStarting: false,
+      isSub: true,
+      injuryWeeks: 2,
+    },
+  };
+  const result = markAsSubState(
+    {
+      players,
+      teams: data.teams,
+      userTeamId: userTeam!.id,
+    },
+    benchPlayer!.id
+  );
+  const resultingPlayers = result.players || players;
+  const squadScreen = readSource('app/(tabs)/squad.tsx');
+
+  assert(
+    !resultingPlayers[benchPlayer!.id].isSub,
+    'Unavailable bench player should be removable from the bench'
+  );
+  assert(
+    /const bench\s*=\s*sortedSquad\.filter\([^)]*!isPlayerUnavailable/.test(squadScreen),
+    'Squad screen bench capacity should ignore unavailable substitutes'
+  );
+};
+
+const checkSeasonReportsUseCompetitionLifecycleAndLeagueTables = () => {
+  const detailedReport = readSource('scripts/detailed_season_sim.ts');
+  const trackerReport = readSource('scripts/season_tracker.ts');
+
+  [detailedReport, trackerReport].forEach((source, index) => {
+    const label = index === 0 ? 'Detailed season report' : 'Season tracker';
+    assert(
+      /resolveCompetitionProgression/.test(source),
+      `${label} should advance knockout competition rounds during season simulation`
+    );
+    assert(
+      /getSeasonWeekLimit\(state\.fixtures,\s*state\.competitions\)/.test(source),
+      `${label} should include competition state when calculating season length`
+    );
+  });
+
+  assert(
+    /Object\.values\(state\.teams\)\.filter\(.*division === 'Premier League'/.test(detailedReport.replace(/\s+/g, ' ')),
+    'Detailed report should filter the Premier League table to Premier League clubs'
+  );
+  assert(
+    /division:\s*team\.division/.test(trackerReport),
+    'Season tracker table rows should include team division'
+  );
+  assert(
+    /team\.played > 0[\s\S]*team\.goalsFor < 20/.test(trackerReport),
+    'Season tracker low-scoring audit should ignore inactive external teams'
+  );
+  assert(
+    /red card\|sent off\|straight red\|reaches for red/i.test(detailedReport),
+    'Detailed report red-card audit should use the same event pattern as tracker and CI'
+  );
+};
+
+const checkAiTransferListingsExpireOutsideWindow = () => {
+  const data = initGameData();
+  const listedPlayer = Object.values(data.players).find(player => !player.isStarting);
+  assert(listedPlayer, 'Expected a player for transfer listing expiry regression');
+
+  const players = {
+    ...data.players,
+    [listedPlayer!.id]: {
+      ...listedPlayer!,
+      isTransferListed: true,
+      askingPrice: Math.max(1, listedPlayer!.marketValue || 1),
+    },
+  };
+
+  const result = computeWeeklyTransfers(players, data.teams, null, undefined, 5);
+  assert(
+    !result.players[listedPlayer!.id].isTransferListed,
+    'AI transfer listings should expire when the transfer window closes'
+  );
+  assert(
+    result.players[listedPlayer!.id].askingPrice === 0,
+    'Expired AI transfer listings should clear the asking price'
+  );
+};
+
 
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
@@ -519,12 +720,23 @@ const runRegressionChecks = () => {
 
   checkSanityMatchScores();
   console.log('[OK] Sanity Match Scores check passed');
+  checkDisciplineRatesArePlausible();
+  console.log('[OK] Discipline rate plausibility passed');
 
   checkZustandStoreLiveMatchCleanup();
   console.log('[OK] Zustand Live Match cleanup check passed');
 
   checkRosterSizeConstraints();
   console.log('[OK] Roster Size constraints check passed');
+
+  checkManualTransfersRespectWindow();
+  console.log('[OK] Manual transfer window guard passed');
+  checkUnavailableBenchPlayersCanBeRemoved();
+  console.log('[OK] Unavailable bench player cleanup passed');
+  checkSeasonReportsUseCompetitionLifecycleAndLeagueTables();
+  console.log('[OK] Season reporting lifecycle guards passed');
+  checkAiTransferListingsExpireOutsideWindow();
+  console.log('[OK] AI transfer listing expiry passed');
 
   console.log('--- REGRESSION CHECKS COMPLETE ---');
 };

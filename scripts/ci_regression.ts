@@ -827,7 +827,19 @@ const runInvariantChecks = () => {
   };
   const alwaysTransferRng = { next: () => 0 };
   const closedWindowTransfers = computeWeeklyTransfers(transferPlayers, transferTeams, null, alwaysTransferRng, 10);
-  assert.equal(closedWindowTransfers.players, transferPlayers, 'AI transfers should not change players outside transfer windows');
+  const closedWindowMoves = Object.values(closedWindowTransfers.players)
+    .filter(player => player.teamId !== transferPlayers[player.id].teamId);
+  assert.equal(closedWindowMoves.length, 0, 'AI transfers should not move players outside transfer windows');
+  assert.equal(
+    closedWindowTransfers.players[transferTarget.id].isTransferListed,
+    false,
+    'Closed transfer windows should expire stale AI transfer listings'
+  );
+  assert.equal(
+    closedWindowTransfers.players[transferTarget.id].askingPrice,
+    0,
+    'Expired AI transfer listings should clear asking prices'
+  );
   assert.equal(closedWindowTransfers.teams, transferTeams, 'AI transfers should not change teams outside transfer windows');
   assert.equal(closedWindowTransfers.decisions.length, 0, 'AI transfers should not log transfer decisions outside transfer windows');
   const openWindowTransfers = computeWeeklyTransfers(transferPlayers, transferTeams, null, alwaysTransferRng, 2);
@@ -1326,6 +1338,7 @@ const runSeason = (seed: number) => {
     players: data.players,
     teams: data.teams,
     fixtures: data.fixtures,
+    competitions: data.competitions,
     currentWeek: 1,
     news: [] as string[],
   };
@@ -1338,7 +1351,7 @@ const runSeason = (seed: number) => {
   const tacticalChangeCounts = Object.fromEntries(
     Object.values(state.teams).map(team => [team.id, 0])
   ) as Record<string, number>;
-  const seasonWeekLimit = getSeasonWeekLimit(state.fixtures);
+  const seasonWeekLimit = getSeasonWeekLimit(state.fixtures, state.competitions);
   const formationUsage = { back3: 0, back4: 0, back5: 0 };
 
   for (let week = 1; week <= seasonWeekLimit; week++) {
@@ -1372,6 +1385,17 @@ const runSeason = (seed: number) => {
       if (hasRedEvent && redDelta === 0) {
         redCardEventsWithoutCard += 1;
       }
+    }
+
+    const competitionProgression = resolveCompetitionProgression(
+      state.fixtures,
+      state.competitions,
+      state.teams
+    );
+    state.fixtures = competitionProgression.fixtures;
+    state.competitions = competitionProgression.competitions;
+    if (competitionProgression.generatedNews.length > 0) {
+      state.news = [...competitionProgression.generatedNews, ...state.news].slice(0, 20);
     }
 
     const progression = computeWeeklyProgression(
