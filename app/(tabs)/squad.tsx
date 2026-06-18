@@ -127,7 +127,6 @@ export default function SquadScreen() {
   const sortedSquad = sortPlayersByPositionGroup(mySquad);
 
   const activeFormation = myTeam?.activeFormation || '4-3-3';
-  const baseFormation = activeFormation.split('-')[0];
   const slots = getSlotsForFormation(activeFormation);
 
   const starters  = sortedSquad.filter(player => player.isStarting && !isPlayerUnavailable(player));
@@ -372,7 +371,7 @@ export default function SquadScreen() {
       <FormationSelectionModal
         visible={showFormationDrop}
         formations={FORMATIONS}
-        selectedFormation={baseFormation}
+        selectedFormation={activeFormation}
         onClose={() => setShowFormationDrop(false)}
         onSelect={handleFormationSelect}
       />

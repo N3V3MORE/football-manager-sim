@@ -565,7 +565,7 @@ export const getCompetitionResultForTeam = (
 
   const activeRound = competition.rounds.find(round => round.key === competition.currentRound);
   if (activeRound && activeRound.entrantTeamIds.includes(teamId)) {
-    return { competitionId: competition.id, name: competition.name, finish: 'not_qualified' };
+    return { competitionId: competition.id, name: competition.name, finish: activeRound.key };
   }
 
   return { competitionId: competition.id, name: competition.name, finish: 'not_qualified' };

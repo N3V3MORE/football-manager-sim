@@ -4,8 +4,10 @@ import { initGameData } from '../src/utils/initGame';
 import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
 import { getSeasonWeekLimit } from '../src/core/leagueUtils';
-import { getSlotsForFormation } from '../src/constants/formations';
+import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../src/constants/formations';
 import { rebuildFormationMap, rebuildFormationSlotPlayers } from '../src/core/formationMapUtils';
+import { hasReachedCompetitionRound } from '../src/core/competitionEngine';
+import { buildBoardObjectives, buildBoardProfile } from '../src/core/boardEngine';
 import {
   didConcedeInWindow,
   applyWindowedCleanSheets,
@@ -32,6 +34,13 @@ const createSeededRandom = (seed: number) => {
 };
 
 const readSource = (filePath: string) => fs.readFileSync(path.join(process.cwd(), filePath), 'utf8');
+
+const checkFormationSlotLookupUsesExactFormation = () => {
+  const threeFiveTwoSlots = getSlotsForFormation('3-5-2');
+  assert(threeFiveTwoSlots === BASE_FORMATION_SLOTS['3-5-2'], '3-5-2 should use its exact slot definition');
+  assert(threeFiveTwoSlots[0].length === 2, '3-5-2 should render two forwards');
+  assert(threeFiveTwoSlots[2].length === 3, '3-5-2 should render a back three');
+};
 
 const checkCleanSheetWindows = () => {
   assert(!didConcedeInWindow([], 0, 90, 0), 'Empty conceded-minute list with 0 conceded should be clean');
@@ -308,6 +317,47 @@ const checkFormationMapRejectsWrongPositions = () => {
   assert(rebuiltMap['3-0'] === rebuiltSlots[3][0]?.id, 'Rebuilt map should persist the corrected GK slot');
 };
 
+const checkActiveCupRoundCountsAsReached = () => {
+  const data = initGameData();
+  const teamId = Object.keys(data.teams)[0];
+  const activeQuarterFinal = {
+    id: 'fa-cup' as const,
+    name: 'FA Cup',
+    shortName: 'FA',
+    type: 'domestic_cup' as const,
+    season: 1,
+    entrantTeamIds: [teamId],
+    rounds: [{
+      key: 'quarter_final' as const,
+      label: 'Quarter-final',
+      week: 10,
+      entrantTeamIds: [teamId],
+      fixtureIds: [],
+      byeTeamIds: [],
+      winnerTeamIds: [],
+      completed: false,
+    }],
+    currentRound: 'quarter_final' as const,
+    eliminatedTeamIds: [],
+  };
+
+  assert(
+    hasReachedCompetitionRound(activeQuarterFinal, teamId, 'quarter_final'),
+    'Active participation in a cup round should count as reaching that board objective round'
+  );
+};
+
+const checkBoardObjectiveIdsAreStable = () => {
+  const profile = buildBoardProfile('A', 'Premier League');
+  const first = buildBoardObjectives('A', 'Premier League', profile, ['fa-cup', 'europe']);
+  const second = buildBoardObjectives('A', 'Premier League', profile, ['fa-cup', 'europe']);
+
+  assert(
+    JSON.stringify(first.map(objective => objective.id)) === JSON.stringify(second.map(objective => objective.id)),
+    'Board objective IDs should be stable for the same team class, division, profile, and active competitions'
+  );
+};
+
 const checkSeededFormationDiversity = () => {
     const originalRandom = Math.random;
     Math.random = createSeededRandom(20260513);
@@ -440,6 +490,8 @@ const checkRosterSizeConstraints = () => {
 
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
+  checkFormationSlotLookupUsesExactFormation();
+  console.log('[OK] Exact formation slot lookup passed');
   checkCleanSheetWindows();
   console.log('[OK] Clean-sheet window checks passed');
   checkLiveSentOffMinutes();
@@ -458,6 +510,10 @@ const runRegressionChecks = () => {
   console.log('[OK] Stale formation-map recovery model passed');
   checkFormationMapRejectsWrongPositions();
   console.log('[OK] Wrong-position formation-map recovery passed');
+  checkActiveCupRoundCountsAsReached();
+  console.log('[OK] Active cup-round objective recognition passed');
+  checkBoardObjectiveIdsAreStable();
+  console.log('[OK] Stable board objective IDs passed');
   checkSeededFormationDiversity();
   console.log('[OK] Seeded formation diversity check passed');
 

@@ -20,6 +20,7 @@ import { buildManagedTeamObjectives } from './managedTeamObjectives';
 
 export type PersistedStoreState = Partial<GameState & {
   liveMatches: Record<string, LiveMatchState>;
+  transfersAppliedWeek: number;
 }>;
 
 const DEFAULT_CAREER_RECORD: CareerRecord = {
@@ -179,6 +180,11 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
           teamId,
           {
             ...typedTeam,
+            id: typedTeam.id || teamId,
+            name: typedTeam.name || teamId,
+            division,
+            countryId: typedTeam.countryId || (typedTeam.isExternal ? 'continental' : 'england'),
+            clubClass: typedTeam.clubClass || 'C',
             boardProfile,
             manager,
             tactics: typedTeam.tactics && typeof typedTeam.tactics === 'object'
@@ -262,10 +268,15 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
     ) as Record<string, Fixture>
     : {};
 
-  const competitions = state.competitions && typeof state.competitions === 'object'
+  const hasPersistedCompetitions = state.competitions &&
+    typeof state.competitions === 'object' &&
+    Object.keys(state.competitions).length > 0;
+  const competitions = hasPersistedCompetitions
     ? state.competitions as Record<string, CompetitionState>
     : buildLegacyLeagueCompetitions(teams, fixtures, careerRecord.seasonsManaged + 1);
-  const userTeamId = typeof state.userTeamId === 'string' ? state.userTeamId : null;
+  const userTeamId = typeof state.userTeamId === 'string' && teams[state.userTeamId]
+    ? state.userTeamId
+    : null;
   const migratedBoardObjectives = userTeamId && teams[userTeamId]
     ? reconcileBoardObjectives(
         state.boardObjectives,
@@ -276,6 +287,7 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
   return {
     ...state,
     currentWeek: Number.isFinite(state.currentWeek) && (state.currentWeek || 0) > 0 ? state.currentWeek : 1,
+    userTeamId,
     teams,
     players,
     fixtures,
@@ -299,5 +311,7 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
         )
       : {},
     careerRecord,
+    boardReviewAppliedWeek: Number.isFinite(state.boardReviewAppliedWeek) ? state.boardReviewAppliedWeek : 0,
+    transfersAppliedWeek: Number.isFinite(state.transfersAppliedWeek) ? state.transfersAppliedWeek : 0,
   };
 };

@@ -313,6 +313,7 @@ export const useGameStore = create<GameStore>()(
             if (!state.userTeamId) return state;
             if (state.boardReviewAppliedWeek === state.currentWeek) return state;
             const myTeam = state.teams[state.userTeamId];
+            if (!myTeam) return state;
             const seasonWeekLimit = getSeasonWeekLimit(state.fixtures, state.competitions);
             const review = runBoardReview(
               myTeam,

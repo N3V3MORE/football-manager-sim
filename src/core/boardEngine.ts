@@ -1,5 +1,3 @@
-import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
 import {
   BoardObjective,
   BoardProfile,
@@ -76,6 +74,15 @@ const getPatienceModifier = (profile: BoardProfile) => (
 
 const getPatienceRiskModifier = (profile: BoardProfile) => (
   profile.patience === 'low' ? 10 : profile.patience === 'high' ? -8 : 0
+);
+
+const buildObjectiveId = (...parts: (string | number | undefined)[]) => (
+  `objective-${parts
+    .filter(part => part !== undefined && part !== '')
+    .join('-')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')}`
 );
 
 const getAmbitionWeight = (profile: BoardProfile) => {
@@ -284,7 +291,7 @@ const buildPositionObjective = (teamClass: string, division: LeagueDivision): Bo
   const positionTarget = posTargets[teamClass] || posTargets.C;
 
   return {
-    id: uuidv4(),
+    id: buildObjectiveId('position', teamClass, division, positionTarget.target),
     description: positionTarget.desc,
     type: 'position',
     target: positionTarget.target,
@@ -307,7 +314,7 @@ const buildWinsObjective = (teamClass: string, division: LeagueDivision): BoardO
   const target = winTargetByClass[teamClass] || 10;
 
   return {
-    id: uuidv4(),
+    id: buildObjectiveId('wins', teamClass, division, target),
     description: `Win at least ${target} league matches`,
     type: 'wins',
     target,
@@ -338,7 +345,7 @@ const buildFinancialObjective = (teamClass: string, profile: BoardProfile): Boar
   if (profile.transferDiscipline === 'strict') {
     const target = maxSpendTargets[teamClass] || 8;
     return {
-      id: uuidv4(),
+      id: buildObjectiveId('max-spend', teamClass, profile.transferDiscipline, target),
       description: `Keep gross transfer spend below GBP ${target}m`,
       type: 'max_spend',
       target,
@@ -349,7 +356,7 @@ const buildFinancialObjective = (teamClass: string, profile: BoardProfile): Boar
   const disciplineBoost = profile.transferDiscipline === 'aggressive' ? 1.15 : 1;
   const target = Math.round((minSpendTargets[teamClass] || 5) * disciplineBoost);
   return {
-    id: uuidv4(),
+    id: buildObjectiveId('spend', teamClass, profile.transferDiscipline, target),
     description: `Invest at least GBP ${target}m in transfers`,
     type: 'spend',
     target,
@@ -362,7 +369,7 @@ const buildCupObjective = (
   description: string,
   targetRound: CompetitionRoundKey
 ): BoardObjective => ({
-  id: uuidv4(),
+  id: buildObjectiveId('cup-round', competitionId, targetRound, description),
   description,
   type: 'cup_round',
   target: 1,

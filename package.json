@@ -21,7 +21,7 @@
     "test:ci": "tsx -r ./scripts/mock-env.js scripts/ci_regression.ts",
     "test:news": "tsx -r ./scripts/mock-env.js scripts/test_news_output.ts",
     "ci": "npm run -s typecheck && npm run -s lint && npm run -s test:ci && npm run -s test:regression && npm run -s check:save && npm run -s check:agent",
-    "gate:release": "npm run -s ci"
+    "gate:release": "npm run -s ci && npm run -s check:season"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

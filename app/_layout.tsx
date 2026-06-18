@@ -39,23 +39,6 @@ export default function RootLayout() {
 
     if (!hasManagedTeam && !hasLeagueData) {
       state.initializeGame('temp');
-      return;
-    }
-
-    if (Object.values(state.teams).some(team => !team.division)) {
-      useGameStore.setState({
-        teams: Object.fromEntries(
-          Object.entries(state.teams).map(([teamId, team]) => [
-            teamId,
-            {
-              ...team,
-              division: team.division || 'Premier League',
-              countryId: team.countryId || 'england',
-              clubClass: team.clubClass || 'C',
-            },
-          ])
-        ),
-      });
     }
   }, [hasHydrated, userTeamId]);
 

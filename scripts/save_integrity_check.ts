@@ -1,7 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../src/constants/formations';
 import { isPlayerSlotFit, rebuildFormationMap } from '../src/core/formationMapUtils';
 import { Formation, Team } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
+import { sanitizePersistedState } from '../src/store/persistence';
 
 const FORMATIONS: Formation[] = [
   '4-3-3',
@@ -98,6 +100,11 @@ const validateUserLineup = (label: string, team: Team) => {
     assert(player.isStarting, `${label}: ${player.name} is stored in map but not marked starting`);
     assert(isPlayerSlotFit(player, slot), `${label}: ${player.name} is stored in bad slot ${slot.label}`);
   });
+  const storedMapIds = Object.values(team.formationMap || {});
+  assert(
+    new Set(storedMapIds).size === storedMapIds.length,
+    `${label}: ${team.name} stored formation map contains duplicate players`
+  );
 
   Object.entries(rebuiltMap).forEach(([slotKey, playerId]) => {
     const [rowIndex, colIndex] = slotKey.split('-').map(Number);
@@ -181,6 +188,26 @@ const checkBenchBounds = () => {
   validateUserLineup('3-4-3 setup', state.teams[userTeamId]);
 };
 
+const checkSwapPlayerKeepsFormationMapUnique = () => {
+  const team = initializeUserTeam('4-3-3');
+  const mapEntries = Object.entries(team.formationMap || {});
+  const matchingSlots = mapEntries
+    .map(([slotKey, playerId]) => {
+      const [rowIndex, colIndex] = slotKey.split('-').map(Number);
+      const slot = getSlotsForFormation(team.activeFormation)[rowIndex]?.[colIndex];
+      return { slotKey, playerId, slot };
+    })
+    .filter(entry => entry.slot?.pos === 'MID');
+
+  assert(matchingSlots.length >= 2, 'Swap uniqueness setup needs two mapped midfielders');
+
+  const source = matchingSlots[0];
+  const target = matchingSlots[1];
+  useGameStore.getState().swapPlayer(target.playerId, source.playerId, target.slotKey);
+
+  validateUserLineup('swap player map uniqueness', useGameStore.getState().teams[team.id]);
+};
+
 const checkManagerProfilesLoaded = () => {
   const state = useGameStore.getState();
   const teams = Object.values(state.teams);
@@ -193,19 +220,53 @@ const checkManagerProfilesLoaded = () => {
   });
 };
 
-const runSaveIntegrityCheck = () => withSeededRandom(20260407, () => {
-  console.log('--- SAVE INTEGRITY CHECK ---');
-  validateFormationDefinitions();
-  console.log('[OK] Formation definitions cover every Formation value');
-  checkSeasonSkipContinuity();
-  console.log('[OK] Season skip keeps user lineup, tactics, and references intact');
-  checkCorruptedMapRecovery();
-  console.log('[OK] Corrupted formation maps recover to valid player slots');
-  checkBenchBounds();
-  console.log('[OK] Bench bounds and 3-4-3 lineup validation passed');
-  checkManagerProfilesLoaded();
-  console.log('[OK] Manager profiles are loaded for every club');
-  console.log('--- SAVE INTEGRITY CHECK COMPLETE ---');
-});
+const checkPersistedStateSanitization = () => {
+  const state = useGameStore.getState();
+  const sanitized = sanitizePersistedState({
+    ...state,
+    userTeamId: 'missing-team',
+    competitions: {},
+  });
 
-runSaveIntegrityCheck();
+  assert(sanitized.userTeamId === null, 'Sanitization should clear a missing user team id');
+  assert(
+    Object.keys(sanitized.competitions || {}).length > 0,
+    'Sanitization should rebuild empty legacy competition state'
+  );
+};
+
+const checkMockStorageRoundTrip = async () => {
+  const key = 'save-integrity-storage-probe';
+  await AsyncStorage.setItem(key, 'saved');
+  assert(await AsyncStorage.getItem(key) === 'saved', 'Mock AsyncStorage should preserve written values');
+  await AsyncStorage.removeItem(key);
+  assert(await AsyncStorage.getItem(key) === null, 'Mock AsyncStorage should remove written values');
+};
+
+const runSaveIntegrityCheck = async () => {
+  console.log('--- SAVE INTEGRITY CHECK ---');
+  withSeededRandom(20260407, () => {
+    validateFormationDefinitions();
+    console.log('[OK] Formation definitions cover every Formation value');
+    checkSeasonSkipContinuity();
+    console.log('[OK] Season skip keeps user lineup, tactics, and references intact');
+    checkCorruptedMapRecovery();
+    console.log('[OK] Corrupted formation maps recover to valid player slots');
+    checkBenchBounds();
+    console.log('[OK] Bench bounds and 3-4-3 lineup validation passed');
+    checkSwapPlayerKeepsFormationMapUnique();
+    console.log('[OK] Swap player formation-map uniqueness passed');
+    checkManagerProfilesLoaded();
+    console.log('[OK] Manager profiles are loaded for every club');
+    checkPersistedStateSanitization();
+    console.log('[OK] Persisted state sanitization passed');
+  });
+  await checkMockStorageRoundTrip();
+  console.log('[OK] Mock storage round trip passed');
+  console.log('--- SAVE INTEGRITY CHECK COMPLETE ---');
+};
+
+runSaveIntegrityCheck().catch(error => {
+  console.error(error);
+  process.exit(1);
+});

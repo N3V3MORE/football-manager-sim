@@ -206,6 +206,20 @@ export const swapPlayerState = (
   if (removeId && !removePlayer) return state;
   if (removePlayer && removePlayer.teamId !== state.userTeamId) return state;
 
+  if (addPlayer.isStarting && removePlayer?.isStarting && slotKey && state.userTeamId) {
+    const team = state.teams[state.userTeamId];
+    const map = { ...(team.formationMap || {}) };
+    const existingSlotKey = Object.entries(map).find(([, playerId]) => playerId === addId)?.[0];
+    if (existingSlotKey && existingSlotKey !== slotKey) {
+      map[existingSlotKey] = removePlayer.id;
+      map[slotKey] = addId;
+      return {
+        players: state.players,
+        teams: { ...state.teams, [state.userTeamId]: { ...team, formationMap: map } },
+      };
+    }
+  }
+
   if (!removeId || !removePlayer?.isStarting) {
     const currentStarters = Object.values(state.players).filter(
       p => p.teamId === state.userTeamId && p.isStarting && !isPlayerUnavailable(p) && p.id !== removeId
@@ -224,6 +238,9 @@ export const swapPlayerState = (
   if (slotKey && state.userTeamId) {
     const team = state.teams[state.userTeamId];
     const map = { ...(team.formationMap || {}) };
+    Object.entries(map).forEach(([key, playerId]) => {
+      if (playerId === addId && key !== slotKey) delete map[key];
+    });
     map[slotKey] = addId;
     updatedTeams = { ...state.teams, [state.userTeamId]: { ...team, formationMap: map } };
   }
