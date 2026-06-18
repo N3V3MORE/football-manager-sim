@@ -95,9 +95,9 @@ export const useGameStore = create<GameStore>()(
       transfersAppliedWeek: 0,
 
       initializeGame: (userTeamId) => {
-        const data = initGameData();
-        
-        const actualTeamId = userTeamId === 'temp' ? Object.keys(data.teams)[0] : userTeamId;
+        const requestedTeamId = userTeamId === 'temp' ? 'T1' : userTeamId;
+        const data = initGameData(requestedTeamId);
+        const actualTeamId = data.teams[requestedTeamId] ? requestedTeamId : Object.keys(data.teams)[0];
         
         const players = Object.fromEntries(
           Object.entries(data.players).map(([id, player]) => [

@@ -172,6 +172,7 @@ export interface Team {
   transferSpend: number;     // gross transfer spend in millions GBP this season
   boardApproval: number;     // 0 to 100
   lastStartingXI?: string[]; // player IDs
+  lastTacticalAdaptationPlayed?: number;
   formationMap?: Record<string, string>; // Maps slot coordinate 'row-col' to playerId
 }
 

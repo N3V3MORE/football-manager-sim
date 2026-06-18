@@ -6,6 +6,7 @@ import { PREMIER_LEAGUE_MANAGERS } from '../data/premier_league_managers';
 import { buildManager, buildGenericManager, deriveInitialBoardApproval } from '../core/managerUtils';
 import { buildSeasonCompetitionBundle, getContinentalClubNames } from '../core/competitionEngine';
 import { buildBoardObjectives, buildBoardProfile } from '../core/boardEngine';
+import { RandomGenerator, resolveRandom } from '../core/random';
 
 const REAL_TEAMS = [
   { name: 'Arsenal',            class: 'A' },
@@ -30,7 +31,7 @@ const REAL_TEAMS = [
   { name: 'Wolves',             class: 'C' },
 ];
 
-const getRandomTactics = () => {
+const getRandomTactics = (random: () => number) => {
   const mentalities: TeamTactics['mentality'][] = ['Defensive', 'Balanced', 'Attacking'];
   const passingStyles: TeamTactics['passingStyle'][] = ['Short', 'Mixed', 'Direct'];
   const tempos: TeamTactics['tempo'][] = ['Slow', 'Normal', 'Fast'];
@@ -38,11 +39,11 @@ const getRandomTactics = () => {
   const pressings: TeamTactics['pressing'][] = ['None', 'Medium', 'High'];
 
   return {
-    mentality: mentalities[Math.floor(Math.random() * mentalities.length)],
-    passingStyle: passingStyles[Math.floor(Math.random() * passingStyles.length)],
-    tempo: tempos[Math.floor(Math.random() * tempos.length)],
-    defensiveLine: lines[Math.floor(Math.random() * lines.length)],
-    pressing: pressings[Math.floor(Math.random() * pressings.length)],
+    mentality: mentalities[Math.floor(random() * mentalities.length)],
+    passingStyle: passingStyles[Math.floor(random() * passingStyles.length)],
+    tempo: tempos[Math.floor(random() * tempos.length)],
+    defensiveLine: lines[Math.floor(random() * lines.length)],
+    pressing: pressings[Math.floor(random() * pressings.length)],
   };
 };
 
@@ -111,7 +112,8 @@ const deriveTeamClass = (division: LeagueDivision, avgOverall: number) => {
 const buildGeneratedSquadRows = (
   teamName: string,
   baseOverall: number,
-  nationality: string
+  nationality: string,
+  random: () => number
 ): BasePlayerRow[] => {
   const positions: [Position, string][] = [
     ['GK', 'GK'], ['GK', 'GK'],
@@ -127,16 +129,16 @@ const buildGeneratedSquadRows = (
     position,
     subPosition,
     altPositions: [subPosition],
-    overallRating: baseOverall + Math.floor(Math.random() * 6) - 2,
-    age: 20 + Math.floor(Math.random() * 11),
+    overallRating: baseOverall + Math.floor(random() * 6) - 2,
+    age: 20 + Math.floor(random() * 11),
     nationality,
     stats: {
-      pace: 68 + Math.random() * 18,
+      pace: 68 + random() * 18,
       shooting: position === 'FWD' ? 74 : 50,
       passing: position === 'MID' ? 75 : 60,
-      dribbling: 68 + Math.random() * 12,
+      dribbling: 68 + random() * 12,
       defending: position === 'DEF' ? 74 : 42,
-      physic: 68 + Math.random() * 14,
+      physic: 68 + random() * 14,
     },
   }));
 };
@@ -147,7 +149,13 @@ const calculateImpactCoefficient = (overallRating: number) => {
   return 0.9 + ((overallRating - 70) * 0.01);
 };
 
-const buildPlayerRecord = (rp: BasePlayerRow, teamId: string, playerId: string, includeLongName = false): Player => {
+const buildPlayerRecord = (
+  rp: BasePlayerRow,
+  teamId: string,
+  playerId: string,
+  random: () => number,
+  includeLongName = false
+): Player => {
   const mv = rp.marketValue && rp.marketValue > 0 ? rp.marketValue : computeMarketValue(rp.overallRating, rp.age);
   return {
     id: playerId,
@@ -159,8 +167,8 @@ const buildPlayerRecord = (rp: BasePlayerRow, teamId: string, playerId: string, 
     overallRating: rp.overallRating,
     marketValue: mv,
     age: rp.age,
-    morale: 80 + Math.floor(Math.random() * 21),
-    energy: 90 + Math.floor(Math.random() * 11),
+    morale: 80 + Math.floor(random() * 21),
+    energy: 90 + Math.floor(random() * 11),
     teamId,
     isStarting: false,
     isSub: false,
@@ -169,7 +177,7 @@ const buildPlayerRecord = (rp: BasePlayerRow, teamId: string, playerId: string, 
     matchesSuspended: 0,
     injuryWeeks: 0,
     wage: Math.floor(mv * 1.5) + 10,
-    contractLeft: 1 + Math.floor(Math.random() * 4),
+    contractLeft: 1 + Math.floor(random() * 4),
     impactCoefficient: calculateImpactCoefficient(rp.overallRating),
     matchRatingHistory: [],
     minutesPlayed: 0,
@@ -208,7 +216,8 @@ const markBestStarters = (teamPlayers: Player[], players: Record<string, Player>
   });
 };
 
-export const initGameData = (userTeamName?: string) => {
+export const initGameData = (userTeamSelection?: string, rng?: RandomGenerator) => {
+  const random = resolveRandom(rng);
   const teams: Record<string, Team> = {};
   const players: Record<string, Player> = {};
   const teamIds: string[] = [];
@@ -234,6 +243,7 @@ export const initGameData = (userTeamName?: string) => {
     teamIds.push(teamId);
     teamClasses[teamId] = teamData.class;
     const boardProfile = buildBoardProfile(teamData.class, 'Premier League');
+    const isUserTeam = teamData.name === userTeamSelection || teamId === userTeamSelection;
     const managerSource = PREMIER_LEAGUE_MANAGERS.find(item => item.teamName === teamData.name);
     if (!managerSource) {
       throw new Error(`Missing manager data for ${teamData.name}`);
@@ -257,9 +267,9 @@ export const initGameData = (userTeamName?: string) => {
       played: 0,
       activeFormation: '4-3-3',
       form: [],
-      tactics: teamData.name === userTeamName 
+      tactics: isUserTeam
         ? { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' }
-        : getRandomTactics(),
+        : getRandomTactics(random),
       budget: getBudgetForClass(teamData.class),
       transferSpend: 0,
       boardApproval: deriveInitialBoardApproval(manager, boardProfile),
@@ -271,19 +281,19 @@ export const initGameData = (userTeamName?: string) => {
     // Generate generic squad if missing from JSON
     if (realPlayers.length < 15) {
       const baseOvr = teamData.class === 'C' ? 76 : (teamData.class === 'D' ? 74 : 78);
-      realPlayers = buildGeneratedSquadRows(teamData.name, baseOvr, 'England');
+      realPlayers = buildGeneratedSquadRows(teamData.name, baseOvr, 'England', random);
     }
 
     realPlayers.sort((a, b) => b.overallRating - a.overallRating);
 
     realPlayers.forEach(rp => {
-      const p = buildPlayerRecord(rp, teamId, (playerCounter++).toString());
+      const p = buildPlayerRecord(rp, teamId, (playerCounter++).toString(), random);
       players[p.id] = p;
       teamPlayers.push(p);
     });
 
     // Auto-select best 11 for AI teams; user team stays in reserves
-    if (teamData.name !== userTeamName) {
+    if (!isUserTeam) {
       markBestStarters(teamPlayers, players);
     }
   });
@@ -311,6 +321,7 @@ export const initGameData = (userTeamName?: string) => {
       const teamId = `T${teamCounter++}`;
       teamIds.push(teamId);
       teamClasses[teamId] = club.teamClass;
+      const isUserTeam = club.clubName === userTeamSelection || teamId === userTeamSelection;
       const boardProfile = buildBoardProfile(club.teamClass, division);
       const manager = buildGenericManager(club.clubName, teamId, division, club.avgOverall, boardProfile);
       const teamPlayers: Player[] = [];
@@ -333,9 +344,9 @@ export const initGameData = (userTeamName?: string) => {
         played: 0,
         activeFormation: manager.preferredFormations[0] || '4-2-3-1',
         form: [],
-        tactics: club.clubName === userTeamName
+        tactics: isUserTeam
           ? { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' }
-          : getRandomTactics(),
+          : getRandomTactics(random),
         budget: getBudgetForClass(club.teamClass),
         transferSpend: 0,
         boardApproval: deriveInitialBoardApproval(manager, boardProfile),
@@ -343,12 +354,12 @@ export const initGameData = (userTeamName?: string) => {
 
       realPlayers.sort((a, b) => b.overallRating - a.overallRating);
       realPlayers.forEach(rp => {
-        const p = buildPlayerRecord(rp, teamId, (playerCounter++).toString(), true);
+        const p = buildPlayerRecord(rp, teamId, (playerCounter++).toString(), random, true);
         players[p.id] = p;
         teamPlayers.push(p);
       });
 
-      if (club.clubName !== userTeamName) {
+      if (!isUserTeam) {
         markBestStarters(teamPlayers, players);
       }
     });
@@ -378,15 +389,15 @@ export const initGameData = (userTeamName?: string) => {
       played: 0,
       activeFormation: '4-2-3-1',
       form: [],
-      tactics: getRandomTactics(),
+      tactics: getRandomTactics(random),
       budget: index < 3 ? 85 : 55,
       transferSpend: 0,
       boardApproval: deriveInitialBoardApproval(manager, boardProfile),
     };
 
-    buildGeneratedSquadRows(clubName, index < 3 ? 81 : 77, index % 2 === 0 ? 'Spain' : 'Italy')
+    buildGeneratedSquadRows(clubName, index < 3 ? 81 : 77, index % 2 === 0 ? 'Spain' : 'Italy', random)
       .forEach(playerRow => {
-        const player = buildPlayerRecord(playerRow, teamId, (playerCounter++).toString(), true);
+        const player = buildPlayerRecord(playerRow, teamId, (playerCounter++).toString(), random, true);
         players[player.id] = player;
       });
     const squad = Object.values(players).filter(player => player.teamId === teamId);

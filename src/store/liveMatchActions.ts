@@ -10,7 +10,7 @@ import { addPlayerStat, scaleLineupForMatch } from '../core/matchUtils';
 import { RandomGenerator, defaultRandomGenerator } from '../core/random';
 import { applySubstitutions } from '../core/substitutionEngine';
 import { buildStarterMinuteMap } from '../core/minuteMapUtils';
-import { applySharedPostMatchAccounting } from '../core/postMatchAccounting';
+import { applySharedPostMatchAccounting, PlayerMatchContribution } from '../core/postMatchAccounting';
 import { applyMatchInjuries } from '../core/injuryEngine';
 import { isPlayerUnavailable } from '../core/playerStatusUtils';
 import { resolveCompetitionProgression } from '../core/competitionEngine';
@@ -61,6 +61,15 @@ export const processLiveMatchMinuteState = (
   const sentOffMinutes = { ...(storedLiveState?.sentOffMinutes || {}) };
   const homeGoalMinutes = [...(storedLiveState?.homeGoalMinutes || [])];
   const awayGoalMinutes = [...(storedLiveState?.awayGoalMinutes || [])];
+  const matchContributions: Record<string, PlayerMatchContribution> = {
+    ...(storedLiveState?.matchContributions || {}),
+  };
+  const addContribution = (playerId: string, key: keyof PlayerMatchContribution) => {
+    matchContributions[playerId] = {
+      ...matchContributions[playerId],
+      [key]: (matchContributions[playerId]?.[key] || 0) + 1,
+    };
+  };
   const matchYellowCards = new Set(storedLiveState?.yellowCardPlayerIds || []);
   const allowAutoAssign = !storedLiveState?.initialized;
   const firstAttackIsHome = storedLiveState?.firstAttackIsHome ?? (random() < 0.5);
@@ -80,8 +89,14 @@ export const processLiveMatchMinuteState = (
     const awayFormMult = getFormModifier(awayTeam.form);
     const homeMoraleMult = getMoraleModifier(homeStarters);
     const awayMoraleMult = getMoraleModifier(awayStarters);
-    const scaledHome = scaleLineupForMatch(homeStarters, homeFormMult, homeMoraleMult, ENGINE_CONFIG.GLOBAL_HOME_ADVANTAGE);
-    const scaledAway = scaleLineupForMatch(awayStarters, awayFormMult, awayMoraleMult);
+    const scaledHome = scaleLineupForMatch(
+      homeStarters,
+      homeFormMult,
+      homeMoraleMult,
+      ENGINE_CONFIG.GLOBAL_HOME_ADVANTAGE,
+      homeTeam.clubClass
+    );
+    const scaledAway = scaleLineupForMatch(awayStarters, awayFormMult, awayMoraleMult, 1, awayTeam.clubClass);
     const isHomeAttacking = ((possessionIndex + (firstAttackIsHome ? 0 : 1)) % 2) === 0;
     const attacker = isHomeAttacking ? homeTeam : awayTeam;
     const defender = isHomeAttacking ? awayTeam : homeTeam;
@@ -101,6 +116,7 @@ export const processLiveMatchMinuteState = (
         matchesSuspended: 3,
         suspensionAppliedWeek: fixture.week,
       };
+      addContribution(playerId, 'redCards');
       sentOffPlayers.add(playerId);
       sentOffMinutes[playerId] = minute;
       eventMsg = message;
@@ -128,7 +144,9 @@ export const processLiveMatchMinuteState = (
         awayGoalMinutes.push(minute);
       }
       if (res.scorer) addPlayerStat(updatedPlayers, res.scorer.id, 'goals');
+      if (res.scorer) addContribution(res.scorer.id, 'goals');
       if (res.assister) addPlayerStat(updatedPlayers, res.assister.id, 'assists');
+      if (res.assister) addContribution(res.assister.id, 'assists');
     }
 
     if (res.foul) {
@@ -138,12 +156,14 @@ export const processLiveMatchMinuteState = (
           if (matchYellowCards.has(playerId)) {
             if (random() < ENGINE_CONFIG.SECOND_YELLOW_RED_CHANCE) {
               addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+              addContribution(playerId, 'yellowCards');
               sendOffPlayer(playerId, `${res.foul.player.name} receives a second yellow and is sent off.`);
             } else {
               eventMsg = `${res.foul.player.name} avoids a second yellow after the foul.`;
             }
           } else {
             addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+            addContribution(playerId, 'yellowCards');
             matchYellowCards.add(playerId);
           }
         } else {
@@ -164,6 +184,7 @@ export const processLiveMatchMinuteState = (
     sentOffMinutes,
     homeGoalMinutes,
     awayGoalMinutes,
+    matchContributions,
     homeStarterIds: storedLiveState?.homeStarterIds || homeStarters.map(player => player.id),
     awayStarterIds: storedLiveState?.awayStarterIds || awayStarters.map(player => player.id),
     processedMinutes: [...processedMinutes, minute],
@@ -241,6 +262,7 @@ export const finishLiveMatchState = (
     updatedPlayers,
     rng,
     applyEnergyDrain: false,
+    playerMatchContributions: liveMatchState?.matchContributions,
   });
   applySharedPostMatchAccounting({
     teamParticipants: awayParticipants,
@@ -254,6 +276,7 @@ export const finishLiveMatchState = (
     updatedPlayers,
     rng,
     applyEnergyDrain: false,
+    playerMatchContributions: liveMatchState?.matchContributions,
   });
   applyMatchInjuries(homeParticipants, homeMinuteMap, updatedPlayers, fixture.week, rng);
   applyMatchInjuries(awayParticipants, awayMinuteMap, updatedPlayers, fixture.week, rng);

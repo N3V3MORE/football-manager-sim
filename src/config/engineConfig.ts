@@ -42,11 +42,11 @@ export const ENGINE_CONFIG = {
 
   // DUELS & VARIANCE
   STAT_COMPRESSION_BASE: 80, // Compress elite stat gaps to reduce team scoring extremes
-  STAT_COMPRESSION_FACTOR: 0.3,
+  STAT_COMPRESSION_FACTOR: 0.4,
   RATING_CURVE_GAMMA: 1.0, // Optional non-linear stat curve (1.0 = linear)
-  DUEL_LUCK_MIDFIELD: 32, // Slightly more variance
-  DUEL_LUCK_ATTACK: 28,
-  DUEL_LUCK_SHOOTING: 24, // Increased from 20 to give keepers more of a chance
+  DUEL_LUCK_MIDFIELD: 29,
+  DUEL_LUCK_ATTACK: 25,
+  DUEL_LUCK_SHOOTING: 22,
 
   // ANTI-STEAMROLL (Desperation mechanics for trailing teams)
   STEAMROLL_MARGIN_1: 2,

@@ -3,6 +3,7 @@ import { ENGINE_CONFIG } from '../config/engineConfig';
 import { autoAssignLineup } from '../core/lineupEngine';
 import { applyMatchResult } from '../core/teamUtils';
 import { isPlayerUnavailable } from '../core/playerStatusUtils';
+import { PlayerMatchContribution } from '../core/postMatchAccounting';
 
 export type LiveMatchState = {
   initialized: boolean;
@@ -12,6 +13,7 @@ export type LiveMatchState = {
   sentOffMinutes?: Record<string, number>;
   homeGoalMinutes?: number[];
   awayGoalMinutes?: number[];
+  matchContributions?: Record<string, PlayerMatchContribution>;
   homeStarterIds: string[];
   awayStarterIds: string[];
   processedMinutes?: number[];

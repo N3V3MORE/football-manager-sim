@@ -119,6 +119,7 @@ export const applyTacticalAdaptation = (
   Object.values(updatedTeams).forEach(team => {
     if (excludedTeamIds.has(team.id)) return;
     if (team.played < 4 || team.played % 2 !== 0) return;
+    if (team.lastTacticalAdaptationPlayed === team.played) return;
 
     const recentForm = (team.form || []).slice(-5);
     const wins = recentForm.filter(token => token === 'W').length;
@@ -229,8 +230,8 @@ export const applyTacticalAdaptation = (
       }
     }
 
-    if (teamChanged) {
-      updatedTeams[team.id] = nextTeam;
-    }
+    updatedTeams[team.id] = teamChanged
+      ? { ...nextTeam, lastTacticalAdaptationPlayed: team.played }
+      : { ...updatedTeams[team.id], lastTacticalAdaptationPlayed: team.played };
   });
 };

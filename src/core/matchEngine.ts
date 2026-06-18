@@ -4,7 +4,7 @@ import type { TeamShapeProfile } from './matchTypes';
 import { getTeamMatchBench, getTeamMatchStarters } from './lineupEngine';
 import { buildFallbackShapeProfile, buildTeamShapeProfile } from './shapeEngine';
 import { applySubstitutions } from './substitutionEngine';
-import { applySharedPostMatchAccounting } from './postMatchAccounting';
+import { applySharedPostMatchAccounting, PlayerMatchContribution } from './postMatchAccounting';
 import { rebuildFormationMap } from './formationMapUtils';
 import { applyMinuteCaps, buildStarterBenchMinuteMap } from './minuteMapUtils';
 import { applyMatchInjuries } from './injuryEngine';
@@ -425,8 +425,8 @@ export const quickSimMatch = (
   let currentAwayXI = [...awayStarters];
   let availableHomeBench = [...homeBench];
   let availableAwayBench = [...awayBench];
-  let scaledHome = scaleLineupForMatch(currentHomeXI, homeFormMult, homeMoraleMult, GLOBAL_HOME_ADVANTAGE);
-  let scaledAway = scaleLineupForMatch(currentAwayXI, awayFormMult, awayMoraleMult);
+  let scaledHome = scaleLineupForMatch(currentHomeXI, homeFormMult, homeMoraleMult, GLOBAL_HOME_ADVANTAGE, homeTeam.clubClass);
+  let scaledAway = scaleLineupForMatch(currentAwayXI, awayFormMult, awayMoraleMult, 1, awayTeam.clubClass);
   let homeShape = buildTeamShapeProfile(homeTeam, currentHomeXI);
   let awayShape = buildTeamShapeProfile(awayTeam, currentAwayXI);
   const homeMinutes = buildStarterBenchMinuteMap(homeStarters, homeBench);
@@ -440,6 +440,13 @@ export const quickSimMatch = (
   const matchYellowCards = new Set<string>();
   const sentOffPlayers = new Set<string>();
   const sentOffMinutes: Record<string, number> = {};
+  const matchContributions: Record<string, PlayerMatchContribution> = {};
+  const addContribution = (playerId: string, key: keyof PlayerMatchContribution) => {
+    matchContributions[playerId] = {
+      ...matchContributions[playerId],
+      [key]: (matchContributions[playerId]?.[key] || 0) + 1,
+    };
+  };
   const sendOffPlayer = (playerId: string, minute: number) => {
     const player = updatedPlayers[playerId];
     if (!player || sentOffPlayers.has(playerId)) return;
@@ -486,7 +493,7 @@ export const quickSimMatch = (
         onSubstitution: (offPlayer, onPlayer) => {
           currentHomeXI = currentHomeXI.map(player => (player.id === offPlayer.id ? onPlayer : player));
           availableHomeBench = availableHomeBench.filter(player => player.id !== onPlayer.id);
-          scaledHome = scaleLineupForMatch(currentHomeXI, homeFormMult, homeMoraleMult, GLOBAL_HOME_ADVANTAGE);
+          scaledHome = scaleLineupForMatch(currentHomeXI, homeFormMult, homeMoraleMult, GLOBAL_HOME_ADVANTAGE, homeTeam.clubClass);
           homeShape = buildFallbackShapeProfile(scaledHome);
           matchEvents.push(`${homeTeam.name} make a change: ${offPlayer.name} off, ${onPlayer.name} on.`);
         },
@@ -498,7 +505,7 @@ export const quickSimMatch = (
         onSubstitution: (offPlayer, onPlayer) => {
           currentAwayXI = currentAwayXI.map(player => (player.id === offPlayer.id ? onPlayer : player));
           availableAwayBench = availableAwayBench.filter(player => player.id !== onPlayer.id);
-          scaledAway = scaleLineupForMatch(currentAwayXI, awayFormMult, awayMoraleMult);
+          scaledAway = scaleLineupForMatch(currentAwayXI, awayFormMult, awayMoraleMult, 1, awayTeam.clubClass);
           awayShape = buildFallbackShapeProfile(scaledAway);
           matchEvents.push(`${awayTeam.name} make a change: ${offPlayer.name} off, ${onPlayer.name} on.`);
         },
@@ -534,7 +541,9 @@ export const quickSimMatch = (
         awayGoalMinutes.push(minute);
       }
       if (poss.scorer) addPlayerStat(updatedPlayers, poss.scorer.id, 'goals');
+      if (poss.scorer) addContribution(poss.scorer.id, 'goals');
       if (poss.assister) addPlayerStat(updatedPlayers, poss.assister.id, 'assists');
+      if (poss.assister) addContribution(poss.assister.id, 'assists');
     }
     if (poss.foul) {
       const playerId = poss.foul.player.id;
@@ -543,15 +552,19 @@ export const quickSimMatch = (
         if (matchYellowCards.has(playerId)) {
           if (random() < ENGINE_CONFIG.SECOND_YELLOW_RED_CHANCE) {
             addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+            addContribution(playerId, 'yellowCards');
             sendOffPlayer(playerId, minute);
+            addContribution(playerId, 'redCards');
             matchEvents.push(`${poss.foul.player.name} receives a second yellow and is sent off.`);
           }
         } else {
           addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+          addContribution(playerId, 'yellowCards');
           matchYellowCards.add(playerId);
         }
       } else {
         sendOffPlayer(playerId, minute);
+        addContribution(playerId, 'redCards');
       }
     }
   }
@@ -571,6 +584,7 @@ export const quickSimMatch = (
     teamTactics: homeTeam.tactics,
     updatedPlayers,
     rng,
+    playerMatchContributions: matchContributions,
   });
   applySharedPostMatchAccounting({
     teamParticipants: awayParticipants,
@@ -583,6 +597,7 @@ export const quickSimMatch = (
     teamTactics: awayTeam.tactics,
     updatedPlayers,
     rng,
+    playerMatchContributions: matchContributions,
   });
   applyMatchInjuries(homeParticipants, homeMinutes, updatedPlayers, fixture.week, rng)
     .forEach(event => matchEvents.push(`${event.playerName} suffers a ${event.injuryType} and will miss ${event.weeks} week${event.weeks === 1 ? '' : 's'}.`));

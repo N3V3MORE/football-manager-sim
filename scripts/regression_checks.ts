@@ -9,14 +9,16 @@ import { rebuildFormationMap, rebuildFormationSlotPlayers } from '../src/core/fo
 import { hasReachedCompetitionRound } from '../src/core/competitionEngine';
 import { buildBoardObjectives, buildBoardProfile } from '../src/core/boardEngine';
 import {
+  applySharedPostMatchAccounting,
   didConcedeInWindow,
   applyWindowedCleanSheets,
   qualifiesForWindowedCleanSheet,
 } from '../src/core/postMatchAccounting';
 import { advanceSeason } from '../src/core/seasonTransition';
-import { Player } from '../src/models/types';
+import { applyTacticalAdaptation } from '../src/core/tacticalAdaptationEngine';
+import { Player, Team } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
-import { markAsSubState } from '../src/store/lineupActions';
+import { markAsSubState, toggleStartingState } from '../src/store/lineupActions';
 import { buyPlayerState } from '../src/store/transferActions';
 import { computeMarketValue } from '../src/utils/calendar';
 
@@ -562,7 +564,7 @@ const checkManualTransfersRespectWindow = () => {
       askingPrice,
     },
   };
-  const teams = {
+  const teams: Record<string, Team> = {
     ...data.teams,
     [userTeam!.id]: {
       ...userTeam!,
@@ -628,6 +630,40 @@ const checkUnavailableBenchPlayersCanBeRemoved = () => {
     /const bench\s*=\s*sortedSquad\.filter\([^)]*!isPlayerUnavailable/.test(squadScreen),
     'Squad screen bench capacity should ignore unavailable substitutes'
   );
+};
+
+const checkLineupActionsPreserveBenchLimit = () => {
+  const data = initGameData('Arsenal');
+  const userTeam = Object.values(data.teams).find(team => team.name === 'Arsenal');
+  assert(userTeam, 'Expected Arsenal for bench limit regression');
+  const teamPlayers = Object.values(data.players)
+    .filter(player => player.teamId === userTeam!.id)
+    .sort((a, b) => b.overallRating - a.overallRating);
+  const starter = teamPlayers[0];
+  assert(starter, 'Expected a starter candidate for bench limit regression');
+
+  const players = Object.fromEntries(Object.entries(data.players).map(([playerId, player]) => {
+    if (player.teamId !== userTeam!.id) return [playerId, player];
+    const index = teamPlayers.findIndex(candidate => candidate.id === player.id);
+    return [
+      playerId,
+      {
+        ...player,
+        isStarting: player.id === starter.id,
+        isSub: index > 0 && index <= 7,
+      },
+    ];
+  }));
+
+  const result = toggleStartingState(
+    { players, teams: data.teams, userTeamId: userTeam!.id },
+    starter.id
+  );
+  const nextPlayers = 'players' in result && result.players ? result.players : players;
+  const activeBench = Object.values(nextPlayers)
+    .filter(player => player.teamId === userTeam!.id && player.isSub && !player.isStarting);
+
+  assert(activeBench.length <= 7, 'Removing a starter should not create an eighth active substitute');
 };
 
 const checkSeasonReportsUseCompetitionLifecycleAndLeagueTables = () => {
@@ -796,6 +832,153 @@ const checkUiContractsMatchEngineState = () => {
   );
 };
 
+const checkInitialGameSetupCanBeSeeded = () => {
+  const summarize = () => {
+    const data = initGameData(undefined, { next: createSeededRandom(20260618) });
+    return JSON.stringify({
+      teamTactics: Object.values(data.teams).slice(0, 8).map(team => [team.id, team.tactics]),
+      players: Object.values(data.players).slice(0, 30).map(player => [
+        player.id,
+        player.morale,
+        player.energy,
+        player.contractLeft,
+      ]),
+    });
+  };
+
+  assert(
+    summarize() === summarize(),
+    'Initial game data should be reproducible when supplied the same seeded random generator'
+  );
+};
+
+const checkStoreInitializesSelectedTeamDefaults = () => {
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    useGameStore.getState().initializeGame('T1');
+    const state = useGameStore.getState();
+    const userTeam = state.teams[state.userTeamId!];
+    const userPlayers = Object.values(state.players).filter(player => player.teamId === userTeam.id);
+
+    assert(userTeam.name === 'Arsenal', 'Regression assumes T1 is Arsenal');
+    assert(
+      JSON.stringify(userTeam.tactics) === JSON.stringify({
+        mentality: 'Balanced',
+        passingStyle: 'Mixed',
+        tempo: 'Normal',
+        defensiveLine: 'Standard',
+        pressing: 'Medium',
+      }),
+      'Selected team should receive user-team default tactics during initialization'
+    );
+    assert(
+      userPlayers.every(player => !player.isStarting && !player.isSub),
+      'Selected team players should stay unselected until the user picks a lineup'
+    );
+  } finally {
+    Math.random = originalRandom;
+  }
+};
+
+const checkTacticalAdaptationRunsOncePerPlayedCount = () => {
+  const data = initGameData();
+  const team = Object.values(data.teams).find(candidate => candidate.id !== 'T1') as Team | undefined;
+  assert(team, 'Expected an AI team for tactical adaptation regression');
+
+  const teams: Record<string, Team> = {
+    ...data.teams,
+    [team!.id]: {
+      ...team!,
+      played: 4,
+      goalsFor: 8,
+      goalsAgainst: 12,
+      losses: 4,
+      form: ['L', 'L', 'L', 'L'],
+      tactics: {
+        mentality: 'Attacking',
+        passingStyle: 'Direct',
+        tempo: 'Fast',
+        defensiveLine: 'High',
+        pressing: 'High',
+      },
+      manager: {
+        ...team!.manager,
+        pressureScore: 75,
+      },
+    },
+  };
+
+  const rng = { next: () => 0 };
+  applyTacticalAdaptation(data.players, teams, new Set(), rng);
+  const afterFirst = JSON.stringify({
+    formation: teams[team!.id].activeFormation,
+    tactics: teams[team!.id].tactics,
+  });
+  applyTacticalAdaptation(data.players, teams, new Set(), rng);
+  const afterSecond = JSON.stringify({
+    formation: teams[team!.id].activeFormation,
+    tactics: teams[team!.id].tactics,
+  });
+
+  assert(afterSecond === afterFirst, 'Tactical adaptation should not repeatedly react to the same played count');
+};
+
+const checkMatchRatingsIncludeIndividualOutput = () => {
+  const base = Object.values(initGameData().players).find(player => player.position === 'FWD');
+  assert(base, 'Expected a forward for rating contribution regression');
+  const scorer: Player = {
+    ...base!,
+    id: 'rating-scorer',
+    name: 'Rating Scorer',
+    goals: 1,
+    assists: 0,
+    yellowCards: 0,
+    redCards: 0,
+    matchRatingHistory: [],
+  };
+  const teammate: Player = {
+    ...base!,
+    id: 'rating-teammate',
+    name: 'Rating Teammate',
+    goals: 0,
+    assists: 0,
+    yellowCards: 0,
+    redCards: 0,
+    matchRatingHistory: [],
+  };
+  const players = {
+    [scorer.id]: scorer,
+    [teammate.id]: teammate,
+  };
+
+  applySharedPostMatchAccounting({
+    teamParticipants: [scorer, teammate],
+    teamStarterIds: new Set([scorer.id, teammate.id]),
+    minuteMap: { [scorer.id]: 90, [teammate.id]: 90 },
+    concededGoalMinutes: [],
+    concededGoalsTotal: 0,
+    isWin: true,
+    isDraw: false,
+    teamTactics: {
+      mentality: 'Balanced',
+      passingStyle: 'Mixed',
+      tempo: 'Normal',
+      defensiveLine: 'Standard',
+      pressing: 'Medium',
+    },
+    updatedPlayers: players,
+    rng: { next: () => 0.5 },
+    playerMatchContributions: {
+      [scorer.id]: { goals: 1, assists: 0, yellowCards: 0, redCards: 0 },
+    },
+  });
+
+  const scorerRating = players[scorer.id].matchRatingHistory.at(-1) || 0;
+  const teammateRating = players[teammate.id].matchRatingHistory.at(-1) || 0;
+  assert(scorerRating > teammateRating, 'A goalscorer should receive a better match rating than a similar teammate');
+};
+
 
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
@@ -841,6 +1024,8 @@ const runRegressionChecks = () => {
   console.log('[OK] Manual transfer window guard passed');
   checkUnavailableBenchPlayersCanBeRemoved();
   console.log('[OK] Unavailable bench player cleanup passed');
+  checkLineupActionsPreserveBenchLimit();
+  console.log('[OK] Lineup action bench limit passed');
   checkSeasonReportsUseCompetitionLifecycleAndLeagueTables();
   console.log('[OK] Season reporting lifecycle guards passed');
   checkAiTransferListingsExpireOutsideWindow();
@@ -851,6 +1036,14 @@ const runRegressionChecks = () => {
   console.log('[OK] Contract departure destination quality passed');
   checkUiContractsMatchEngineState();
   console.log('[OK] UI data contract checks passed');
+  checkInitialGameSetupCanBeSeeded();
+  console.log('[OK] Seeded initial game setup passed');
+  checkStoreInitializesSelectedTeamDefaults();
+  console.log('[OK] Selected team initialization defaults passed');
+  checkTacticalAdaptationRunsOncePerPlayedCount();
+  console.log('[OK] Tactical adaptation repeat guard passed');
+  checkMatchRatingsIncludeIndividualOutput();
+  console.log('[OK] Match rating contribution checks passed');
 
   console.log('--- REGRESSION CHECKS COMPLETE ---');
 };

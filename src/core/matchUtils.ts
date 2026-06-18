@@ -120,20 +120,34 @@ export const getMoraleModifier = (teamPlayers: Player[]): number => {
   return 1.0 + ((avgMorale - 50) / 50) * 0.05;
 };
 
+export const getClubClassMatchMultiplier = (clubClass?: string): number => {
+  const multipliers: Record<string, number> = {
+    S: 1.035,
+    A: 1.02,
+    B: 1.005,
+    C: 0.99,
+    D: 0.975,
+    E: 0.96,
+    F: 0.945,
+  };
+  return multipliers[clubClass || 'C'] || 0.99;
+};
+
 export const scaleLineupForMatch = (
   players: Player[],
   formMultiplier: number,
   moraleMultiplier: number,
-  homeAdvantage = 1
+  homeAdvantage = 1,
+  clubClass?: string
 ) => (
   players.map(player => ({
     ...player,
     stats: {
       ...player.stats,
-      passing: player.stats.passing * formMultiplier * moraleMultiplier * homeAdvantage,
-      shooting: player.stats.shooting * formMultiplier * moraleMultiplier * homeAdvantage,
-      defending: (player.stats.defending || 50) * formMultiplier * moraleMultiplier * homeAdvantage,
-      dribbling: (player.stats.dribbling || 50) * formMultiplier * moraleMultiplier * homeAdvantage,
+      passing: player.stats.passing * formMultiplier * moraleMultiplier * homeAdvantage * getClubClassMatchMultiplier(clubClass),
+      shooting: player.stats.shooting * formMultiplier * moraleMultiplier * homeAdvantage * getClubClassMatchMultiplier(clubClass),
+      defending: (player.stats.defending || 50) * formMultiplier * moraleMultiplier * homeAdvantage * getClubClassMatchMultiplier(clubClass),
+      dribbling: (player.stats.dribbling || 50) * formMultiplier * moraleMultiplier * homeAdvantage * getClubClassMatchMultiplier(clubClass),
     },
   }))
 );

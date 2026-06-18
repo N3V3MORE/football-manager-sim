@@ -6,6 +6,13 @@ import { ENGINE_CONFIG } from '../config/engineConfig';
 
 export const CLEAN_SHEET_MINUTES_REQUIRED = 60;
 
+export type PlayerMatchContribution = {
+  goals?: number;
+  assists?: number;
+  yellowCards?: number;
+  redCards?: number;
+};
+
 export const didConcedeInWindow = (
   concededGoalMinutes: number[],
   windowStartMinute: number,
@@ -66,6 +73,7 @@ type SharedPostMatchInput = {
   updatedPlayers: Record<string, Player>;
   rng?: RandomGenerator;
   applyEnergyDrain?: boolean;
+  playerMatchContributions?: Record<string, PlayerMatchContribution>;
 };
 
 export const applySharedPostMatchAccounting = ({
@@ -80,6 +88,7 @@ export const applySharedPostMatchAccounting = ({
   updatedPlayers,
   rng,
   applyEnergyDrain = true,
+  playerMatchContributions = {},
 }: SharedPostMatchInput) => {
   const random = resolveRandom(rng);
   applyWindowedCleanSheets(
@@ -106,6 +115,11 @@ export const applySharedPostMatchAccounting = ({
     if (concededGoalsTotal === 0 && (player.position === 'DEF' || player.position === 'GK')) {
       rating += ENGINE_CONFIG.MATCH_RATING_CLEAN_SHEET_BONUS;
     }
+    const contribution = playerMatchContributions[player.id] || {};
+    rating += (contribution.goals || 0) * 0.75;
+    rating += (contribution.assists || 0) * 0.45;
+    rating -= (contribution.yellowCards || 0) * 0.25;
+    rating -= (contribution.redCards || 0) * 1.25;
     rating += (player.impactCoefficient ?? 1.0) - 1.0;
     if (minutes < 30) rating -= ENGINE_CONFIG.MATCH_RATING_SHORT_CAMEO_PENALTY;
     rating = Math.max(1.0, Math.min(10.0, Math.round(rating * 10) / 10));

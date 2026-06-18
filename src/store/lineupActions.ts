@@ -6,6 +6,26 @@ import { isPlayerUnavailable } from '../core/playerStatusUtils';
 type LineupActionState = Pick<GameState, 'players' | 'teams' | 'userTeamId'>;
 type LineupActionResult = LineupActionState | Partial<Pick<GameState, 'players' | 'teams'>>;
 
+const MAX_ACTIVE_SUBS = 7;
+
+const activeBenchCount = (
+  players: Record<string, Player>,
+  teamId: string,
+  excludingIds = new Set<string>()
+) => Object.values(players).filter(player => (
+  player.teamId === teamId &&
+  player.isSub &&
+  !player.isStarting &&
+  !isPlayerUnavailable(player) &&
+  !excludingIds.has(player.id)
+)).length;
+
+const canAddActiveSub = (
+  players: Record<string, Player>,
+  teamId: string,
+  excludingIds = new Set<string>()
+) => activeBenchCount(players, teamId, excludingIds) < MAX_ACTIVE_SUBS;
+
 export const applyLineupSuggestionToTeam = (
   allPlayers: Record<string, Player>,
   teamId: string,
@@ -150,8 +170,9 @@ export const toggleStartingState = (
 
   if (player.isStarting) {
     removeFromMap(playerId);
+    const shouldMoveToBench = canAddActiveSub(state.players, player.teamId, new Set([playerId]));
     return {
-      players: { ...state.players, [playerId]: { ...player, isStarting: false, isSub: true } },
+      players: { ...state.players, [playerId]: { ...player, isStarting: false, isSub: shouldMoveToBench } },
       teams: updatedTeams,
     };
   }
@@ -161,11 +182,16 @@ export const toggleStartingState = (
       .sort((a, b) => a.overallRating - b.overallRating)[0]
       || starters.sort((a, b) => a.overallRating - b.overallRating)[0];
     removeFromMap(toSwap.id);
+    const shouldMoveSwappedPlayerToBench = canAddActiveSub(
+      state.players,
+      player.teamId,
+      new Set([playerId, toSwap.id])
+    );
 
     return {
       players: {
         ...state.players,
-        [toSwap.id]: { ...toSwap, isStarting: false, isSub: true },
+        [toSwap.id]: { ...toSwap, isStarting: false, isSub: shouldMoveSwappedPlayerToBench },
         [playerId]: { ...player, isStarting: true, isSub: false },
       },
       teams: updatedTeams,
@@ -184,6 +210,7 @@ export const markAsSubState = (
   const player = state.players[playerId];
   if (!player || player.isStarting) return state;
   if (isPlayerUnavailable(player) && !player.isSub) return state;
+  if (!player.isSub && !canAddActiveSub(state.players, player.teamId, new Set([playerId]))) return state;
 
   return {
     players: {
@@ -232,7 +259,12 @@ export const swapPlayerState = (
     [addId]: { ...addPlayer, isStarting: true, isSub: false },
   };
   if (removeId && state.players[removeId]) {
-    updates[removeId] = { ...state.players[removeId], isStarting: false, isSub: true };
+    const shouldMoveRemovedPlayerToBench = canAddActiveSub(
+      state.players,
+      state.players[removeId].teamId,
+      new Set([addId, removeId])
+    );
+    updates[removeId] = { ...state.players[removeId], isStarting: false, isSub: shouldMoveRemovedPlayerToBench };
   }
 
   let updatedTeams = state.teams;
