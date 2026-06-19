@@ -1,11 +1,22 @@
 // ─── Premier League Calendar ──────────────────────────────────────────────────
 // Season 2024/25 starts on Sat 10 Aug 2024.
 // Each matchweek is 7 days apart. Week 38 ≈ Sun 25 May 2025.
+//
+// ⚠️ IMPORTANT: All date-formatting functions accept an optional `season` parameter
+// (defaults to 1). Callers MUST pass the current season number to ensure dates
+// increment correctly across year boundaries. UI callers that omit `season` will
+// display incorrect dates after season 1. Phase 8 tracks the UI sweep for this.
+
+import { ENGINE_CONFIG } from '../config/engineConfig';
 
 export const SEASON_START = new Date(2024, 7, 10); // Aug 10 2024
 
 const getSeasonStart = (season = 1) => new Date(2024 + Math.max(0, season - 1), 7, 10);
 
+/**
+ * Returns a formatted season label like "2024/25 Fixtures".
+ * @param season - Season number (1 = 2024/25, 2 = 2025/26, etc.)
+ */
 export const formatSeasonLabel = (season = 1): string => {
   const startYear = 2024 + Math.max(0, season - 1);
   return `${startYear}/${String((startYear + 1) % 100).padStart(2, '0')} Fixtures`;
@@ -13,6 +24,11 @@ export const formatSeasonLabel = (season = 1): string => {
 
 /**
  * Returns a JS Date for the given matchweek.
+ */
+/**
+ * Returns a JS Date for the given matchweek.
+ * @param week - Matchweek number (1-based).
+ * @param season - Season number (1 = 2024/25, 2 = 2025/26, etc.). Must be passed for correct year-boundary display.
  */
 export const weekToDate = (week: number, season = 1): Date => {
   const d = getSeasonStart(season);
@@ -114,9 +130,11 @@ export const getTransferWindowLabel = (week: number, season = 1): string => {
 /**
  * Compute a player's market value in millions £ based on rating and age.
  * Peaks around age 24-26, drops sharply after 30.
+ * Tune via ENGINE_CONFIG.MARKET_VALUE_POWER and MARKET_VALUE_DIVISOR.
  */
 export const computeMarketValue = (rating: number, age: number): number => {
-  const baseValue = Math.pow(rating, 2.5) / 50000; // 0.5–90m raw
+  const { MARKET_VALUE_POWER, MARKET_VALUE_DIVISOR } = ENGINE_CONFIG;
+  const baseValue = Math.pow(rating, MARKET_VALUE_POWER) / MARKET_VALUE_DIVISOR;
   let ageMult = 1.0;
   if (age <= 21) ageMult = 0.75;
   else if (age <= 23) ageMult = 0.9;

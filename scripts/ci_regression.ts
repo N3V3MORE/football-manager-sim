@@ -30,7 +30,7 @@ import {
 import { applySubstitutions } from '../src/core/substitutionEngine';
 import { advanceSeason } from '../src/core/seasonTransition';
 import { appointReplacementManager } from '../src/core/managerUtils';
-import { LeagueDivision, Player, Team } from '../src/models/types';
+import { LeagueDivision, Player, Team, UserManagerIdentity } from '../src/models/types';
 import { isPlayerUnavailable } from '../src/core/playerStatusUtils';
 import { evaluateBoardObjectives } from '../src/store/boardObjectiveHelpers';
 import { useGameStore } from '../src/store/gameStore';
@@ -41,6 +41,7 @@ import {
   MAX_INBOX_MESSAGES,
   mergeInboxMessages,
 } from '../src/store/inboxHelpers';
+import { sanitizePersistedState } from '../src/store/persistence';
 
 const RED_CARD_EVENT_PATTERN = /red card|sent off|straight red|reaches for red/i;
 const buildTacticalSetupKey = (team: Team) => (
@@ -1638,13 +1639,13 @@ const runCareerEngineChecks = () => {
     assert.equal(after.trophies[0].type, 'champion');
   }
 
-  // applySeasonEndToCareer: relegated drops reputation, adds relegated trophy
+  // applySeasonEndToCareer: relegated drops reputation, no longer adds a relegated trophy
   const rel = { ...champSummary, outcome: 'relegated' as const, boardVerdict: 'critical' as const };
   const relRecord = createDefaultCareerRecord();
   const { careerRecord: relAfter, reputationDelta: relDelta } = applySeasonEndToCareer(relRecord, rel);
   assert.equal(relDelta, -12);
   assert.equal(relAfter.reputation, 38);
-  assert.equal(relAfter.trophies[0]?.type, 'relegated');
+  assert.equal(relAfter.trophies.length, 0);
 
   // applySeasonEndToCareer: reputation is clamped to [0, 100]
   const lowRepRecord = { ...createDefaultCareerRecord(), reputation: 5 };
@@ -1683,6 +1684,28 @@ const runCareerEngineChecks = () => {
   const candidates = generateJobOfferCandidates(data.teams, userTeamId, champSummary);
   assert.ok(candidates.length <= 2);
   assert.ok(candidates.every(t => t.id !== userTeamId));
+
+  const stableOfferPool = Object.fromEntries(
+    Object.entries(data.teams).map(([id, team]) => [
+      id,
+      {
+        ...team,
+        boardApproval: 85,
+        manager: {
+          ...team.manager,
+          jobSecurity: 90,
+          replacementRisk: 5,
+          contractYearsRemaining: 3,
+        },
+      },
+    ])
+  );
+  const stableOnlyOffers = generateJobOfferCandidates(stableOfferPool, userTeamId, {
+    ...champSummary,
+    outcome: 'stayed',
+    boardVerdict: 'stable',
+  }, 75);
+  assert.equal(stableOnlyOffers.length, 0, 'Stable/non-vacant clubs should not be reintroduced as job offers');
 
   const configuredOfferPool = Object.fromEntries(
     Object.values(data.teams).map(team => [team.id, { ...team }])
@@ -1818,6 +1841,10 @@ const runCareerEngineChecks = () => {
     useGameStore.getState().applyInboxAction('job-offer-test');
     const acceptedState = useGameStore.getState();
     assert.equal(acceptedState.userTeamId, offerTeamId);
+    const userManagerName = acceptedState.careerRecord.userManager?.name;
+    assert.ok(userManagerName, 'Accepted job should preserve a persistent user manager identity');
+    assert.equal(acceptedState.teams[offerTeamId].manager.name, userManagerName);
+    assert.notEqual(acceptedState.teams[userTeamId].manager.name, userManagerName);
     assert.deepEqual(
       acceptedState.boardObjectives.map(({ description, type, target, met }) => ({ description, type, target, met })),
       expectedObjectives.map(({ description, type, target, met }) => ({ description, type, target, met }))
@@ -1826,6 +1853,53 @@ const runCareerEngineChecks = () => {
     assert.ok(!acceptedState.inboxMessages.some(message => message.id === 'stale-board-test'));
     assert.ok(acceptedState.inboxMessages.some(message => message.id === 'career-history-test'));
   }
+
+  const persistedIdentity: UserManagerIdentity = {
+    name: 'Persistent Test Coach',
+    nationality: 'Wales',
+    dateOfBirth: '1984-04-12',
+    preferredFormations: ['4-3-3', '4-2-3-1'],
+    tacticalIdentity: 'Persistence-first positional play',
+    transferIdentity: 'Persistence-first recruitment',
+  };
+  const sanitizedWithIdentity = sanitizePersistedState({
+    currentWeek: 1,
+    userTeamId,
+    teams: data.teams,
+    players: data.players,
+    fixtures: data.fixtures,
+    competitions: data.competitions,
+    news: [],
+    inboxMessages: [],
+    boardObjectives: [],
+    careerRecord: {
+      ...createDefaultCareerRecord(),
+      userManager: persistedIdentity,
+    },
+  });
+  assert.deepEqual(
+    sanitizedWithIdentity.careerRecord?.userManager,
+    persistedIdentity,
+    'Sanitized saves should preserve persisted user manager identity'
+  );
+
+  const sanitizedWithoutIdentity = sanitizePersistedState({
+    currentWeek: 1,
+    userTeamId,
+    teams: data.teams,
+    players: data.players,
+    fixtures: data.fixtures,
+    competitions: data.competitions,
+    news: [],
+    inboxMessages: [],
+    boardObjectives: [],
+    careerRecord: createDefaultCareerRecord(),
+  });
+  assert.equal(
+    sanitizedWithoutIdentity.careerRecord?.userManager?.name,
+    data.teams[userTeamId].manager.name,
+    'Legacy sanitized saves should derive user manager identity from the managed club'
+  );
 };
 
 const runCompetitionBackendChecks = () => {

@@ -271,6 +271,7 @@ export const initGameData = (userTeamSelection?: string, rng?: RandomGenerator) 
         ? { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' }
         : getRandomTactics(random),
       budget: getBudgetForClass(teamData.class),
+      operatingBudget: getBudgetForClass(teamData.class),
       transferSpend: 0,
       boardApproval: deriveInitialBoardApproval(manager, boardProfile),
     };
@@ -348,6 +349,7 @@ export const initGameData = (userTeamSelection?: string, rng?: RandomGenerator) 
           ? { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' }
           : getRandomTactics(random),
         budget: getBudgetForClass(club.teamClass),
+        operatingBudget: getBudgetForClass(club.teamClass),
         transferSpend: 0,
         boardApproval: deriveInitialBoardApproval(manager, boardProfile),
       };
@@ -391,6 +393,7 @@ export const initGameData = (userTeamSelection?: string, rng?: RandomGenerator) 
       form: [],
       tactics: getRandomTactics(random),
       budget: index < 3 ? 85 : 55,
+      operatingBudget: index < 3 ? 85 : 55,
       transferSpend: 0,
       boardApproval: deriveInitialBoardApproval(manager, boardProfile),
     };

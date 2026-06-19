@@ -169,6 +169,7 @@ export interface Team {
   form: string[];            // ['W', 'D', 'L', 'W', 'W']
   tactics: TeamTactics;
   budget: number;            // transfer budget in millions GBP
+  operatingBudget?: number;   // operating cash in millions GBP (separated from transfer budget; optional for backward compat)
   transferSpend: number;     // gross transfer spend in millions GBP this season
   boardApproval: number;     // 0 to 100
   lastStartingXI?: string[]; // player IDs
@@ -182,6 +183,7 @@ export interface BoardObjective {
   type: BoardObjectiveType;
   target: number;
   met: boolean;
+  failed?: boolean;
   competitionId?: CompetitionId;
   targetRound?: CompetitionRoundKey;
 }
@@ -315,8 +317,11 @@ export interface InboxMessage {
 }
 
 export interface TrophyEntry {
+  /** Stable unique key: `season|type|competitionId|label`. Populated on creation; optional for backward compatibility. */
+  id?: string;
   season: number;
   division: Division;
+  /** `relegated` is deprecated and no longer created; kept for backward compatibility with older saves. */
   type: 'champion' | 'promoted' | 'relegated' | 'cup_winner' | 'continental_winner';
   competitionId?: CompetitionId;
   label?: string;
@@ -370,6 +375,16 @@ export interface SeasonSummary {
   competitionResults: CompetitionResultSummary[];
 }
 
+/** Minimal persistent identity for the user-as-manager that follows across team changes. */
+export interface UserManagerIdentity {
+  name: string;
+  nationality: string;
+  dateOfBirth: string;
+  preferredFormations: Formation[];
+  tacticalIdentity: string;
+  transferIdentity: string;
+}
+
 export interface CareerRecord {
   seasonsManaged: number;
   totalWins: number;
@@ -381,6 +396,8 @@ export interface CareerRecord {
   trophies: TrophyEntry[];
   seasonHistory: SeasonSummary[];
   consecutiveLowApprovalWeeks: number;
+  /** The user's persistent manager identity. Optional for backward compatibility. */
+  userManager?: UserManagerIdentity;
 }
 
 export interface GameState {
@@ -395,4 +412,6 @@ export interface GameState {
   boardObjectives: BoardObjective[];
   boardReviewAppliedWeek: number;
   careerRecord: CareerRecord;
+  /** Persisted RNG state for deterministic replay. Optional for backward compatibility. */
+  rngState?: number;
 }

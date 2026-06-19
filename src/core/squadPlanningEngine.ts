@@ -7,9 +7,22 @@ import {
   SquadPlan,
   Team,
 } from '../models/types';
-import { isContractExpiringSoon, isPlayerUnavailable } from './playerStatusUtils';
+import { isContractExpiringSoon } from './playerStatusUtils';
 
 const POSITIONS: Position[] = ['GK', 'DEF', 'MID', 'FWD'];
+
+/**
+ * Short-term injuries (≤2 weeks) should not trigger permanent squad-depth
+ * purchases. Treat those players as available for depth-planning purposes
+ * so the AI doesn't overreact to a temporary absence.
+ */
+const SHORT_TERM_INJURY_THRESHOLD = 2;
+
+const isPlayerUnavailableForPlanning = (player: Player): boolean => {
+  if (player.matchesSuspended > 0) return true;
+  if ((player.injuryWeeks || 0) > SHORT_TERM_INJURY_THRESHOLD) return true;
+  return false;
+};
 
 const SEVERITY_VALUE: Record<SquadNeedSeverity, number> = {
   none: 0,
@@ -101,7 +114,7 @@ export const evaluateSquadNeeds = (
 
   return POSITIONS.map(position => {
     const positionPlayers = squad.filter(player => player.position === position);
-    const availablePlayers = positionPlayers.filter(player => !isPlayerUnavailable(player));
+    const availablePlayers = positionPlayers.filter(player => !isPlayerUnavailableForPlanning(player));
     const currentDepth = availablePlayers.length;
     const targetDepth = getTargetDepth(team, position);
     const averageAge = average(positionPlayers.map(player => player.age));

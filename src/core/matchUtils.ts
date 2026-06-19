@@ -121,16 +121,18 @@ export const getMoraleModifier = (teamPlayers: Player[]): number => {
 };
 
 export const getClubClassMatchMultiplier = (clubClass?: string): number => {
+  // Club-class match multipliers are now near 1.0 to avoid double-counting
+  // team quality (player ratings already capture squad strength).
   const multipliers: Record<string, number> = {
-    S: 1.035,
-    A: 1.02,
-    B: 1.005,
-    C: 0.99,
-    D: 0.975,
-    E: 0.96,
-    F: 0.945,
+    S: 1.008,
+    A: 1.004,
+    B: 1.002,
+    C: 1.0,
+    D: 0.998,
+    E: 0.996,
+    F: 0.994,
   };
-  return multipliers[clubClass || 'C'] || 0.99;
+  return multipliers[clubClass || 'C'] || 1.0;
 };
 
 export const scaleLineupForMatch = (

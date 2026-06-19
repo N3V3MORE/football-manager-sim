@@ -133,6 +133,18 @@ export const applySharedPostMatchAccounting = ({
     if (minutes < 30) rating -= ENGINE_CONFIG.MATCH_RATING_SHORT_CAMEO_PENALTY;
     rating = Math.max(1.0, Math.min(10.0, Math.round(rating * 10) / 10));
 
+    // Post-match morale adjustment based on result.
+    let moraleDelta = 0;
+    if (isWin) {
+      moraleDelta = minutes >= 60 ? 4 : 2;
+    } else if (isDraw) {
+      moraleDelta = minutes >= 45 ? 1 : 0;
+    } else {
+      moraleDelta = minutes >= 30 ? -3 : -1;
+    }
+    // Capped to min 0, max 100.
+    const newMorale = Math.max(0, Math.min(100, (updatedPlayers[player.id].morale || 50) + moraleDelta));
+
     updatedPlayers[player.id] = {
       ...updatedPlayers[player.id],
       energy: applyEnergyDrain
@@ -140,6 +152,7 @@ export const applySharedPostMatchAccounting = ({
         : updatedPlayers[player.id].energy,
       minutesPlayed: (updatedPlayers[player.id].minutesPlayed || 0) + minutes,
       matchRatingHistory: [...(updatedPlayers[player.id].matchRatingHistory || []), rating].slice(-15),
+      morale: newMorale,
     };
   });
 };

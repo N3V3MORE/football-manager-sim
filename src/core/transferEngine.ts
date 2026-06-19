@@ -245,8 +245,12 @@ export const computeWeeklyTransfers = (
     });
   });
 
-  // Global Listing Pool populated after all teams have registered their listings
-  const globalListedPlayers = Object.values(updatedPlayers).filter(p => p.isTransferListed);
+  // Global Listing Pool populated after all teams have registered their listings.
+  // Exclude user-team players so AI never silently purchases a player the user listed
+  // in the same weekly cycle.
+  const globalListedPlayers = Object.values(updatedPlayers).filter(
+    p => p.isTransferListed && p.teamId !== userTeamId
+  );
 
   // Phase 2: All AI Teams attempt to satisfy their weaknesses from the Global Pool
   aiTeams.forEach(team => {
@@ -304,6 +308,10 @@ export const computeWeeklyTransfers = (
           askingPrice: 0,
           isStarting: false,
           isSub: false,
+          // Assign destination-context values so the player arrives with
+          // a proper contract, morale baseline, and preserved wage.
+          contractLeft: Math.max(updatedPlayers[bestTarget.id].contractLeft, 2),
+          morale: Math.max(60, updatedPlayers[bestTarget.id].morale),
         };
         decisions.push({
           week: currentWeek,

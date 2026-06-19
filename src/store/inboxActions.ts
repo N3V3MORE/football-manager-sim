@@ -1,4 +1,5 @@
 import { GameState } from '../models/types';
+import { moveUserManagerToTeam } from '../core/careerEngine';
 import { buildRenewedPlayer, clearContractWarningMessages } from './contractActions';
 import { applyLineupSuggestionToTeam } from './lineupActions';
 import {
@@ -18,6 +19,7 @@ type InboxActionState = Pick<
   | 'competitions'
   | 'inboxMessages'
   | 'boardObjectives'
+  | 'careerRecord'
 >;
 
 type InboxActionPatch = InboxActionState | Partial<InboxActionState>;
@@ -66,7 +68,25 @@ export const applyInboxActionState = (
   } else if (message.action.type === 'renew_contract') {
     const { playerId, years, wage } = message.action.payload;
     const player = state.players[playerId];
-    if (!player) return state;
+    const userTeam = state.userTeamId ? state.teams[state.userTeamId] : null;
+
+    // Validation parity with direct contract renewal: player must be on user's
+    // team and contract terms must be positive.
+    if (!player || !userTeam || player.teamId !== userTeam.id) {
+      return {
+        inboxMessages: state.inboxMessages.map(item =>
+          item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+        ),
+      };
+    }
+
+    if (years <= 0 || wage <= 0) {
+      return {
+        inboxMessages: state.inboxMessages.map(item =>
+          item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+        ),
+      };
+    }
 
     nextPlayers = {
       ...state.players,
@@ -90,7 +110,11 @@ export const applyInboxActionState = (
       };
     }
 
-    const boardObjectives = buildManagedTeamObjectives(nextTeam, state.competitions);
+    const previousTeamId = state.userTeamId;
+    const managerMove = moveUserManagerToTeam(nextTeams, previousTeamId, teamId, state.careerRecord);
+    nextTeams = managerMove.teams;
+
+    const boardObjectives = buildManagedTeamObjectives(nextTeams[teamId] || nextTeam, state.competitions);
     const carriedMessages = pruneInboxMessagesForManagedTeam(
       state.inboxMessages
         .filter(item => item.category !== 'career_job_offer')
@@ -100,13 +124,14 @@ export const applyInboxActionState = (
     const nextAssistantMessages = generateAssistantWeekMessages({
       currentWeek: state.currentWeek,
       userTeamId: teamId,
-      teams: state.teams,
+      teams: nextTeams,
       players: nextPlayers,
       fixtures: state.fixtures,
     });
 
     return {
       userTeamId: teamId,
+      careerRecord: managerMove.careerRecord,
       boardObjectives,
       players: nextPlayers,
       teams: nextTeams,

@@ -75,11 +75,16 @@ export const applySubstitutions = (
 
     const onPool = bench.filter(player => !usedBench.has(player.id));
     if (onPool.length === 0) break;
-    const preferred = onPool.filter(player => preferredOnRoles.includes(inferRoleTag(player)));
+    // Prefer positional compatibility over broad role preferences.
+    // When a bench player shares the departing player's position, subPosition,
+    // or an altPosition matching the departing subPosition, use that pool first.
     const positional = onPool.filter(player =>
-      player.position === offPlayer.position || player.altPositions?.includes(offPlayer.subPosition)
+      player.position === offPlayer.position
+      || player.subPosition === offPlayer.subPosition
+      || player.altPositions?.includes(offPlayer.subPosition)
     );
-    const selectedPool = preferred.length > 0 ? preferred : (positional.length > 0 ? positional : onPool);
+    const preferred = onPool.filter(player => preferredOnRoles.includes(inferRoleTag(player)));
+    const selectedPool = positional.length > 0 ? positional : (preferred.length > 0 ? preferred : onPool);
     const onPlayer = selectedPool
       .map(player => {
         const role = inferRoleTag(player);

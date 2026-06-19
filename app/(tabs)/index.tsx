@@ -74,7 +74,10 @@ export default function HubScreen() {
   );
 
   const myNextMatch = useMemo(
-    () => weekFixtures.find(fixture => fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId),
+    () => weekFixtures.find(fixture =>
+      !fixture.isPlayed &&
+      (fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId)
+    ),
     [weekFixtures, userTeamId]
   );
 

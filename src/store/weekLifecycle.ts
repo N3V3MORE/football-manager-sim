@@ -1,9 +1,10 @@
-import { GameState, InboxMessage, Team } from '../models/types';
+import { GameState, InboxMessage, Player, Team } from '../models/types';
 import { resolveCompetitionProgression } from '../core/competitionEngine';
 import { quickSimMatch } from '../core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../core/progressionEngine';
+import { AITransferDecision } from '../core/transferEngine';
 import { getSeasonWeekLimit } from '../core/leagueUtils';
-import { runBoardReview } from '../core/boardEngine';
+import { getSackingApprovalThreshold, runBoardReview } from '../core/boardEngine';
 import { advanceSeason } from '../core/seasonTransition';
 import {
   applySeasonEndToCareer,
@@ -26,14 +27,6 @@ import {
 export type WeeklyLifecycleState = GameState & {
   liveMatches: Record<string, LiveMatchState>;
 };
-
-const getSackingApprovalThreshold = (team: Team) => (
-  team.boardProfile.patience === 'low'
-    ? 28
-    : team.boardProfile.patience === 'high'
-      ? 18
-      : 22
-);
 
 const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TState): TState => {
   const weekFixtures = Object.values(state.fixtures).filter(
@@ -262,7 +255,7 @@ const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
     seasonSummary
   );
 
-  const jobOfferTeams = generateJobOfferCandidates(state.teams, state.userTeamId, seasonSummary);
+  const jobOfferTeams = generateJobOfferCandidates(state.teams, state.userTeamId, seasonSummary, updatedCareer.reputation);
   const careerMessages = generateCareerInboxMessages({
     week: initialWeek,
     summary: seasonSummary,
@@ -282,12 +275,16 @@ const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
   });
 
   const nextUserTeamId = isSacked ? null : state.userTeamId;
+  // Prevent double-counting: the user team already had its season-end review applied
+  // via applyBoardReview in the weekly lifecycle. Skip re-review in advanceSeason.
+  const skipReviewTeamIds = [state.userTeamId];
   const nextSeason = advanceSeason(
     state.players,
     state.teams,
     state.competitions,
     nextUserTeamId,
-    state.news
+    state.news,
+    skipReviewTeamIds
   );
   const nextAssistantMessages = nextUserTeamId
     ? generateAssistantWeekMessages({
@@ -321,6 +318,90 @@ const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
       ]
     ),
   };
+};
+
+const MAX_AI_SQUAD_SIZE = 28;
+
+/**
+ * Gentle ongoing roster-size enforcement for AI teams.
+ * Releases the lowest-rated non-starting, non-transfer-listed players
+ * from teams that exceed the maximum squad size after transfers.
+ * Does not touch the user team.
+ */
+const enforceAiRosterSizes = (
+  players: Record<string, Player>,
+  teams: Record<string, Team>,
+  userTeamId: string | null
+): Record<string, Player> => {
+  let updatedPlayers = { ...players };
+  const aiTeams = Object.values(teams).filter(t => t.id !== userTeamId);
+
+  aiTeams.forEach(team => {
+    const squad = Object.values(updatedPlayers).filter(p => p.teamId === team.id);
+    if (squad.length <= MAX_AI_SQUAD_SIZE) return;
+
+    const excess = squad.length - MAX_AI_SQUAD_SIZE;
+    // Prioritise releasing: non-starting, non-sub, non-listed, lowest rating first
+    const releaseCandidates = [...squad]
+      .filter(p => !p.isStarting && !p.isSub && !p.isTransferListed)
+      .sort((a, b) => a.overallRating - b.overallRating);
+
+    const toRelease = releaseCandidates.slice(0, excess);
+    toRelease.forEach(p => {
+      updatedPlayers[p.id] = {
+        ...p,
+        teamId: '__free_agent__',
+        isStarting: false,
+        isSub: false,
+        isTransferListed: false,
+        askingPrice: 0,
+      };
+    });
+  });
+
+  return updatedPlayers;
+};
+
+const generateTransferInboxMessages = (
+  decisions: AITransferDecision[],
+  userTeamId: string | null,
+  teams: Record<string, Team>,
+  players: Record<string, Player>
+): InboxMessage[] => {
+  if (!userTeamId) return [];
+  const userDivision = teams[userTeamId]?.division;
+  if (!userDivision) return [];
+
+  const messages: InboxMessage[] = [];
+
+  decisions
+    .filter(d => d.action === 'bought')
+    .forEach(decision => {
+      const buyer = teams[decision.teamId];
+      const seller = decision.fromTeamId ? teams[decision.fromTeamId] : null;
+      // Surface transfers relevant to the user's division or notable fees (≥£10m)
+      const isSameDivision = buyer?.division === userDivision || seller?.division === userDivision;
+      const isNotableFee = (decision.fee || 0) >= 10;
+      if (!isSameDivision && !isNotableFee) return;
+
+      const player = players[decision.playerId];
+      if (!buyer || !player) return;
+
+      const id = `system-transfer_advice-w${decision.week || 0}-${decision.playerId}-${decision.teamId}`;
+      messages.push({
+        id,
+        week: decision.week || 0,
+        source: 'system',
+        category: 'transfer_advice',
+        title: `${player.name} joins ${buyer.name}`,
+        body: `${buyer.name} have signed ${player.name} (${player.position}) from ${seller?.name || 'their previous club'}${decision.fee != null ? ` for GBP ${decision.fee}m` : ''}. ${decision.reason}`,
+        isRead: false,
+        playerId: decision.playerId,
+        teamId: decision.teamId,
+      });
+    });
+
+  return messages;
 };
 
 export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TState): TState => {
@@ -373,6 +454,11 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
     teams: transferState.teams,
     transfersAppliedWeek: nextState.currentWeek,
   };
+  // Gentle AI roster-size enforcement after transfers
+  nextState = {
+    ...nextState,
+    players: enforceAiRosterSizes(nextState.players, nextState.teams, nextState.userTeamId),
+  };
   nextState = sanitizeFormationMaps(nextState);
 
   const boardReview = applyBoardReview(nextState, initialWeek);
@@ -383,6 +469,12 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
 
   const weekMessages = [
     ...generateSystemInboxMessages(initialWeek, progression.generatedNews),
+    ...generateTransferInboxMessages(
+      transferState.decisions,
+      nextState.userTeamId,
+      nextState.teams,
+      nextState.players
+    ),
     ...boardReview.boardMessages,
     ...sackingRisk.sackMessages,
   ];

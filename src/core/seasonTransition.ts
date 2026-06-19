@@ -18,6 +18,7 @@ import {
 } from './boardEngine';
 import { appointReplacementManager, refreshManagerForNewSeason } from './managerUtils';
 import { buildQuickSimLineup } from './lineupEngine';
+import { getBudgetForClass } from '../utils/calendar';
 
 const resetTeamStats = (team: Team): Team => ({
   ...team,
@@ -37,6 +38,29 @@ const getDivisionTeams = (teams: Record<string, Team>, division: LeagueDivision)
 );
 
 const formatTeamList = (teams: Team[]) => teams.map(team => team.name).join(', ');
+
+/**
+ * Recompute a team's clubClass when it changes division via promotion or relegation.
+ * Keeps the algorithm simple: promoted teams get a mid-table class for the new division,
+ * relegated teams get a top-half class since they were strong enough to play above.
+ */
+const recomputeClubClassForDivision = (
+  previousDivision: Division,
+  nextDivision: Division
+): string => {
+  // Promotion: assign class appropriate for lower-mid table in the new, higher division.
+  if (nextDivision === 'Premier League' && previousDivision !== 'Premier League') return 'C';
+  if (nextDivision === 'Championship' && previousDivision === 'League One') return 'D';
+  if (nextDivision === 'League One' && previousDivision === 'League Two') return 'E';
+
+  // Relegation: assign class appropriate for top-half in the new, lower division.
+  if (nextDivision === 'Championship' && previousDivision === 'Premier League') return 'B';
+  if (nextDivision === 'League One' && previousDivision === 'Championship') return 'C';
+  if (nextDivision === 'League Two' && previousDivision === 'League One') return 'D';
+
+  // Within same division tier — keep the existing class.
+  return '';
+};
 
 const getActiveCompetitionIdsForTeam = (
   teamId: string,
@@ -61,23 +85,69 @@ const resetPlayerSeasonStats = (player: Player): Player => ({
   matchRatingHistory: [],
 });
 
+const MAX_SQUAD_SIZE = 28;
+const PREFERRED_SQUAD_SIZE = 24;
+
 const findContractDestinationTeamId = (
   player: Player,
   teams: Record<string, Team>,
-  userTeamId: string | null
+  userTeamId: string | null,
+  players: Record<string, Player>
 ) => {
   const currentDivision = teams[player.teamId]?.division;
-  return Object.values(teams)
+
+  const candidateTeams = Object.values(teams)
     .filter(team => team.id !== player.teamId && team.id !== userTeamId)
-    .sort((a, b) => {
-      if (a.division === currentDivision && b.division !== currentDivision) return -1;
-      if (b.division === currentDivision && a.division !== currentDivision) return 1;
-      const aBudgetFit = a.budget - player.marketValue;
-      const bBudgetFit = b.budget - player.marketValue;
-      if ((bBudgetFit >= 0) !== (aBudgetFit >= 0)) return bBudgetFit >= 0 ? 1 : -1;
-      if (b.budget !== a.budget) return b.budget - a.budget;
-      return a.name.localeCompare(b.name);
-    })[0]?.id || null;
+    .map(team => {
+      const squad = Object.values(players).filter(p => p.teamId === team.id);
+      const squadSize = squad.length;
+      // Count players of the same position already on the candidate team
+      const positionDepth = squad.filter(p => p.position === player.position).length;
+      // A positional need exists when the team has few players of this position
+      const positionalNeedScore = Math.max(0, 3 - positionDepth);
+      // Prefer teams that are not at capacity
+      const capacityScore = squadSize < PREFERRED_SQUAD_SIZE ? 2 : squadSize < MAX_SQUAD_SIZE ? 1 : 0;
+      // Budget fit: prefer teams that can afford the player's market value
+      const budgetFit = team.budget - player.marketValue;
+      const budgetScore = budgetFit >= 0 ? 1 : 0;
+      // Wage context: prefer teams where the player's wage is not an outlier
+      const avgWage = squad.length > 0
+        ? squad.reduce((sum, p) => sum + p.wage, 0) / squad.length
+        : player.wage;
+      const wageRatio = avgWage > 0 ? player.wage / avgWage : 1;
+      const wageScore = wageRatio <= 1.5 ? 1 : wageRatio <= 2.5 ? 0 : -1;
+
+      return {
+        team,
+        divisionMatch: team.division === currentDivision ? 1 : 0,
+        positionalNeedScore,
+        capacityScore,
+        budgetScore,
+        wageScore,
+        budget: team.budget,
+      };
+    });
+
+  if (candidateTeams.length === 0) return null;
+
+  candidateTeams.sort((a, b) => {
+    // 1. Division match
+    if (a.divisionMatch !== b.divisionMatch) return b.divisionMatch - a.divisionMatch;
+    // 2. Positional need
+    if (a.positionalNeedScore !== b.positionalNeedScore) return b.positionalNeedScore - a.positionalNeedScore;
+    // 3. Squad capacity
+    if (a.capacityScore !== b.capacityScore) return b.capacityScore - a.capacityScore;
+    // 4. Budget score (can afford vs cannot)
+    if (a.budgetScore !== b.budgetScore) return b.budgetScore - a.budgetScore;
+    // 5. Wage fit
+    if (a.wageScore !== b.wageScore) return b.wageScore - a.wageScore;
+    // 6. Budget size as tiebreaker (higher budget = more room)
+    if (b.budget !== a.budget) return b.budget - a.budget;
+    // 7. Stable tiebreaker
+    return a.team.name.localeCompare(b.team.name);
+  });
+
+  return candidateTeams[0].team.id;
 };
 
 const reseedTeamLineupForNewSeason = (
@@ -115,7 +185,8 @@ export const advanceSeason = (
   teams: Record<string, Team>,
   competitions: Record<string, CompetitionState>,
   userTeamId: string | null,
-  news: string[]
+  news: string[],
+  skipReviewTeamIds?: string[]
 ): {
   players: Record<string, Player>;
   teams: Record<string, Team>;
@@ -136,7 +207,7 @@ export const advanceSeason = (
     if (!currentTeam) return;
 
     if (player.teamId === userTeamId) {
-      const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId);
+      const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId, contractAdjustedPlayers);
       if (!destinationTeamId) {
         contractAdjustedPlayers[player.id] = {
           ...player,
@@ -167,7 +238,7 @@ export const advanceSeason = (
       return;
     }
 
-    const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId);
+    const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId, contractAdjustedPlayers);
     if (!destinationTeamId) {
       const renewal = getRenewalOffer(player);
       contractAdjustedPlayers[player.id] = {
@@ -225,13 +296,50 @@ export const advanceSeason = (
     }
   });
 
+  // Recompute clubClass for teams that changed division via promotion/relegation.
+  const nextClubClassByTeamId: Record<string, string> = {};
+  Object.entries(nextDivisionByTeamId).forEach(([teamId, nextDivision]) => {
+    const team = contractAdjustedTeams[teamId];
+    if (!team || nextDivision === team.division) return;
+    const newClass = recomputeClubClassForDivision(team.division, nextDivision);
+    if (newClass) {
+      nextClubClassByTeamId[teamId] = newClass;
+    }
+  });
+
+  const skipReviewSet = new Set(skipReviewTeamIds ?? []);
+
   const reviewedTeams = Object.fromEntries(
     Object.entries(contractAdjustedTeams).map(([teamId, team]) => {
+      const nextDivision = nextDivisionByTeamId[teamId] || team.division;
+      const nextClubClass = nextClubClassByTeamId[teamId] || team.clubClass || 'C';
+      const nextBoardProfile = buildBoardProfile(nextClubClass, nextDivision, Boolean(team.isExternal));
+
+      // Skip review for teams that already had a season-end review applied (e.g. user team via weekly lifecycle)
+      if (skipReviewSet.has(teamId)) {
+        const nextTeam: Team = {
+          ...team,
+          division: nextDivision,
+          clubClass: nextClubClass,
+          boardProfile: nextBoardProfile,
+          boardApproval: team.boardApproval,
+          budget: nextClubClassByTeamId[teamId]
+            ? getBudgetForClass(nextClubClass)
+            : team.budget,
+          operatingBudget: nextClubClassByTeamId[teamId]
+            ? getBudgetForClass(nextClubClass)
+            : team.operatingBudget,
+          manager: refreshManagerForNewSeason(team.manager, nextBoardProfile, nextDivision),
+        };
+        return [teamId, resetTeamStats(nextTeam)];
+      }
+
       const currentBoardProfile = team.boardProfile || buildBoardProfile(
         team.clubClass || 'C',
         team.division,
         Boolean(team.isExternal)
       );
+      // Review objectives are based on the season just ended (OLD division & clubClass).
       const reviewObjectives = buildBoardObjectives(
         team.clubClass || 'C',
         team.division,
@@ -248,14 +356,19 @@ export const advanceSeason = (
           players: nextPlayers,
         }
       );
-      const nextDivision = nextDivisionByTeamId[teamId] || team.division;
-      const nextBoardProfile = buildBoardProfile(team.clubClass || 'C', nextDivision, Boolean(team.isExternal));
 
       let nextTeam: Team = {
         ...team,
         division: nextDivision,
+        clubClass: nextClubClass,
         boardProfile: nextBoardProfile,
         boardApproval: review.nextApproval,
+        budget: nextClubClassByTeamId[teamId]
+          ? getBudgetForClass(nextClubClass)
+          : team.budget,
+        operatingBudget: nextClubClassByTeamId[teamId]
+          ? getBudgetForClass(nextClubClass)
+          : team.operatingBudget,
         manager: refreshManagerForNewSeason(review.nextManager, nextBoardProfile, nextDivision),
       };
 

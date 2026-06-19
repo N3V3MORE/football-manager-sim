@@ -72,9 +72,9 @@ const TACTIC_SECTIONS: TacticConfig[] = [
     title: 'Tempo',
     options: ['Slow', 'Normal', 'Fast'],
     descriptions: {
-      Slow: 'Control the game and conserve more energy.',
+      Slow: 'Control the game and limit opponent chances.',
       Normal: 'Standard rhythm and frequency of play.',
-      Fast: 'Higher intensity and chance creation, but burns more energy.',
+      Fast: 'Higher intensity and chance creation, but costs more energy.',
     },
   },
   {
@@ -92,7 +92,7 @@ const TACTIC_SECTIONS: TacticConfig[] = [
     title: 'Pressing',
     options: ['None', 'Medium', 'High'],
     descriptions: {
-      None: 'Sit off and conserve energy.',
+      None: 'Sit off and stay organised.',
       Medium: 'Press selectively.',
       High: 'Aggressive pressure with higher energy cost.',
     },
@@ -160,6 +160,12 @@ export default function SquadScreen() {
   }, [slots, starters, hasMap, formationMap]);
 
   const rebuildLockRef = useRef(false);
+
+  // Reset the rebuild lock whenever the formation, starters, or map change so
+  // a subsequent repair can run again (locking only prevents re-entrant loops).
+  useEffect(() => {
+    rebuildLockRef.current = false;
+  }, [activeFormation, formationMap, starters]);
 
   useEffect(() => {
     if (!userTeamId || !hasMap || rebuildLockRef.current) return;

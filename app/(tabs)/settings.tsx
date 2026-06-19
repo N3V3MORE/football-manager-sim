@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CurrentTeamCard } from '@/components/settings/current-team-card';
@@ -104,8 +104,27 @@ export default function SettingsScreen() {
         currentTeamId={userTeamId}
         onClose={() => setShowChangeTeam(false)}
         onSelect={(teamId) => {
-          changeTeam(teamId);
-          setShowChangeTeam(false);
+          const targetTeam = sortedTeams.find(t => t.id === teamId);
+          if (!targetTeam) return;
+          if (teamId === userTeamId) {
+            setShowChangeTeam(false);
+            return;
+          }
+          Alert.alert(
+            'Switch Teams',
+            `Are you sure you want to leave ${userTeam?.name ?? 'your current club'} and take control of ${targetTeam.name} (${targetTeam.division})?\n\nThis will be recorded as a career event and your manager identity will follow you.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Switch',
+                style: 'destructive',
+                onPress: () => {
+                  changeTeam(teamId);
+                  setShowChangeTeam(false);
+                },
+              },
+            ]
+          );
         }}
       />
     </SafeAreaView>

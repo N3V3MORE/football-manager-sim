@@ -1,7 +1,16 @@
-import { CareerRecord, CompetitionState, SeasonSummary, Team, TrophyEntry } from '../models/types';
+import { CareerRecord, CompetitionId, CompetitionState, Manager, SeasonSummary, Team, TrophyEntry, UserManagerIdentity } from '../models/types';
 import { DIVISION_ORDER, PROMOTION_COUNT, RELEGATION_COUNT, sortTeamsByTable } from './leagueUtils';
 import { getCompetitionResultForTeam } from './competitionEngine';
-import { getReviewVerdict } from './boardEngine';
+import { getReviewVerdict, getSackingApprovalThreshold } from './boardEngine';
+import { appointReplacementManager, calculateAgeFromDob } from './managerUtils';
+
+/** Build a stable unique key for a trophy entry: `season|type|competitionId|label` */
+export const buildTrophyId = (
+  season: number,
+  type: TrophyEntry['type'],
+  competitionId?: CompetitionId,
+  label?: string
+): string => `${season}|${type}|${competitionId ?? ''}|${label ?? ''}`;
 
 const getBoardVerdict = (team: Team): SeasonSummary['boardVerdict'] => (
   getReviewVerdict(team.boardApproval, team.manager.pressureScore, team.manager.replacementRisk)
@@ -87,6 +96,97 @@ export const createDefaultCareerRecord = (): CareerRecord => ({
   consecutiveLowApprovalWeeks: 0,
 });
 
+export const buildUserManagerIdentity = (manager: Manager): UserManagerIdentity => ({
+  name: manager.name,
+  nationality: manager.nationality,
+  dateOfBirth: manager.dateOfBirth,
+  preferredFormations: manager.preferredFormations,
+  tacticalIdentity: manager.tacticalIdentity,
+  transferIdentity: manager.transferIdentity,
+});
+
+const applyUserIdentityToManager = (
+  manager: Manager,
+  team: Team,
+  userManager: UserManagerIdentity
+): Manager => {
+  const computedAge = calculateAgeFromDob(userManager.dateOfBirth);
+
+  return {
+    ...manager,
+    id: team.id,
+    teamId: team.id,
+    teamName: team.name,
+    name: userManager.name,
+    nationality: userManager.nationality,
+    dateOfBirth: userManager.dateOfBirth,
+    age: Number.isFinite(computedAge) ? computedAge : manager.age,
+    preferredFormations: userManager.preferredFormations.length > 0
+      ? userManager.preferredFormations
+      : manager.preferredFormations,
+    tacticalIdentity: userManager.tacticalIdentity,
+    transferIdentity: userManager.transferIdentity,
+    status: 'Permanent',
+  };
+};
+
+const buildVacatedClubManager = (team: Team, userManager: UserManagerIdentity): Manager => {
+  const replacement = appointReplacementManager(team, team.division);
+  const replacementName = replacement.name === userManager.name
+    ? `${team.name} Caretaker`
+    : replacement.name;
+
+  return {
+    ...replacement,
+    id: team.id,
+    teamId: team.id,
+    teamName: team.name,
+    name: replacementName,
+    status: 'Caretaker',
+  };
+};
+
+export const moveUserManagerToTeam = (
+  allTeams: Record<string, Team>,
+  currentTeamId: string | null | undefined,
+  targetTeamId: string,
+  careerRecord: CareerRecord
+): { teams: Record<string, Team>; careerRecord: CareerRecord; userManager?: UserManagerIdentity } => {
+  const targetTeam = allTeams[targetTeamId];
+  if (!targetTeam) {
+    return { teams: allTeams, careerRecord, userManager: careerRecord.userManager };
+  }
+
+  const currentTeam = currentTeamId ? allTeams[currentTeamId] : undefined;
+  const userManager = careerRecord.userManager ?? (currentTeam ? buildUserManagerIdentity(currentTeam.manager) : undefined);
+  if (!userManager) {
+    return { teams: allTeams, careerRecord };
+  }
+
+  const nextTeams = { ...allTeams };
+  if (currentTeam && currentTeam.id !== targetTeamId) {
+    nextTeams[currentTeam.id] = {
+      ...currentTeam,
+      manager: buildVacatedClubManager(currentTeam, userManager),
+    };
+  }
+
+  const updatedTargetTeam = nextTeams[targetTeamId] || targetTeam;
+  nextTeams[targetTeamId] = {
+    ...updatedTargetTeam,
+    manager: applyUserIdentityToManager(updatedTargetTeam.manager, updatedTargetTeam, userManager),
+  };
+
+  return {
+    teams: nextTeams,
+    careerRecord: {
+      ...careerRecord,
+      userManager,
+    },
+    userManager,
+  };
+};
+
 export const buildSeasonSummary = (
   season: number,
   team: Team,
@@ -144,19 +244,26 @@ export const applySeasonEndToCareer = (
   else if (summary.boardVerdict === 'critical') reputationDelta -= 2;
 
   const trophies: TrophyEntry[] = [...careerRecord.trophies];
+  const existingIds = new Set(careerRecord.trophies.map(t => t.id).filter(Boolean) as string[]);
+  const addTrophy = (entry: TrophyEntry) => {
+    const id = buildTrophyId(entry.season, entry.type, entry.competitionId, entry.label);
+    if (!existingIds.has(id)) {
+      existingIds.add(id);
+      trophies.push({ ...entry, id });
+    }
+  };
   if (summary.outcome === 'champion') {
-    trophies.push({ season: summary.season, division: summary.division, type: 'champion' });
+    addTrophy({ season: summary.season, division: summary.division, type: 'champion' });
   } else if (summary.outcome === 'promoted') {
-    trophies.push({ season: summary.season, division: summary.division, type: 'promoted' });
-  } else if (summary.outcome === 'relegated') {
-    trophies.push({ season: summary.season, division: summary.division, type: 'relegated' });
+    addTrophy({ season: summary.season, division: summary.division, type: 'promoted' });
   }
+  // NOTE: Relegation is recorded in seasonHistory but no longer stored as a trophy entry.
 
   summary.competitionResults.forEach(result => {
     if (result.finish === 'winner') {
       const isEurope = result.competitionId === 'europe';
       reputationDelta += isEurope ? 6 : 3;
-      trophies.push({
+      addTrophy({
         season: summary.season,
         division: summary.division,
         type: isEurope ? 'continental_winner' : 'cup_winner',
@@ -197,11 +304,7 @@ export const evaluateSackingRisk = (
 ): { newConsecutiveWeeks: number; shouldWarn: boolean; isSackingImminent: boolean } => {
   const team = typeof boardApproval === 'number' ? null : boardApproval;
   const approval = typeof boardApproval === 'number' ? boardApproval : boardApproval.boardApproval;
-  const lowThreshold = team?.boardProfile.patience === 'low'
-    ? 28
-    : team?.boardProfile.patience === 'high'
-      ? 18
-      : 22;
+  const lowThreshold = getSackingApprovalThreshold(team);
   const warnWeek = team?.boardProfile.patience === 'low' ? 2 : 3;
   const imminentWeek = team?.boardProfile.patience === 'high' ? 5 : team?.boardProfile.patience === 'low' ? 3 : 4;
   const replacementBuffer = team && team.manager.replacementRisk < 55 ? 1 : 0;
@@ -217,10 +320,29 @@ export const evaluateSackingRisk = (
   return { newConsecutiveWeeks: 0, shouldWarn: false, isSackingImminent: false };
 };
 
+/**
+ * Returns true when a club is unlikely to be hiring — the manager is secure and
+ * not at immediate risk of replacement.
+ */
+const isManagerStable = (team: Team): boolean => {
+  const { manager } = team;
+  // High job security + low replacement risk + good board approval → stable
+  if (manager.jobSecurity >= 70 && manager.replacementRisk <= 25 && team.boardApproval >= 65) {
+    return true;
+  }
+  // Manager recently appointed (contract > 2.5 years) and board is happy
+  if (manager.contractYearsRemaining > 2.5 && team.boardApproval >= 60) {
+    return true;
+  }
+  return false;
+};
+
 export const generateJobOfferCandidates = (
   allTeams: Record<string, Team>,
   userTeamId: string,
-  summary: SeasonSummary
+  summary: SeasonSummary,
+  /** The user's career reputation (0-100). Defaults to 50 if not provided. */
+  reputation = 50,
 ): Team[] => {
   const leagueDivision = summary.division === 'Continental' ? 'Premier League' : summary.division;
   const divIndex = DIVISION_ORDER.indexOf(leagueDivision);
@@ -244,24 +366,43 @@ export const generateJobOfferCandidates = (
         ? 'downward'
         : 'steady';
 
+  // --- Reputation gates: high rep can reach further up; low rep is limited ---
+  const canReachUpward = reputation >= 60 || trajectory === 'upward';
+  const upwardSteps = reputation >= 80 ? 2 : 1;
+
   if (trajectory === 'upward') {
-    if (normalizedDivIndex > 0) targetDivisions.push(DIVISION_ORDER[normalizedDivIndex - 1]);
+    if (canReachUpward && normalizedDivIndex > 0) {
+      // Allow reaching 1 division up (or 2 for very high rep)
+      for (let step = 1; step <= Math.min(upwardSteps, normalizedDivIndex); step++) {
+        targetDivisions.push(DIVISION_ORDER[normalizedDivIndex - step]);
+      }
+    }
     targetDivisions.push(leagueDivision);
   } else if (trajectory === 'downward') {
     targetDivisions.push(leagueDivision);
     if (normalizedDivIndex < DIVISION_ORDER.length - 1) targetDivisions.push(DIVISION_ORDER[normalizedDivIndex + 1]);
+    // Low reputation can also push further down
+    if (reputation <= 30 && normalizedDivIndex < DIVISION_ORDER.length - 2) {
+      targetDivisions.push(DIVISION_ORDER[normalizedDivIndex + 2]);
+    }
   } else {
     targetDivisions.push(leagueDivision);
     if (summary.boardVerdict === 'warning' && normalizedDivIndex < DIVISION_ORDER.length - 1) {
       targetDivisions.push(DIVISION_ORDER[normalizedDivIndex + 1]);
     }
+    // High rep in steady trajectory might still attract interest from above
+    if (canReachUpward && normalizedDivIndex > 0 && reputation >= 70) {
+      targetDivisions.push(DIVISION_ORDER[normalizedDivIndex - 1]);
+    }
   }
 
+  // --- Vacancy / instability filter ---
   const divisionCandidates = Object.values(allTeams)
     .filter(t => (
       t.id !== userTeamId &&
       targetDivisions.includes(t.division) &&
-      t.division !== 'Continental'
+      t.division !== 'Continental' &&
+      !isManagerStable(t)
     ));
 
   const ambitionFilteredCandidates = divisionCandidates.filter(team => {
@@ -274,7 +415,14 @@ export const generateJobOfferCandidates = (
     ? ambitionFilteredCandidates
     : divisionCandidates;
 
+  // --- Reputation-weighted scoring ---
+  const reputationFactor = reputation / 50; // 1.0 at 50, 0.2 at 10, 2.0 at 100
+
   return candidatePool
-    .sort((a, b) => getJobOfferCandidateScore(b, normalizedDivIndex, trajectory) - getJobOfferCandidateScore(a, normalizedDivIndex, trajectory))
+    .sort((a, b) => {
+      const scoreA = getJobOfferCandidateScore(a, normalizedDivIndex, trajectory) * reputationFactor;
+      const scoreB = getJobOfferCandidateScore(b, normalizedDivIndex, trajectory) * reputationFactor;
+      return scoreB - scoreA;
+    })
     .slice(0, 2);
 };

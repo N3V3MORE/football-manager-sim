@@ -20,6 +20,7 @@ import {
 } from '../core/matchEngine';
 import {
   createDefaultCareerRecord,
+  moveUserManagerToTeam,
 } from '../core/careerEngine';
 import {
   LiveMatchState,
@@ -30,6 +31,7 @@ import {
   generateAssistantWeekMessages,
   generatePostMatchReportMessage,
   generateSystemInboxMessages,
+  generateTeamSwitchMessage,
   mergeInboxMessages,
   pruneInboxMessagesForManagedTeam,
 } from './inboxHelpers';
@@ -53,7 +55,8 @@ import {
   unlistPlayerState,
 } from './transferActions';
 import { buildManagedTeamObjectives } from './managedTeamObjectives';
-import { DEFAULT_GAME_STATE, safeStorage, sanitizePersistedState } from './persistence';
+import { DEFAULT_GAME_STATE, PERSIST_STORAGE_KEY, ensureReferentialIntegrity, hashStringToSeed, safeStorage, sanitizePersistedState } from './persistence';
+import { createSeededRandomGenerator } from '../core/random';
 import { advanceWeekState } from './weekLifecycle';
 import { finishLiveMatchState, processLiveMatchMinuteState } from './liveMatchActions';
 
@@ -112,7 +115,7 @@ export const useGameStore = create<GameStore>()(
 
         const userTeam = data.teams[actualTeamId];
         const objectives = buildManagedTeamObjectives(userTeam, data.competitions);
-        const initialNews = ['Season begins! The Premier League simulation is underway.'];
+        const initialNews = [`Season begins! The ${userTeam.division} simulation is underway.`];
         const inboxMessages = mergeInboxMessages(
           [],
           [
@@ -127,6 +130,15 @@ export const useGameStore = create<GameStore>()(
           ]
         );
 
+        const initialUserManager = {
+          name: userTeam.manager.name,
+          nationality: userTeam.manager.nationality,
+          dateOfBirth: userTeam.manager.dateOfBirth,
+          preferredFormations: userTeam.manager.preferredFormations,
+          tacticalIdentity: userTeam.manager.tacticalIdentity,
+          transferIdentity: userTeam.manager.transferIdentity,
+        };
+
         set({
           userTeamId: actualTeamId,
           currentWeek: 1,
@@ -137,10 +149,11 @@ export const useGameStore = create<GameStore>()(
           boardObjectives: objectives,
           news: initialNews,
           inboxMessages,
-          careerRecord: createDefaultCareerRecord(),
+          careerRecord: { ...createDefaultCareerRecord(), userManager: initialUserManager },
           liveMatches: {},
           boardReviewAppliedWeek: 0,
           transfersAppliedWeek: 0,
+          rngState: Math.floor(Math.random() * 2147483647) + 1,
         });
       },
 
@@ -175,7 +188,11 @@ export const useGameStore = create<GameStore>()(
       playMatch: (fixtureId: string) => {
         set((state) => {
           const previousPlayers = state.players;
-          const { players, teams, fixture } = quickSimMatch(fixtureId, state.players, state.teams, state.fixtures, state.userTeamId);
+          // Deterministic replay: combine the persisted seed with the fixture id
+          // so the same fixture always produces the same outcome after reload.
+          const matchSeed = (state.rngState ?? 1) ^ hashStringToSeed(fixtureId);
+          const rng = createSeededRandomGenerator(matchSeed >>> 0);
+          const { players, teams, fixture } = quickSimMatch(fixtureId, state.players, state.teams, state.fixtures, state.userTeamId, { rng });
           const nextFixtures = { ...state.fixtures, [fixtureId]: fixture };
           const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, teams);
           const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);
@@ -223,7 +240,14 @@ export const useGameStore = create<GameStore>()(
       },
 
       advanceWeek: () => {
-        set(state => advanceWeekState(state));
+        set(state => {
+          const next = advanceWeekState(state);
+          // Ensure free-agent team exists if any player was moved there during
+          // squad trimming or contract expiry (durable representation for
+          // referential integrity).
+          const fixedTeams = ensureReferentialIntegrity(next.teams ?? state.teams, next.players ?? state.players);
+          return { ...next, teams: fixedTeams };
+        });
       },
 
       setFormation: (teamId, formation) => {
@@ -292,19 +316,45 @@ export const useGameStore = create<GameStore>()(
         set(state => {
           const nextTeam = state.teams[teamId];
           if (!nextTeam) return state;
+          const previousTeamId = state.userTeamId;
+          const previousTeam = previousTeamId ? state.teams[previousTeamId] : null;
+
+          const managerMove = moveUserManagerToTeam(
+            state.teams,
+            previousTeamId,
+            teamId,
+            state.careerRecord
+          );
+          const nextTeams = managerMove.teams;
+
           const nextAssistantMessages = generateAssistantWeekMessages({
             currentWeek: state.currentWeek,
             userTeamId: teamId,
-            teams: state.teams,
+            teams: nextTeams,
             players: state.players,
             fixtures: state.fixtures,
           });
+
+          const switchMessage = previousTeam
+            ? generateTeamSwitchMessage(
+                state.currentWeek,
+                previousTeam.name,
+                nextTeam.name,
+                nextTeam.division
+              )
+            : null;
+
           return {
             userTeamId: teamId,
-            boardObjectives: buildManagedTeamObjectives(nextTeam, state.competitions),
+            teams: nextTeams,
+            careerRecord: managerMove.careerRecord,
+            boardObjectives: buildManagedTeamObjectives(nextTeams[teamId] || nextTeam, state.competitions),
             inboxMessages: mergeInboxMessages(
               pruneInboxMessagesForManagedTeam(state.inboxMessages, teamId),
-              nextAssistantMessages
+              [
+                ...(switchMessage ? [switchMessage] : []),
+                ...nextAssistantMessages,
+              ]
             ),
           };
         });
@@ -369,7 +419,7 @@ export const useGameStore = create<GameStore>()(
       },
     }),
     {
-      name: 'football-manager-storage',
+      name: PERSIST_STORAGE_KEY,
       storage: createJSONStorage(() => safeStorage),
       version: 8,
       migrate: (persistedState, version) => {

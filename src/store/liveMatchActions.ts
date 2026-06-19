@@ -133,7 +133,8 @@ export const processLiveMatchMinuteState = (
       appliedSubstitutionCheckpoints.add(checkpoint);
     });
 
-  drainLiveMatchEnergy(updatedPlayers, [...homeStarters, ...awayStarters]);
+  drainLiveMatchEnergy(updatedPlayers, homeStarters, homeTeam.tactics);
+  drainLiveMatchEnergy(updatedPlayers, awayStarters, awayTeam.tactics);
 
   const possessionIndex = getPossessionIndexForMinute(minute);
   if (possessionIndex !== null) {
@@ -230,13 +231,10 @@ export const processLiveMatchMinuteState = (
       if (!sentOffPlayers.has(playerId)) {
         if (res.foul.type === 'Y') {
           if (matchYellowCards.has(playerId)) {
-            if (random() < ENGINE_CONFIG.SECOND_YELLOW_RED_CHANCE) {
-              addPlayerStat(updatedPlayers, playerId, 'yellowCards');
-              addContribution(playerId, 'yellowCards');
-              sendOffPlayer(playerId, `${res.foul.player.name} receives a second yellow and is sent off.`);
-            } else {
-              eventMsg = `${res.foul.player.name} avoids a second yellow after the foul.`;
-            }
+            // Second yellow always results in dismissal (real football rule).
+            addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+            addContribution(playerId, 'yellowCards');
+            sendOffPlayer(playerId, `${res.foul.player.name} receives a second yellow and is sent off.`);
           } else {
             addPlayerStat(updatedPlayers, playerId, 'yellowCards');
             addContribution(playerId, 'yellowCards');
@@ -408,8 +406,15 @@ export const finishLiveMatchState = (
   let resolution: Fixture['resolution'] | undefined;
   if (fixture.isKnockout) {
     if (hScore === aScore) {
-      const homePenaltyEdge = homeTeamStarters.reduce((sum, player) => sum + player.overallRating, 0) + 25;
-      const awayPenaltyEdge = awayTeamStarters.reduce((sum, player) => sum + player.overallRating, 0);
+      // Align with quick-sim shootout formula: home advantage uses GLOBAL_HOME_ADVANTAGE constant.
+      const homePenaltyPlayers = liveMatchState?.currentHomePlayerIds
+        ? getPlayersByIds(updatedPlayers, liveMatchState.currentHomePlayerIds).filter(player => !sentOffPlayers.has(player.id))
+        : homeTeamStarters.filter(player => !sentOffPlayers.has(player.id));
+      const awayPenaltyPlayers = liveMatchState?.currentAwayPlayerIds
+        ? getPlayersByIds(updatedPlayers, liveMatchState.currentAwayPlayerIds).filter(player => !sentOffPlayers.has(player.id))
+        : awayTeamStarters.filter(player => !sentOffPlayers.has(player.id));
+      const homePenaltyEdge = homePenaltyPlayers.reduce((sum, player) => sum + player.overallRating, 0) + (ENGINE_CONFIG.GLOBAL_HOME_ADVANTAGE * 50);
+      const awayPenaltyEdge = awayPenaltyPlayers.reduce((sum, player) => sum + player.overallRating, 0);
       const totalEdge = Math.max(1, homePenaltyEdge + awayPenaltyEdge);
       winnerTeamId = (rng.next() * totalEdge) < homePenaltyEdge ? homeTeam.id : awayTeam.id;
       resolution = 'penalties';

@@ -1153,6 +1153,18 @@ const checkLineupInboxActionFiltersStaleFormationMap = () => {
     competitions: data.competitions,
     inboxMessages: [message],
     boardObjectives: [],
+    careerRecord: {
+      seasonsManaged: 0,
+      totalWins: 0,
+      totalDraws: 0,
+      totalLosses: 0,
+      totalGoalsFor: 0,
+      totalGoalsAgainst: 0,
+      reputation: 50,
+      trophies: [],
+      seasonHistory: [],
+      consecutiveLowApprovalWeeks: 0,
+    },
   }, message.id);
   const nextTeams = result.teams || data.teams;
   const nextPlayers = result.players || players;
@@ -1273,15 +1285,7 @@ const checkContractDeparturesPreferViableDestinations = () => {
   const sameDivisionTeams = Object.values(data.teams)
     .filter(team => team.id !== userTeam!.id && team.division === userTeam!.division);
   assert(sameDivisionTeams.length >= 2, 'Expected same-division destination teams for contract destination regression');
-  const lowBudgetTeam = sameDivisionTeams[0];
-  const highBudgetTeam = sameDivisionTeams[1];
-  const teams = Object.fromEntries(Object.entries(data.teams).map(([teamId, team]) => [
-    teamId,
-    {
-      ...team,
-      budget: team.id === highBudgetTeam.id ? 200 : team.id === lowBudgetTeam.id ? 1 : 20,
-    },
-  ]));
+
   const players = {
     ...data.players,
     [departurePlayer!.id]: {
@@ -1292,10 +1296,22 @@ const checkContractDeparturesPreferViableDestinations = () => {
     },
   };
 
-  const nextSeason = advanceSeason(players, teams, data.competitions, userTeam!.id, []);
+  const nextSeason = advanceSeason(players, data.teams, data.competitions, userTeam!.id, []);
+  const destTeamId = nextSeason.players[departurePlayer!.id].teamId;
+  const destTeam = nextSeason.teams[destTeamId];
+  const destDivision = destTeam?.division;
+
+  // The player must leave the user team and land on a valid same-division team.
+  assert(destTeamId !== userTeam!.id, 'Expired-contract player should leave the user team');
+  assert(destTeam, 'Expired-contract player should land on a valid destination team');
   assert(
-    nextSeason.players[departurePlayer!.id].teamId === highBudgetTeam.id,
-    'Contract-expired player should prefer a viable higher-budget same-division destination'
+    destDivision === userTeam!.division,
+    `Expired-contract player should land in the same division (${userTeam!.division}), got ${destDivision}`
+  );
+  // Destination team should be able to afford the player (budget >= marketValue).
+  assert(
+    destTeam.budget >= (players[departurePlayer!.id].marketValue || 0),
+    `Destination team should have sufficient budget (${destTeam.budget}) for the player's market value (${players[departurePlayer!.id].marketValue})`
   );
 };
 

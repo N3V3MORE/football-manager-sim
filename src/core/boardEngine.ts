@@ -380,6 +380,14 @@ const buildCupObjective = (
 
 export const clampBoardMetric = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
 
+export const getSackingApprovalThreshold = (team?: Team | null) => (
+  team?.boardProfile.patience === 'low'
+    ? 28
+    : team?.boardProfile.patience === 'high'
+      ? 18
+      : 22
+);
+
 export const describeBoardSeasonExpectations = (
   profile: BoardProfile,
   division: Division
@@ -586,6 +594,7 @@ const evaluateObjective = (
   context?: BoardObjectiveContext
 ): ObjectiveResult => {
   let met = objective.met;
+  let failed = objective.failed || false;
   let approvalDelta = 0;
   const isSeasonComplete = Boolean(context?.isSeasonComplete);
 
@@ -600,6 +609,9 @@ const evaluateObjective = (
         met = true;
         approvalDelta += 10;
       }
+      if (!met && isSeasonComplete) {
+        failed = true;
+      }
       break;
     }
     case 'wins':
@@ -607,22 +619,39 @@ const evaluateObjective = (
         met = true;
         approvalDelta += 10;
       }
+      if (!met && isSeasonComplete) {
+        failed = true;
+      }
       break;
-    case 'cup_round':
+    case 'cup_round': {
+      const competition = objective.competitionId
+        ? context?.competitions?.[objective.competitionId]
+        : undefined;
       if (
         objective.competitionId &&
         objective.targetRound &&
-        hasReachedCompetitionRound(context?.competitions?.[objective.competitionId], team.id, objective.targetRound) &&
+        hasReachedCompetitionRound(competition, team.id, objective.targetRound) &&
         !met
       ) {
         met = true;
         approvalDelta += objective.competitionId === 'europe' ? 16 : 12;
       }
+      // Mark as failed when the team is eliminated and cannot reach the target round any longer
+      if (!met && competition && competition.eliminatedTeamIds.includes(team.id)) {
+        failed = true;
+      }
+      if (!met && isSeasonComplete) {
+        failed = true;
+      }
       break;
+    }
     case 'spend':
       if ((team.transferSpend || 0) >= objective.target && !met) {
         met = true;
         approvalDelta += 10;
+      }
+      if (!met && isSeasonComplete) {
+        failed = true;
       }
       break;
     case 'max_spend':
@@ -630,12 +659,15 @@ const evaluateObjective = (
         met = true;
         approvalDelta += 8;
       }
+      if (!met && isSeasonComplete) {
+        failed = true;
+      }
       break;
     default:
       break;
   }
 
-  return { objective: { ...objective, met }, approvalDelta };
+  return { objective: { ...objective, met, failed }, approvalDelta };
 };
 
 export const evaluateBoardObjectives = (
@@ -679,6 +711,9 @@ export const runBoardReview = (
   objectives: BoardObjective[],
   context?: BoardObjectiveContext
 ): BoardReview => {
+  const alreadyFailedObjectiveIds = new Set(
+    objectives.filter(objective => objective.failed).map(objective => objective.id)
+  );
   const objectiveResult = evaluateBoardObjectives(objectives, team, teams, context);
   const updatedObjectives = objectiveResult.updatedObjectives;
   const reasons: string[] = [];
@@ -707,7 +742,7 @@ export const runBoardReview = (
   updatedObjectives
     .filter(objective => objective.type === 'cup_round' && objective.competitionId)
     .forEach(objective => {
-      if (objective.met) return;
+      if (objective.met || alreadyFailedObjectiveIds.has(objective.id)) return;
       const competition = objective.competitionId
         ? context?.competitions?.[objective.competitionId]
         : undefined;
@@ -720,6 +755,7 @@ export const runBoardReview = (
           ? 3
           : 2;
       approvalChange -= penalty;
+      objective.failed = true;
       reasons.push(`${objective.description.toLowerCase()} was missed`);
     });
 
@@ -738,17 +774,19 @@ export const runBoardReview = (
     reasons.push(...squadContext.reasons);
   }
 
-  team.boardProfile.targetCompetitions.forEach(competitionId => {
-    const result = context?.competitions?.[competitionId]
-      ? getCompetitionResultForTeam(context.competitions[competitionId], team.id)
-      : null;
-    if (!result) return;
-    if (result.finish === 'winner') {
-      approvalChange += competitionId === 'europe' ? 5 : 3;
-    } else if (result.finish === 'runner_up') {
-      approvalChange += competitionId === 'europe' ? 3 : 1;
-    }
-  });
+  if (isSeasonComplete) {
+    team.boardProfile.targetCompetitions.forEach(competitionId => {
+      const result = context?.competitions?.[competitionId]
+        ? getCompetitionResultForTeam(context.competitions[competitionId], team.id)
+        : null;
+      if (!result) return;
+      if (result.finish === 'winner') {
+        approvalChange += competitionId === 'europe' ? 5 : 3;
+      } else if (result.finish === 'runner_up') {
+        approvalChange += competitionId === 'europe' ? 3 : 1;
+      }
+    });
+  }
 
   const metObjectives = updatedObjectives.filter(objective => objective.met).length;
   const totalObjectives = updatedObjectives.length;
@@ -829,7 +867,7 @@ export const shouldReplaceManagerAfterReview = (
 
   if (
     team.boardProfile.patience === 'low' &&
-    review.nextApproval < 28 &&
+    review.nextApproval < getSackingApprovalThreshold(team) &&
     review.positionDelta !== null &&
     review.positionDelta >= 2
   ) {

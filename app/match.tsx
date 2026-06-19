@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
 import { useState, useEffect, useRef } from 'react';
@@ -6,6 +6,8 @@ import { getTeamTheme } from '@/src/constants/teamColors';
 import { getPositionColor } from '@/src/constants/positionColors';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { TeamTactics } from '@/src/models/types';
+import { TacticSection } from '@/components/squad/tactic-section';
 
 export default function MatchScreen() {
   const router = useRouter();
@@ -14,28 +16,76 @@ export default function MatchScreen() {
   const fixtures = useGameStore(state => state.fixtures);
   const teams = useGameStore(state => state.teams);
   const players = useGameStore(state => state.players);
+  const liveMatches = useGameStore(state => state.liveMatches);
+  const userTeamId = useGameStore(state => state.userTeamId);
+  const setTactics = useGameStore(state => state.setTactics);
   const processMatchMinute = useGameStore(state => state.processMatchMinute);
   const finishLiveMatch = useGameStore(state => state.finishLiveMatch);
   const advanceWeek = useGameStore(state => state.advanceWeek);
 
   const fixture = fixtures[fixtureId];
+  const liveMatchState = liveMatches?.[fixtureId];
+  const liveProcessedMinutes = liveMatchState?.processedMinutes || [];
+  const liveProcessedCount = liveProcessedMinutes.length;
+  const liveProcessedMax = liveProcessedCount > 0 ? Math.max(...liveProcessedMinutes) : 0;
+  const restoreStateKey = [
+    fixtureId,
+    fixture?.isPlayed ? 'played' : 'unplayed',
+    fixture?.homeScore ?? 'null',
+    fixture?.awayScore ?? 'null',
+    liveMatchState?.initialized ? 'live' : 'none',
+    liveProcessedCount,
+    liveProcessedMax,
+  ].join(':');
   
   const [minute, setMinute] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isHalfTime, setIsHalfTime] = useState(false);
   const [matchFinished, setMatchFinished] = useState(false);
   const [logs, setLogs] = useState<string[]>(['Match is ready to start!']);
+  const [showTactics, setShowTactics] = useState(false);
 
   const minuteRef = useRef(0);
+  const appliedRestoreKeyRef = useRef<string | null>(null);
 
+  // On mount / fixture state change: restore live-match state from persistence if available.
+  // The derived key lets async persisted state rehydration rerun this effect without
+  // repeatedly resetting active in-progress play as processMatchMinute updates the store.
   useEffect(() => {
-    minuteRef.current = 0;
-    setMinute(0);
-    setIsPlaying(false);
-    setIsHalfTime(false);
-    setMatchFinished(false);
-    setLogs(['Match is ready to start!']);
-  }, [fixtureId]);
+    if (isPlaying || appliedRestoreKeyRef.current === restoreStateKey) return;
+
+    const liveState = liveMatches?.[fixtureId];
+    const fixtureData = fixtures[fixtureId];
+    appliedRestoreKeyRef.current = restoreStateKey;
+
+    if (liveState && liveState.initialized && !fixtureData?.isPlayed) {
+      const processed = liveState.processedMinutes || [];
+      const maxProcessed = processed.length > 0 ? Math.max(...processed) : 0;
+      const resumedMinute = maxProcessed;
+      minuteRef.current = resumedMinute;
+      setMinute(resumedMinute);
+      setIsPlaying(false); // always start paused when resuming
+      const isFinished = resumedMinute >= 90;
+      setMatchFinished(isFinished);
+      setIsHalfTime(resumedMinute === 45);
+      if (resumedMinute === 0) {
+        setLogs(['Match is ready to start!']);
+      } else if (isFinished) {
+        setLogs(['Match has finished.']);
+      } else if (resumedMinute === 45) {
+        setLogs(['HALF TIME. Match state restored.']);
+      } else {
+        setLogs([`Resumed at ${resumedMinute}' — tap Resume to continue.`]);
+      }
+    } else {
+      minuteRef.current = 0;
+      setMinute(0);
+      setIsPlaying(false);
+      setIsHalfTime(false);
+      setMatchFinished(false);
+      setLogs(['Match is ready to start!']);
+    }
+  }, [fixtureId, restoreStateKey]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -66,10 +116,63 @@ export default function MatchScreen() {
     return () => { mounted = false; clearInterval(interval); };
   }, [isPlaying, isHalfTime, matchFinished, fixtureId, processMatchMinute, finishLiveMatch]);
 
+  const handleContinue = () => {
+    advanceWeek(); // advance to next week
+    router.replace('/(tabs)');
+  };
+
   if (!fixture) return <Text>Loading...</Text>;
 
   const homeTeam = teams[fixture.homeTeamId];
   const awayTeam = teams[fixture.awayTeamId];
+
+  // If the fixture is already played, show the result screen
+  if (fixture.isPlayed) {
+    const hScore = fixture.homeScore ?? 0;
+    const aScore = fixture.awayScore ?? 0;
+    const homeTheme = getTeamTheme(homeTeam.name);
+    const awayThemeRaw = getTeamTheme(awayTeam.name);
+    let awayPrimary = awayThemeRaw.primary;
+    if (homeTheme.primary === awayThemeRaw.primary) {
+      awayPrimary = awayThemeRaw.secondary;
+    }
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.topNav}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.exitBtn}>
+            <Text style={styles.exitText}>[ EXIT ]</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <Text style={styles.headerTitle}>Match Result</Text>
+          <Text style={styles.stadiumText}>{homeTheme.stadium}</Text>
+          <View style={styles.scoreboard}>
+            <View style={styles.teamBox}>
+              <Text style={[styles.teamName, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
+              <Text style={styles.score}>{hScore}</Text>
+            </View>
+            <View style={styles.vsBox}>
+              <Text style={styles.vsText}>VS</Text>
+            </View>
+            <View style={styles.teamBox}>
+              <Text style={[styles.teamName, { color: awayPrimary }]}>{awayTeam.name}</Text>
+              <Text style={styles.score}>{aScore}</Text>
+            </View>
+          </View>
+          {fixture.resolution === 'penalties' && (
+            <Text style={{ color: '#facc15', fontSize: 14, fontWeight: '900', textAlign: 'center', marginTop: 12 }}>
+              Won on penalties
+            </Text>
+          )}
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity style={styles.btnContinue} onPress={handleContinue}>
+              <Text style={styles.btnText}>Continue to Next Week</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   // Colors & Anti-Clash
   const homeTheme = getTeamTheme(homeTeam.name);
@@ -89,12 +192,14 @@ export default function MatchScreen() {
   );
 
   const handleStart = () => setIsPlaying(true);
-  const handlePause = () => setIsPlaying(false);
+  const handlePause = () => { setIsPlaying(false); setShowTactics(true); };
   const handleResumeHT = () => { setIsHalfTime(false); setIsPlaying(true); };
-
-  const handleContinue = () => {
-    advanceWeek(); // advance to next week
-    router.replace('/(tabs)');
+  const canResumeFromTactics = !isHalfTime && !matchFinished && minute > 0 && minute < 90;
+  const handleResumeFromTactics = () => {
+    setShowTactics(false);
+    if (canResumeFromTactics) {
+      setIsPlaying(true);
+    }
   };
 
   const handleExit = () => {
@@ -108,6 +213,68 @@ export default function MatchScreen() {
   };
 
   const currentFixture = fixtures[fixtureId];
+
+  // Tactical overlay config
+  const TACTIC_SECTIONS: { key: keyof TeamTactics; title: string; options: string[]; descriptions: Record<string, string> }[] = [
+    {
+      key: 'mentality',
+      title: 'Mentality',
+      options: ['Defensive', 'Balanced', 'Attacking'],
+      descriptions: {
+        Defensive: 'Focus on shape and discipline. Lower goal threat but stronger defence.',
+        Balanced: 'Standard approach. No specific stat bonuses or penalties.',
+        Attacking: 'Push players forward. Increased shooting accuracy but vulnerable to counters.',
+      },
+    },
+    {
+      key: 'passingStyle',
+      title: 'Passing Style',
+      options: ['Short', 'Mixed', 'Direct'],
+      descriptions: {
+        Short: 'Patient buildup. Higher pass completion but fewer through-balls.',
+        Mixed: 'A balanced blend of short and direct passing.',
+        Direct: 'Bypass midfield. More through-balls, more risk on passing.',
+      },
+    },
+    {
+      key: 'tempo',
+      title: 'Tempo',
+      options: ['Slow', 'Normal', 'Fast'],
+      descriptions: {
+        Slow: 'Control the game and limit opponent chances.',
+        Normal: 'Standard rhythm and frequency of play.',
+        Fast: 'Higher intensity and chance creation, but costs more energy.',
+      },
+    },
+    {
+      key: 'defensiveLine',
+      title: 'Defensive Line',
+      options: ['Deep', 'Standard', 'High'],
+      descriptions: {
+        Deep: 'Protect space behind the defence but concede midfield territory.',
+        Standard: 'Balanced defensive positioning.',
+        High: 'Compress the pitch but risk through-balls behind.',
+      },
+    },
+    {
+      key: 'pressing',
+      title: 'Pressing',
+      options: ['None', 'Medium', 'High'],
+      descriptions: {
+        None: 'Sit off and conserve energy.',
+        Medium: 'Press selectively.',
+        High: 'Aggressive pressure with higher energy cost.',
+      },
+    },
+  ];
+
+  const myTeam = userTeamId ? teams[userTeamId] : null;
+  const myTactics = myTeam?.tactics;
+
+  const handleTacticChange = (key: keyof TeamTactics, value: string) => {
+    if (!userTeamId) return;
+    setTactics(userTeamId, { [key]: value } as Partial<TeamTactics>);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -201,6 +368,44 @@ export default function MatchScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Tactical Overlay Modal */}
+      <Modal
+        visible={showTactics}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowTactics(false)}
+      >
+        <View style={styles.tacticsModalOverlay}>
+          <View style={styles.tacticsModalContainer}>
+            <View style={styles.tacticsModalHeader}>
+              <Text style={styles.tacticsModalTitle}>Pause &amp; Tactics</Text>
+              <TouchableOpacity onPress={() => setShowTactics(false)} style={styles.tacticsModalCloseBtn}>
+                <Text style={styles.tacticsModalCloseText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.tacticsModalScroll} showsVerticalScrollIndicator={false}>
+              {myTactics && TACTIC_SECTIONS.map((section) => (
+                <TacticSection
+                  key={section.key}
+                  title={section.title}
+                  selectedOption={myTactics[section.key]}
+                  options={section.options}
+                  descriptions={section.descriptions}
+                  onSelect={(option) => handleTacticChange(section.key, option)}
+                />
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.tacticsModalResumeBtn}
+              onPress={handleResumeFromTactics}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.tacticsModalResumeText}>{canResumeFromTactics ? 'Resume Match' : 'Back to Match'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -374,5 +579,62 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 5,
+  },
+  // Tactical modal
+  tacticsModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'flex-end',
+  },
+  tacticsModalContainer: {
+    backgroundColor: '#0f172a',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderTopWidth: 2,
+    borderTopColor: '#38bdf8',
+    maxHeight: '80%',
+    paddingBottom: 20,
+  },
+  tacticsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e293b',
+  },
+  tacticsModalTitle: {
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  tacticsModalCloseBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#334155',
+    borderRadius: 0,
+  },
+  tacticsModalCloseText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  tacticsModalScroll: {
+    padding: 16,
+    gap: 18,
+  },
+  tacticsModalResumeBtn: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    backgroundColor: '#38bdf8',
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 0,
+  },
+  tacticsModalResumeText: {
+    color: '#0f172a',
+    fontSize: 14,
+    fontWeight: '900',
   },
 });

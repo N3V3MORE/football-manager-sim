@@ -1,4 +1,4 @@
-import { Player, Team, Fixture } from '../models/types';
+import { Player, Team, Fixture, Position } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { applyTacticalAdaptation } from './tacticalAdaptationEngine';
 import { getSeasonWeekLimit } from './leagueUtils';
@@ -44,6 +44,25 @@ const trimActiveSubstitutes = (
         players[player.id] = { ...players[player.id], isSub: false };
       });
 
+    // Enforce max 11 starters: if a team somehow has more, demote the lowest-rated extras.
+    // Preserve one starting GK when present so trimming cannot leave a side without a keeper.
+    const activeStarters = Object.values(players)
+      .filter(player => player.teamId === teamId && player.isStarting)
+      .sort((a, b) => (b.overallRating + b.energy * 0.1) - (a.overallRating + a.energy * 0.1));
+    if (activeStarters.length > 11) {
+      const startingGoalkeeper = activeStarters.find(player => player.position === 'GK');
+      const keepIds = new Set((startingGoalkeeper
+        ? [startingGoalkeeper, ...activeStarters.filter(player => player.position !== 'GK').slice(0, 10)]
+        : activeStarters.slice(0, 11)
+      ).map(player => player.id));
+
+      activeStarters.forEach(player => {
+        if (!keepIds.has(player.id)) {
+          players[player.id] = { ...players[player.id], isStarting: false };
+        }
+      });
+    }
+
     const activeSubs = Object.values(players)
       .filter(player => player.teamId === teamId && player.isSub && !isPlayerUnavailable(player))
       .sort((a, b) => {
@@ -56,6 +75,141 @@ const trimActiveSubstitutes = (
       players[player.id] = { ...players[player.id], isSub: false };
     });
   });
+};
+
+/** Minimal squad-size threshold below which a team receives youth intake. */
+const MIN_SQUAD_THRESHOLD = 16;
+/** Number of youth players generated per underfilled team at season end. */
+const YOUTH_INTAKE_COUNT = 2;
+
+const YOUTH_FIRST_NAMES = ['Alex', 'Ben', 'Callum', 'Dan', 'Ethan', 'Finn', 'George', 'Harry', 'Isaac', 'Jack'];
+const YOUTH_LAST_NAMES = ['Adams', 'Brown', 'Clark', 'Davies', 'Evans', 'Fisher', 'Green', 'Harris', 'Irvine', 'Jones'];
+
+const getNextPlayerId = (players: Record<string, Player>): string => {
+  let maxId = 0;
+  for (const id of Object.keys(players)) {
+    const num = parseInt(id, 10);
+    if (!isNaN(num) && num > maxId) maxId = num;
+  }
+  return (maxId + 1).toString();
+};
+
+const generateYouthPlayer = (
+  playerId: string,
+  teamId: string,
+  position: Position,
+  rng: () => number
+): Player => {
+  const firstName = YOUTH_FIRST_NAMES[Math.floor(rng() * YOUTH_FIRST_NAMES.length)];
+  const lastName = YOUTH_LAST_NAMES[Math.floor(rng() * YOUTH_LAST_NAMES.length)];
+  const age = 16 + Math.floor(rng() * 3); // 16–18
+  const rating = 40 + Math.floor(rng() * 16); // 40–55
+  const marketValue = computeMarketValue(rating, age);
+
+  const baseStats = {
+    pace: 40 + Math.floor(rng() * 30),
+    shooting: 35 + Math.floor(rng() * 25),
+    passing: 35 + Math.floor(rng() * 30),
+    dribbling: 35 + Math.floor(rng() * 30),
+    defending: 35 + Math.floor(rng() * 25),
+    physical: 40 + Math.floor(rng() * 30),
+  };
+
+  let stats: Player['stats'];
+  let subPosition: string;
+  let altPositions: string[];
+  switch (position) {
+    case 'GK':
+      stats = {
+        ...baseStats,
+        shooting: 10 + Math.floor(rng() * 15),
+        gk_diving: 40 + Math.floor(rng() * 40),
+        gk_handling: 40 + Math.floor(rng() * 40),
+        gk_kicking: 35 + Math.floor(rng() * 35),
+        gk_reflexes: 40 + Math.floor(rng() * 40),
+        gk_speed: 35 + Math.floor(rng() * 35),
+        gk_positioning: 40 + Math.floor(rng() * 40),
+      };
+      subPosition = 'GK';
+      altPositions = ['GK'];
+      break;
+    case 'DEF':
+      stats = { ...baseStats, defending: baseStats.defending + 15, physical: baseStats.physical + 10 };
+      subPosition = 'CB';
+      altPositions = ['CB', 'RB', 'LB'];
+      break;
+    case 'MID':
+      stats = { ...baseStats, passing: baseStats.passing + 15, dribbling: baseStats.dribbling + 10 };
+      subPosition = 'CM';
+      altPositions = ['CM', 'CDM', 'CAM'];
+      break;
+    case 'FWD':
+    default:
+      stats = { ...baseStats, shooting: baseStats.shooting + 15, pace: baseStats.pace + 10 };
+      subPosition = 'ST';
+      altPositions = ['ST', 'LW', 'RW'];
+      break;
+  }
+
+  return {
+    id: playerId,
+    name: `${firstName} ${lastName}`,
+    position,
+    subPosition,
+    altPositions,
+    overallRating: rating,
+    marketValue,
+    age,
+    morale: 70 + Math.floor(rng() * 21),
+    energy: 95 + Math.floor(rng() * 6),
+    teamId,
+    isStarting: false,
+    isSub: false,
+    isTransferListed: false,
+    askingPrice: 0,
+    matchesSuspended: 0,
+    injuryWeeks: 0,
+    wage: Math.max(1, Math.floor(marketValue * 0.8) + 1),
+    contractLeft: 1 + Math.floor(rng() * 3),
+    impactCoefficient: calculateImpactCoefficient(rating),
+    matchRatingHistory: [],
+    minutesPlayed: 0,
+    goals: 0,
+    assists: 0,
+    cleanSheets: 0,
+    yellowCards: 0,
+    redCards: 0,
+    nationality: 'English',
+    stats,
+  };
+};
+
+/**
+ * Replenish squads that have fallen below the minimum threshold.
+ * Returns new players that should be added to the player pool.
+ */
+const replenishUnderfilledSquads = (
+  players: Record<string, Player>,
+  teams: Record<string, Team>,
+  rng: () => number
+): Record<string, Player> => {
+  const nextPlayers = { ...players };
+  let nextId = parseInt(getNextPlayerId(players), 10);
+  const positions: Position[] = ['GK', 'DEF', 'MID', 'FWD'];
+
+  Object.values(teams).forEach(team => {
+    const squadSize = Object.values(nextPlayers).filter(p => p.teamId === team.id).length;
+    if (squadSize >= MIN_SQUAD_THRESHOLD) return;
+
+    const intake = Math.min(YOUTH_INTAKE_COUNT, MIN_SQUAD_THRESHOLD - squadSize);
+    for (let i = 0; i < intake; i++) {
+      const position = positions[Math.floor(rng() * positions.length)];
+      const playerId = (nextId++).toString();
+      nextPlayers[playerId] = generateYouthPlayer(playerId, team.id, position, rng);
+    }
+  });
+
+  return nextPlayers;
 };
 
 export const computeWeeklyProgression = (
@@ -98,9 +252,14 @@ export const computeWeeklyProgression = (
 
   const allPlayers = Object.values(players);
   const updatedPlayers = { ...players };
+  // Only decrement suspensions for teams that actually played a fixture this week.
+  const teamsWithFixtureThisWeek = new Set(playedFixtures
+    .filter(f => f.isPlayed)
+    .flatMap(f => [f.homeTeamId, f.awayTeamId]));
   allPlayers.forEach(player => {
     const newEnergy = Math.min(100, player.energy + ENGINE_CONFIG.WEEKLY_ENERGY_RECOVERY);
-    const shouldDecrementSuspension = !player.suspensionAppliedWeek || player.suspensionAppliedWeek < currentWeek;
+    const playerTeamPlayed = teamsWithFixtureThisWeek.has(player.teamId);
+    const shouldDecrementSuspension = playerTeamPlayed && (!player.suspensionAppliedWeek || player.suspensionAppliedWeek < currentWeek);
     const shouldDecrementInjury = !player.injuryAppliedWeek || player.injuryAppliedWeek < currentWeek;
     const newSuspension = shouldDecrementSuspension ? Math.max(0, player.matchesSuspended - 1) : player.matchesSuspended;
     const newInjuryWeeks = shouldDecrementInjury ? Math.max(0, (player.injuryWeeks || 0) - 1) : (player.injuryWeeks || 0);
@@ -125,14 +284,21 @@ export const computeWeeklyProgression = (
     const teamPlayers = Object.values(updatedPlayers).filter(player => player.teamId === team.id);
     const weeklyWageTotalThousand = teamPlayers.reduce((sum, player) => sum + (player.wage || 0), 0);
     const wageCostM = weeklyWageTotalThousand / 1000;
-    let newBudget = team.budget - wageCostM;
+
+    // Use operatingBudget if present; fall back to budget for backward-compatible saves.
+    const operatingBudget = team.operatingBudget !== undefined ? team.operatingBudget : team.budget;
+    let newOperatingBudget = operatingBudget - wageCostM;
 
     const homeFixture = playedFixtures.find(fixture => fixture.homeTeamId === team.id);
     if (homeFixture) {
-      newBudget += 1.0 + (team.points * 0.05);
+      newOperatingBudget += 1.0 + (team.points * 0.05);
     }
 
-    updatedTeams[team.id] = { ...team, budget: Math.max(0, newBudget) };
+    // Transfer budget (team.budget) stays stable; only operating cash fluctuates weekly.
+    updatedTeams[team.id] = {
+      ...team,
+      operatingBudget: Math.max(0, newOperatingBudget),
+    };
   });
 
   applyTacticalAdaptation(
@@ -184,6 +350,19 @@ export const computeWeeklyProgression = (
       };
     });
     newNews.push('The season has concluded! Check your squad for player growth and updates.');
+
+    // Replenish underfilled squads with youth intake to prevent long-term population collapse.
+    const replenishedPlayers = replenishUnderfilledSquads(updatedPlayers, updatedTeams, random);
+    const newYouthCount = Object.keys(replenishedPlayers).length - Object.keys(updatedPlayers).length;
+    if (newYouthCount > 0) {
+      newNews.push(`${newYouthCount} academy graduate${newYouthCount !== 1 ? 's' : ''} promoted to first-team squads.`);
+    }
+    // Merge replenished players into updatedPlayers.
+    Object.keys(replenishedPlayers).forEach(id => {
+      if (!updatedPlayers[id]) {
+        updatedPlayers[id] = replenishedPlayers[id];
+      }
+    });
   }
 
   return {

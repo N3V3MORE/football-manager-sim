@@ -1,4 +1,4 @@
-import { Fixture, Player, Team } from '../models/types';
+import { Fixture, Player, Team, TeamTactics } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { autoAssignLineup } from '../core/lineupEngine';
 import { applyMatchResult } from '../core/teamUtils';
@@ -71,11 +71,23 @@ export const ensureLiveTeamStarters = (
   return starters;
 };
 
-export const drainLiveMatchEnergy = (players: Record<string, Player>, starters: Player[]) => {
+const getLiveEnergyDrainPerMinute = (teamTactics: TeamTactics) => {
+  const drainMultiplier =
+    (teamTactics.tempo === 'Fast' ? ENGINE_CONFIG.TEMPO_FAST_DRAIN_MULTIPLIER : 1.0) *
+    (teamTactics.pressing === 'High' ? ENGINE_CONFIG.PRESSING_HIGH_DRAIN_MULTIPLIER : 1.0);
+  return (ENGINE_CONFIG.BASE_POST_MATCH_ENERGY_DRAIN / 90) * drainMultiplier;
+};
+
+export const drainLiveMatchEnergy = (
+  players: Record<string, Player>,
+  starters: Player[],
+  teamTactics: TeamTactics
+) => {
+  const drain = getLiveEnergyDrainPerMinute(teamTactics);
   starters.forEach(player => {
     players[player.id] = {
       ...players[player.id],
-      energy: Math.max(0, players[player.id].energy - ENGINE_CONFIG.ENERGY_DRAIN_PER_MINUTE),
+      energy: Math.max(0, players[player.id].energy - drain),
     };
   });
 };

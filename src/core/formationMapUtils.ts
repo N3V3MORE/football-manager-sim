@@ -84,13 +84,38 @@ export const rebuildFormationSlotPlayers = (
     });
   });
 
+  // Fallback: fill remaining empty slots with acceptable players.
+  // Never place an outfield player in a GK slot; never place a GK in an outfield slot.
+  // If no acceptable player is available, prefer leaving the slot empty.
   slots.forEach((row, rowIdx) => {
     row.forEach((_, colIdx) => {
       if (slotPlayers[rowIdx][colIdx] || missingStarters.length === 0) return;
-      const fill = missingStarters.find(p => p.position !== 'GK' || slots[rowIdx][colIdx].pos === 'GK');
-      if (fill) {
-        const idx = missingStarters.indexOf(fill);
-        slotPlayers[rowIdx][colIdx] = missingStarters.splice(idx, 1)[0] || null;
+      const slot = slots[rowIdx][colIdx];
+
+      if (slot.pos === 'GK') {
+        // GK slot: only a goalkeeper is acceptable. Never fill with an outfield player.
+        const gkIndex = missingStarters.findIndex(p => p.position === 'GK');
+        if (gkIndex !== -1) {
+          slotPlayers[rowIdx][colIdx] = missingStarters.splice(gkIndex, 1)[0] || null;
+        }
+        return;
+      }
+
+      // Outfield slot: prefer players with some slot fit; never use a GK.
+      const compatIndex = missingStarters
+        .map((p, i) => ({ i, score: getSlotFitScore(p, slot) }))
+        .filter(c => c.score > -Infinity)
+        .sort((a, b) => b.score - a.score)[0]?.i;
+
+      if (compatIndex !== undefined) {
+        slotPlayers[rowIdx][colIdx] = missingStarters.splice(compatIndex, 1)[0] || null;
+        return;
+      }
+
+      // No slot-compatible player remains; fill with any outfield player.
+      const outfieldIndex = missingStarters.findIndex(p => p.position !== 'GK');
+      if (outfieldIndex !== -1) {
+        slotPlayers[rowIdx][colIdx] = missingStarters.splice(outfieldIndex, 1)[0] || null;
       }
     });
   });

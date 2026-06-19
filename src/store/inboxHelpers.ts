@@ -373,6 +373,22 @@ export const generateSystemInboxMessages = (week: number, news: string[]) => (
     }))
 );
 
+/** Generate a career milestone message when the user manually switches teams via Settings. */
+export const generateTeamSwitchMessage = (
+  week: number,
+  previousTeamName: string,
+  newTeamName: string,
+  newDivision: string,
+): InboxMessage =>
+  buildMessage({
+    week,
+    source: 'system',
+    category: 'career_milestone',
+    title: `Took charge of ${newTeamName}`,
+    body: `You have left ${previousTeamName} and taken control of ${newTeamName} (${newDivision}). This move was initiated from the Settings screen.`,
+    isRead: true,
+  });
+
 const generateRecoveryMessages = (
   currentWeek: number,
   userTeamId: string,

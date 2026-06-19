@@ -586,13 +586,12 @@ export const quickSimMatch = (
       if (sentOffPlayers.has(playerId)) continue;
       if (poss.foul.type === 'Y') {
         if (matchYellowCards.has(playerId)) {
-          if (random() < ENGINE_CONFIG.SECOND_YELLOW_RED_CHANCE) {
-            addPlayerStat(updatedPlayers, playerId, 'yellowCards');
-            addContribution(playerId, 'yellowCards');
-            sendOffPlayer(playerId, minute);
-            addContribution(playerId, 'redCards');
-            matchEvents.push(`${poss.foul.player.name} receives a second yellow and is sent off.`);
-          }
+          // Second yellow always results in dismissal (real football rule).
+          addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+          addContribution(playerId, 'yellowCards');
+          sendOffPlayer(playerId, minute);
+          addContribution(playerId, 'redCards');
+          matchEvents.push(`${poss.foul.player.name} receives a second yellow and is sent off.`);
         } else {
           addPlayerStat(updatedPlayers, playerId, 'yellowCards');
           addContribution(playerId, 'yellowCards');

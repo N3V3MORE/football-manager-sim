@@ -2,7 +2,7 @@ export const ENGINE_CONFIG = {
   // MATCH TIMING & PACING
   TOTAL_POSSESSIONS: 28, // Scaled down from 35 to drastically reduce excessive shot attempts
   ENERGY_DRAIN_PER_MINUTE: 0.25, // Energy lost per minute played
-  WEEKLY_ENERGY_RECOVERY: 50, // Energy regained after a week
+  WEEKLY_ENERGY_RECOVERY: 25, // Energy regained after a week (reduced from 50 to make rotation meaningful)
 
   // SCORING & CHANCES
   BIG_MOMENT_CHANCE: 0.35, // Drastically reduced from 0.52
@@ -58,7 +58,9 @@ export const ENGINE_CONFIG = {
   MIDFIELD_FOUL_CHANCE: 0.69,
   FOUL_CHANCE: 0.30,
   RED_CARD_CHANCE: 0.015,
-  SECOND_YELLOW_RED_CHANCE: 0.12,
+  // SECOND_YELLOW_RED_CHANCE: Deprecated — second yellows are now always dismissals
+  // (per real football rules). Kept for backward compat; no longer read by engine.
+  SECOND_YELLOW_RED_CHANCE: 1.0,
 
   // SUBSTITUTION HEURISTICS
   SUBS_BASE_MAX: 2,
@@ -82,6 +84,13 @@ export const ENGINE_CONFIG = {
   MATCH_RATING_LOSS_PENALTY: 0.6,
   MATCH_RATING_CLEAN_SHEET_BONUS: 1.0,
   MATCH_RATING_SHORT_CAMEO_PENALTY: 0.3,
+
+  // MARKET VALUE FORMULA
+  // baseValue = Math.pow(rating, MARKET_VALUE_POWER) / MARKET_VALUE_DIVISOR
+  // Result is in millions GBP before age multiplier is applied.
+  // Tune these to keep values plausible for the rating range 55-95.
+  MARKET_VALUE_POWER: 4.0,
+  MARKET_VALUE_DIVISOR: 800000,
 
   // TRANSFER MARKET HEURISTICS
   TRANSFER_LIST_MIN_MINUTES_SHARE: 0.3,

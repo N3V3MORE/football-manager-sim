@@ -16,6 +16,7 @@ import {
   sortTeamsByDivisionAndName,
   sortTeamsByTable,
 } from './leagueUtils';
+import { RandomGenerator, resolveRandom } from './random';
 
 const CARABAO_WEEKS = [3, 11, 19, 27, 35, 43, 51];
 const FA_CUP_WEEKS = [7, 15, 23, 31, 39, 47, 55];
@@ -179,28 +180,40 @@ const scheduleKnockoutRound = (
   round: CompetitionRoundState,
   teamIds: string[],
   teams: Record<string, Team>,
-  fixtureCounterStart: number
+  fixtureCounterStart: number,
+  rng?: RandomGenerator
 ): {
   round: CompetitionRoundState;
   fixtures: Record<string, Fixture>;
   nextCounter: number;
 } => {
+  const random = resolveRandom(rng);
   const seededTeamIds = getSeededTeamIds(teamIds, teams);
   const nextFieldSize = getNextKnockoutFieldSize(seededTeamIds.length);
-  const matchCount = Math.max(1, seededTeamIds.length - nextFieldSize);
-  const teamsPlaying = seededTeamIds.length <= 2 || isPowerOfTwo(seededTeamIds.length)
+  const teamsPlayingRaw = seededTeamIds.length <= 2 || isPowerOfTwo(seededTeamIds.length)
     ? seededTeamIds
     : seededTeamIds.slice((nextFieldSize * 2) - seededTeamIds.length);
   const byeTeamIds = seededTeamIds.length <= 2 || isPowerOfTwo(seededTeamIds.length)
     ? []
-    : seededTeamIds.slice(0, seededTeamIds.length - teamsPlaying.length);
+    : seededTeamIds.slice(0, seededTeamIds.length - teamsPlayingRaw.length);
+
+  // Shuffle teamsPlaying to avoid deterministic strongest-vs-weakest pairing.
+  const teamsPlaying = [...teamsPlayingRaw];
+  for (let i = teamsPlaying.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [teamsPlaying[i], teamsPlaying[j]] = [teamsPlaying[j], teamsPlaying[i]];
+  }
 
   const fixtures: Record<string, Fixture> = {};
   let fixtureCounter = fixtureCounterStart;
-  for (let index = 0; index < Math.max(matchCount, teamsPlaying.length / 2); index++) {
-    const homeTeamId = teamsPlaying[index];
-    const awayTeamId = teamsPlaying[teamsPlaying.length - 1 - index];
+  for (let index = 0; index < teamsPlaying.length - 1; index += 2) {
+    let homeTeamId = teamsPlaying[index];
+    let awayTeamId = teamsPlaying[index + 1];
     if (!homeTeamId || !awayTeamId || homeTeamId === awayTeamId) continue;
+    // Randomise home/away to avoid bias towards stronger-seeded team.
+    if (random() < 0.5) {
+      [homeTeamId, awayTeamId] = [awayTeamId, homeTeamId];
+    }
     const fixtureId = `F${fixtureCounter++}`;
     fixtures[fixtureId] = {
       id: fixtureId,
@@ -266,7 +279,8 @@ const buildKnockoutCompetition = (
   weekSlots: number[],
   roundKeys: CompetitionRoundKey[],
   teams: Record<string, Team>,
-  fixtureCounterStart: number
+  fixtureCounterStart: number,
+  rng?: RandomGenerator
 ): {
   competition: CompetitionState;
   fixtures: Record<string, Fixture>;
@@ -279,7 +293,8 @@ const buildKnockoutCompetition = (
     rounds[0],
     entrantTeamIds,
     teams,
-    fixtureCounterStart
+    fixtureCounterStart,
+    rng
   );
   rounds[0] = scheduledRound.round;
 
@@ -352,7 +367,8 @@ export const getSeasonEuropeQualifiedTeamIds = (
 export const buildSeasonCompetitionBundle = (
   teams: Record<string, Team>,
   season: number,
-  europeQualifiedTeamIds?: string[]
+  europeQualifiedTeamIds?: string[],
+  rng?: RandomGenerator
 ): {
   fixtures: Record<string, Fixture>;
   competitions: Record<string, CompetitionState>;
@@ -389,7 +405,8 @@ export const buildSeasonCompetitionBundle = (
     CARABAO_WEEKS,
     DOMESTIC_CUP_ROUNDS,
     teams,
-    fixtureCounter
+    fixtureCounter,
+    rng
   );
   Object.assign(fixtures, carabaoBundle.fixtures);
   competitions['carabao-cup'] = carabaoBundle.competition;
@@ -403,7 +420,8 @@ export const buildSeasonCompetitionBundle = (
     FA_CUP_WEEKS,
     DOMESTIC_CUP_ROUNDS,
     teams,
-    fixtureCounter
+    fixtureCounter,
+    rng
   );
   Object.assign(fixtures, faCupBundle.fixtures);
   competitions['fa-cup'] = faCupBundle.competition;
@@ -424,7 +442,8 @@ export const buildSeasonCompetitionBundle = (
     EUROPE_WEEKS,
     EUROPE_ROUNDS,
     teams,
-    fixtureCounter
+    fixtureCounter,
+    rng
   );
   Object.assign(fixtures, europeBundle.fixtures);
   competitions.europe = europeBundle.competition;
@@ -432,15 +451,24 @@ export const buildSeasonCompetitionBundle = (
   return { fixtures, competitions };
 };
 
-const resolveFixtureWinnerId = (fixture: Fixture) => {
+const resolveFixtureWinnerId = (fixture: Fixture, rng?: RandomGenerator) => {
   if (fixture.winnerTeamId) return fixture.winnerTeamId;
   if ((fixture.homeScore || 0) > (fixture.awayScore || 0)) return fixture.homeTeamId;
   if ((fixture.awayScore || 0) > (fixture.homeScore || 0)) return fixture.awayTeamId;
+  // Tied knockout: resolve via penalty shootout instead of silently advancing the home team.
+  if (fixture.isKnockout) {
+    const random = resolveRandom(rng);
+    const winnerTeamId = random() < 0.5 ? fixture.homeTeamId : fixture.awayTeamId;
+    fixture.winnerTeamId = winnerTeamId;
+    fixture.resolution = 'penalties';
+    return winnerTeamId;
+  }
+  // Non-knockout tie (should not normally reach competition progression).
   return fixture.homeTeamId;
 };
 
-const resolveFixtureLoserId = (fixture: Fixture) => {
-  const winnerTeamId = resolveFixtureWinnerId(fixture);
+const resolveFixtureLoserId = (fixture: Fixture, rng?: RandomGenerator) => {
+  const winnerTeamId = resolveFixtureWinnerId(fixture, rng);
   return winnerTeamId === fixture.homeTeamId ? fixture.awayTeamId : fixture.homeTeamId;
 };
 
@@ -468,7 +496,8 @@ const describeRoundDraw = (
 export const resolveCompetitionProgression = (
   fixtures: Record<string, Fixture>,
   competitions: Record<string, CompetitionState>,
-  teams: Record<string, Team>
+  teams: Record<string, Team>,
+  rng?: RandomGenerator
 ): {
   fixtures: Record<string, Fixture>;
   competitions: Record<string, CompetitionState>;
@@ -488,8 +517,8 @@ export const resolveCompetitionProgression = (
       if (currentRound.completed || currentRound.fixtureIds.length === 0) return;
       if (currentRound.fixtureIds.some(fixtureId => !nextFixtures[fixtureId]?.isPlayed)) return;
 
-      const winnerTeamIds = currentRound.fixtureIds.map(fixtureId => resolveFixtureWinnerId(nextFixtures[fixtureId]));
-      const loserTeamIds = currentRound.fixtureIds.map(fixtureId => resolveFixtureLoserId(nextFixtures[fixtureId]));
+      const winnerTeamIds = currentRound.fixtureIds.map(fixtureId => resolveFixtureWinnerId(nextFixtures[fixtureId], rng));
+      const loserTeamIds = currentRound.fixtureIds.map(fixtureId => resolveFixtureLoserId(nextFixtures[fixtureId], rng));
       const updatedRound: CompetitionRoundState = {
         ...currentRound,
         completed: true,
@@ -510,7 +539,7 @@ export const resolveCompetitionProgression = (
         if (advancingTeamIds.length > 0) {
           updatedCompetition.championTeamId = advancingTeamIds[0];
         }
-        updatedCompetition.runnerUpTeamId = finalFixture ? resolveFixtureLoserId(nextFixtures[finalFixture]) : undefined;
+        updatedCompetition.runnerUpTeamId = finalFixture ? resolveFixtureLoserId(nextFixtures[finalFixture], rng) : undefined;
         updatedCompetition.currentRound = currentRound.key;
         nextCompetitions[competition.id] = updatedCompetition;
         const champion = updatedCompetition.championTeamId ? teams[updatedCompetition.championTeamId] : null;
@@ -527,7 +556,8 @@ export const resolveCompetitionProgression = (
         nextRound,
         advancingTeamIds,
         teams,
-        fixtureCounter
+        fixtureCounter,
+        rng
       );
       fixtureCounter = scheduledRound.nextCounter;
       Object.assign(nextFixtures, scheduledRound.fixtures);

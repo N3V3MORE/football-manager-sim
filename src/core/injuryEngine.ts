@@ -1,5 +1,6 @@
 import { Player } from '../models/types';
 import { RandomGenerator, resolveRandom } from './random';
+import { weightedPick } from './matchUtils';
 
 type InjuryEvent = {
   playerId: string;
@@ -47,12 +48,11 @@ export const applyMatchInjuries = (
   if (candidates.length === 0) return [] as InjuryEvent[];
   if (random() >= getTeamInjuryChance(candidates, minuteMap)) return [] as InjuryEvent[];
 
-  const weightedCandidates = [...candidates].sort((a, b) => {
-    const loadA = (minuteMap[a.id] || 0) + Math.max(0, 65 - updatedPlayers[a.id].energy);
-    const loadB = (minuteMap[b.id] || 0) + Math.max(0, 65 - updatedPlayers[b.id].energy);
-    return loadB - loadA;
-  });
-  const injuredPlayer = weightedCandidates[0];
+  // Weighted random selection: higher load = higher injury risk, but not deterministic.
+  const injuredPlayer = weightedPick(candidates, p => {
+    const load = (minuteMap[p.id] || 0) + Math.max(0, 65 - updatedPlayers[p.id].energy);
+    return Math.max(0.1, load);
+  }, rng);
   const weeks = getInjuryLength(random());
   const injuryType = INJURY_TYPES[Math.floor(random() * INJURY_TYPES.length)];
 
