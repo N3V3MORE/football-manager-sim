@@ -128,6 +128,13 @@ const applyBoardReview = <TState extends WeeklyLifecycleState>(state: TState, re
     return { nextState: state, boardMessages: [] as InboxMessage[] };
   }
 
+  // Idempotency guard: skip if a review was already applied for the target
+  // week (reviewWeek + 1 equals the new currentWeek after weekly progression).
+  // Mirrors checkBoardObjectives guard in gameStore.ts.
+  if (state.boardReviewAppliedWeek === reviewWeek + 1) {
+    return { nextState: state, boardMessages: [] as InboxMessage[] };
+  }
+
   const seasonWeekLimit = getSeasonWeekLimit(state.fixtures, state.competitions);
   const review = runBoardReview(
     teamBefore,

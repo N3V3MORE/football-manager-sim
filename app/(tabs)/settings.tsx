@@ -78,6 +78,7 @@ export default function SettingsScreen() {
           injuredCount={injuredCount}
           expiringCount={expiringCount}
           onChangeTeam={() => setShowChangeTeam(true)}
+          showChangeTeamButton={__DEV__}
         />
 
         <ContractWatchCard
@@ -98,35 +99,37 @@ export default function SettingsScreen() {
         ) : null}
       </ScrollView>
 
-      <TeamSelectionSheet
-        visible={showChangeTeam}
-        teams={sortedTeams}
-        currentTeamId={userTeamId}
-        onClose={() => setShowChangeTeam(false)}
-        onSelect={(teamId) => {
-          const targetTeam = sortedTeams.find(t => t.id === teamId);
-          if (!targetTeam) return;
-          if (teamId === userTeamId) {
-            setShowChangeTeam(false);
-            return;
-          }
-          Alert.alert(
-            'Switch Teams',
-            `Are you sure you want to leave ${userTeam?.name ?? 'your current club'} and take control of ${targetTeam.name} (${targetTeam.division})?\n\nThis will be recorded as a career event and your manager identity will follow you.`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Switch',
-                style: 'destructive',
-                onPress: () => {
-                  changeTeam(teamId);
-                  setShowChangeTeam(false);
+      {__DEV__ && (
+        <TeamSelectionSheet
+          visible={showChangeTeam}
+          teams={sortedTeams}
+          currentTeamId={userTeamId}
+          onClose={() => setShowChangeTeam(false)}
+          onSelect={(teamId) => {
+            const targetTeam = sortedTeams.find(t => t.id === teamId);
+            if (!targetTeam) return;
+            if (teamId === userTeamId) {
+              setShowChangeTeam(false);
+              return;
+            }
+            Alert.alert(
+              'Switch Teams',
+              `Are you sure you want to leave ${userTeam?.name ?? 'your current club'} and take control of ${targetTeam.name} (${targetTeam.division})?\n\nThis will be recorded as a career event and your manager identity will follow you.`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Switch',
+                  style: 'destructive',
+                  onPress: () => {
+                    changeTeam(teamId);
+                    setShowChangeTeam(false);
+                  },
                 },
-              },
-            ]
-          );
-        }}
-      />
+              ]
+            );
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

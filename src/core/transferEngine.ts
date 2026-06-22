@@ -34,6 +34,8 @@ export type AITransferDecision = {
     transferDiscipline: Team['boardProfile']['transferDiscipline'];
     managerTransferIdentity: string;
   };
+  rolePromise?: 'starter' | 'rotation' | 'squad';
+  newWage?: number;
 };
 
 export type WeeklyTransferResult = {
@@ -50,6 +52,97 @@ const NEED_SEVERITY_VALUE: Record<PlanningSeverity, number> = {
 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+// --- Manager Transfer Identity Profile ---
+type ManagerIdentityProfile = {
+  label: string;
+  buyChanceMod: number;
+  agePreference: 'young' | 'peak' | 'experienced' | 'neutral';
+  ratingWeight: number;
+  priceSensitivity: number;
+  ageSensitivity: number;
+};
+
+const getManagerIdentityProfile = (identity: string): ManagerIdentityProfile => {
+  const lower = identity.toLowerCase();
+
+  if (lower.includes('youth') || lower.includes('high-ceiling') || lower.includes('development')) {
+    return { label: 'youth', buyChanceMod: -0.05, agePreference: 'young', ratingWeight: 0.8, priceSensitivity: 0.7, ageSensitivity: 2.0 };
+  }
+  if (lower.includes('value') || lower.includes('resale') || lower.includes('bargain')) {
+    return { label: 'value', buyChanceMod: -0.03, agePreference: 'young', ratingWeight: 0.9, priceSensitivity: 1.5, ageSensitivity: 1.3 };
+  }
+  if (lower.includes('star') || lower.includes('premium') || lower.includes('marquee')) {
+    return { label: 'star', buyChanceMod: 0.08, agePreference: 'peak', ratingWeight: 1.4, priceSensitivity: 0.5, ageSensitivity: 0.5 };
+  }
+  if (lower.includes('experienced') || lower.includes('proven') || lower.includes('veteran')) {
+    return { label: 'experienced', buyChanceMod: 0.02, agePreference: 'experienced', ratingWeight: 1.1, priceSensitivity: 1.0, ageSensitivity: -0.3 };
+  }
+  if (lower.includes('technical')) {
+    return { label: 'technical', buyChanceMod: 0.0, agePreference: 'peak', ratingWeight: 1.2, priceSensitivity: 0.8, ageSensitivity: 0.8 };
+  }
+  if (lower.includes('athletic') || lower.includes('physical') || lower.includes('power')) {
+    return { label: 'athletic', buyChanceMod: 0.02, agePreference: 'young', ratingWeight: 1.0, priceSensitivity: 0.9, ageSensitivity: 1.2 };
+  }
+  if (lower.includes('reliable') || lower.includes('system-fit')) {
+    return { label: 'reliable', buyChanceMod: -0.02, agePreference: 'peak', ratingWeight: 0.9, priceSensitivity: 1.1, ageSensitivity: 0.7 };
+  }
+
+  return { label: 'balanced', buyChanceMod: 0.0, agePreference: 'neutral', ratingWeight: 1.0, priceSensitivity: 1.0, ageSensitivity: 1.0 };
+};
+
+const getAgeScore = (age: number, agePreference: ManagerIdentityProfile['agePreference']): number => {
+  switch (agePreference) {
+    case 'young':
+      return age <= 23 ? 0 : (age - 23) * 2;
+    case 'peak':
+      return Math.abs(age - 28) * 0.5;
+    case 'experienced':
+      return age >= 28 ? 0 : (28 - age) * 1.5;
+    default:
+      return Math.max(0, age - 29);
+  }
+};
+
+const calculateDestinationWage = (
+  player: Player,
+  buyerTeam: Team,
+  allPlayers: Record<string, Player>,
+  severity: PlanningSeverity
+): number => {
+  const buyerSquad = Object.values(allPlayers).filter(p => p.teamId === buyerTeam.id && p.id !== player.id);
+  const avgWage = buyerSquad.length > 0
+    ? buyerSquad.reduce((sum, p) => sum + p.wage, 0) / buyerSquad.length
+    : player.wage;
+  const avgRating = buyerSquad.length > 0
+    ? buyerSquad.reduce((sum, p) => sum + p.overallRating, 0) / buyerSquad.length
+    : player.overallRating;
+
+  const ratingRatio = clamp(player.overallRating / Math.max(1, avgRating), 0.4, 2.5);
+  const severityMultiplier = severity === 'urgent' ? 1.2 : severity === 'need' ? 1.08 : 1.0;
+  const disciplineMultiplier = buyerTeam.boardProfile.transferDiscipline === 'strict'
+    ? 0.92
+    : buyerTeam.boardProfile.transferDiscipline === 'aggressive'
+      ? 1.10
+      : 1.0;
+
+  const contextWage = avgWage * ratingRatio;
+  const blendedWage = player.wage * 0.3 + contextWage * 0.7;
+
+  return clamp(Math.round(blendedWage * severityMultiplier * disciplineMultiplier), 1, 500);
+};
+
+const determineRolePromise = (
+  severity: PlanningSeverity,
+  playerRating: number,
+  buyerSquadAvgRating: number
+): 'starter' | 'rotation' | 'squad' => {
+  if (severity === 'urgent') return 'starter';
+  if (severity === 'need') {
+    return playerRating >= buyerSquadAvgRating ? 'starter' : 'rotation';
+  }
+  return 'squad';
+};
 
 const getBoardContext = (team: Team): AITransferDecision['boardContext'] => ({
   ambition: team.boardProfile.ambition,
@@ -98,6 +191,7 @@ const getBudgetLimitShare = (team: Team, severity: PlanningSeverity) => {
 };
 
 const getBuyChance = (team: Team, severity: PlanningSeverity, baseChance: number) => {
+  const identityProfile = getManagerIdentityProfile(team.manager.transferIdentity);
   const disciplineAdjustment = team.boardProfile.transferDiscipline === 'strict'
     ? -0.08
     : team.boardProfile.transferDiscipline === 'aggressive'
@@ -112,7 +206,7 @@ const getBuyChance = (team: Team, severity: PlanningSeverity, baseChance: number
           ? -0.03
           : 0;
   const severityAdjustment = severity === 'urgent' ? 0.12 : 0;
-  return clamp(baseChance + disciplineAdjustment + ambitionAdjustment + severityAdjustment, 0.02, 0.9);
+  return clamp(baseChance + disciplineAdjustment + ambitionAdjustment + severityAdjustment + identityProfile.buyChanceMod, 0.02, 0.9);
 };
 
 const getEffectiveRating = (player: Player) => {
@@ -276,9 +370,21 @@ export const computeWeeklyTransfers = (
     );
 
     if (targets.length > 0) {
+      const identityProfile = getManagerIdentityProfile(team.manager.transferIdentity);
+      const buyerSquad = Object.values(updatedPlayers).filter(p => p.teamId === team.id);
+      const buyerSquadAvgRating = buyerSquad.length > 0
+        ? buyerSquad.reduce((sum, p) => sum + p.overallRating, 0) / buyerSquad.length
+        : 70;
+
       const bestTarget = targets.sort((a, b) => {
-        const aValue = a.overallRating * 3 - a.askingPrice - Math.max(0, a.age - 29);
-        const bValue = b.overallRating * 3 - b.askingPrice - Math.max(0, b.age - 29);
+        const aAgeScore = getAgeScore(a.age, identityProfile.agePreference);
+        const bAgeScore = getAgeScore(b.age, identityProfile.agePreference);
+        const aValue = a.overallRating * 3 * identityProfile.ratingWeight
+          - a.askingPrice * identityProfile.priceSensitivity
+          - aAgeScore * identityProfile.ageSensitivity;
+        const bValue = b.overallRating * 3 * identityProfile.ratingWeight
+          - b.askingPrice * identityProfile.priceSensitivity
+          - bAgeScore * identityProfile.ageSensitivity;
         return bValue - aValue;
       })[0];
 
@@ -286,6 +392,10 @@ export const computeWeeklyTransfers = (
       const buyChance = getBuyChance(team, priorityNeed.severity, buyChanceBase);
       
       if (random() < buyChance) {
+        const rolePromise = determineRolePromise(priorityNeed.severity, bestTarget.overallRating, buyerSquadAvgRating);
+        const newWage = calculateDestinationWage(bestTarget, updatedTeams[team.id], updatedPlayers, priorityNeed.severity);
+        const moraleBase = rolePromise === 'starter' ? 75 : rolePromise === 'rotation' ? 65 : 55;
+
         const buyer = updatedTeams[team.id];
         updatedTeams[team.id] = {
           ...buyer,
@@ -308,10 +418,9 @@ export const computeWeeklyTransfers = (
           askingPrice: 0,
           isStarting: false,
           isSub: false,
-          // Assign destination-context values so the player arrives with
-          // a proper contract, morale baseline, and preserved wage.
+          wage: newWage,
           contractLeft: Math.max(updatedPlayers[bestTarget.id].contractLeft, 2),
-          morale: Math.max(60, updatedPlayers[bestTarget.id].morale),
+          morale: Math.max(moraleBase, updatedPlayers[bestTarget.id].morale),
         };
         decisions.push({
           week: currentWeek,
@@ -321,13 +430,116 @@ export const computeWeeklyTransfers = (
           fromTeamId: bestTarget.teamId,
           fee: bestTarget.askingPrice,
           position: bestTarget.position,
-          reason: `${team.name} bought ${bestTarget.name} because ${priorityNeed.reason}`,
+          reason: `${team.name} bought ${bestTarget.name} (${rolePromise}) because ${priorityNeed.reason}`,
           squadNeed: summarizeNeed(priorityNeed),
           boardContext: getBoardContext(team),
+          rolePromise,
+          newWage,
         });
       }
     }
   });
+
+  // Phase 3: AI Teams evaluate user-listed players for purchase
+  if (userTeamId) {
+    const userListedPlayers = Object.values(updatedPlayers).filter(
+      p => p.isTransferListed && p.teamId === userTeamId
+    );
+
+    if (userListedPlayers.length > 0) {
+      aiTeams.forEach(team => {
+        const squadPlan = buildSquadPlan(team, updatedPlayers);
+        const priorityNeed = [...squadPlan.needs]
+          .filter(need => NEED_SEVERITY_VALUE[need.severity] >= NEED_SEVERITY_VALUE.need)
+          .sort((a, b) => {
+            const severityDelta = NEED_SEVERITY_VALUE[b.severity] - NEED_SEVERITY_VALUE[a.severity];
+            if (severityDelta !== 0) return severityDelta;
+            return (b.targetDepth - b.currentDepth) - (a.targetDepth - a.currentDepth);
+          })[0];
+
+        if (!priorityNeed) return;
+
+        const budgetLimit = Math.max(0, updatedTeams[team.id].budget) * getBudgetLimitShare(team, priorityNeed.severity);
+
+        const matchingUserTargets = userListedPlayers.filter(p =>
+          p.position === priorityNeed.position &&
+          p.askingPrice <= budgetLimit &&
+          updatedPlayers[p.id]?.isTransferListed
+        );
+
+        if (matchingUserTargets.length > 0) {
+          const identityProfile = getManagerIdentityProfile(team.manager.transferIdentity);
+          const buyerSquad = Object.values(updatedPlayers).filter(p => p.teamId === team.id);
+          const buyerSquadAvgRating = buyerSquad.length > 0
+            ? buyerSquad.reduce((sum, p) => sum + p.overallRating, 0) / buyerSquad.length
+            : 70;
+
+          const bestUserTarget = matchingUserTargets.sort((a, b) => {
+            const aAgeScore = getAgeScore(a.age, identityProfile.agePreference);
+            const bAgeScore = getAgeScore(b.age, identityProfile.agePreference);
+            const aValue = a.overallRating * 3 * identityProfile.ratingWeight
+              - a.askingPrice * identityProfile.priceSensitivity
+              - aAgeScore * identityProfile.ageSensitivity;
+            const bValue = b.overallRating * 3 * identityProfile.ratingWeight
+              - b.askingPrice * identityProfile.priceSensitivity
+              - bAgeScore * identityProfile.ageSensitivity;
+            return bValue - aValue;
+          })[0];
+
+          const buyChanceBase = team.played < 10 ? ENGINE_CONFIG.TRANSFER_EARLY_BUY_CHANCE : ENGINE_CONFIG.TRANSFER_NORMAL_BUY_CHANCE;
+          const buyChance = getBuyChance(team, priorityNeed.severity, buyChanceBase);
+
+          if (random() < buyChance) {
+            const rolePromise = determineRolePromise(priorityNeed.severity, bestUserTarget.overallRating, buyerSquadAvgRating);
+            const newWage = calculateDestinationWage(bestUserTarget, updatedTeams[team.id], updatedPlayers, priorityNeed.severity);
+            const moraleBase = rolePromise === 'starter' ? 75 : rolePromise === 'rotation' ? 65 : 55;
+
+            const buyer = updatedTeams[team.id];
+            updatedTeams[team.id] = {
+              ...buyer,
+              budget: buyer.budget - bestUserTarget.askingPrice,
+              transferSpend: buyer.transferSpend + bestUserTarget.askingPrice,
+            };
+
+            const userTeam = updatedTeams[userTeamId];
+            if (userTeam) {
+              updatedTeams[userTeamId] = removePlayerFromTeamSelections(
+                { ...userTeam, budget: userTeam.budget + bestUserTarget.askingPrice },
+                bestUserTarget.id
+              );
+            }
+
+            updatedPlayers[bestUserTarget.id] = {
+              ...updatedPlayers[bestUserTarget.id],
+              teamId: team.id,
+              isTransferListed: false,
+              askingPrice: 0,
+              isStarting: false,
+              isSub: false,
+              wage: newWage,
+              contractLeft: Math.max(updatedPlayers[bestUserTarget.id].contractLeft, 2),
+              morale: Math.max(moraleBase, updatedPlayers[bestUserTarget.id].morale),
+            };
+
+            decisions.push({
+              week: currentWeek,
+              action: 'bought',
+              teamId: team.id,
+              playerId: bestUserTarget.id,
+              fromTeamId: userTeamId,
+              fee: bestUserTarget.askingPrice,
+              position: bestUserTarget.position,
+              reason: `${team.name} bought ${bestUserTarget.name} (${rolePromise}) from your club because ${priorityNeed.reason}`,
+              squadNeed: summarizeNeed(priorityNeed),
+              boardContext: getBoardContext(team),
+              rolePromise,
+              newWage,
+            });
+          }
+        }
+      });
+    }
+  }
 
   return { players: updatedPlayers, teams: updatedTeams, decisions };
 };

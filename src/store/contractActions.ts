@@ -23,6 +23,16 @@ export const clearContractWarningMessages = (messages: InboxMessage[], playerId:
   ))
 );
 
+const MAX_CONTRACT_WAGE = 1000;
+
+/** Rejects NaN, Infinity, non-integer years, and implausible values. */
+export const isValidContractTerms = (years: number, wage: number): boolean => {
+  if (!Number.isFinite(years) || !Number.isInteger(years)) return false;
+  if (years < 1 || years > 5) return false;
+  if (!Number.isFinite(wage) || wage <= 0 || wage > MAX_CONTRACT_WAGE) return false;
+  return true;
+};
+
 export const renewPlayerContractState = (
   state: ContractActionState,
   playerId: string,
@@ -39,7 +49,7 @@ export const renewPlayerContractState = (
     };
   }
 
-  if (years <= 0 || wage <= 0) {
+  if (!isValidContractTerms(years, wage)) {
     return {
       patch: state,
       result: { success: false, message: 'Invalid contract terms.' },

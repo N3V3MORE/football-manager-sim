@@ -5,7 +5,7 @@
  *   a) Long-career simulation: youth replenishment, population stability
  *   b) Quick-sim vs live-sim parity: energy drain equivalence
  *   c) Board-event accounting: one-time events, failed objective permanence
- *   d) Transfer transactions: user-listed exclusion, AI contract assignment, squad-size limits
+ *   d) Transfer transactions: user-listed sale flow, AI contract assignment, squad-size limits
  *   e) Career flow: reputation-based offers, vacancy filtering, manager identity
  *   f) Save/load roundtrip: deterministic replay, referential integrity, corruption resilience
  */
@@ -598,31 +598,176 @@ const checkTrophyBonusAppliedOnce = () => {
 // AREA D — TRANSFER TRANSACTIONS (user-listed exclusion, AI contracts, squad limits)
 // ═══════════════════════════════════════════════════════════════
 
-const checkAiTransfersExcludeUserListedPlayers = () => {
-  const data = initGameData();
-  // Use 'T1' as the user team (Arsenal)
-  const userTeam = data.teams['T1'];
-  assert(userTeam, 'Expected user team T1');
-  const userPlayer = Object.values(data.players).find(p => p.teamId === userTeam!.id && !p.isStarting);
-  assert(userPlayer, 'Expected a user-team player for listing exclusion test');
-
-  const players = {
-    ...data.players,
-    [userPlayer!.id]: {
-      ...userPlayer!,
-      isTransferListed: true,
-      askingPrice: 5,
+const checkAiTransfersHandleUserListedSales = () => {
+  const tactics: Team['tactics'] = {
+    mentality: 'Balanced',
+    passingStyle: 'Mixed',
+    tempo: 'Normal',
+    defensiveLine: 'Standard',
+    pressing: 'Medium',
+  };
+  const boardProfile: Team['boardProfile'] = {
+    ambition: 'stability',
+    patience: 'medium',
+    transferDiscipline: 'balanced',
+    targetCompetitions: [],
+    identity: 'Stable board',
+  };
+  const buildManager = (teamId: string, transferIdentity: string): Team['manager'] => ({
+    id: `${teamId}-manager`,
+    teamId,
+    teamName: teamId,
+    name: `${teamId} Manager`,
+    nationality: 'England',
+    dateOfBirth: '01/01/1980',
+    age: 45,
+    appointedAt: '01/07/2024',
+    contractUntil: '30/06/2027',
+    status: 'Permanent',
+    reputation: 50,
+    preferredFormations: ['4-3-3'],
+    tacticalIdentity: 'Balanced approach',
+    transferIdentity,
+    boardTrust: 50,
+    jobSecurity: 50,
+    contractYearsRemaining: 2,
+    pressureScore: 0,
+    replacementRisk: 0,
+    seasonExpectations: 'Stable season',
+    clubFit: 50,
+    record: {
+      played: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      position: 1,
     },
+  });
+  const buildTeam = (id: string, budget: number, transferIdentity: string): Team => ({
+    id,
+    name: id,
+    division: 'Premier League',
+    clubClass: 'C',
+    boardProfile,
+    manager: buildManager(id, transferIdentity),
+    points: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    played: 20,
+    activeFormation: '4-3-3',
+    form: [],
+    tactics,
+    budget,
+    operatingBudget: budget,
+    transferSpend: 0,
+    boardApproval: 50,
+    lastStartingXI: [],
+    formationMap: {},
+  });
+  const stats = {
+    pace: 60,
+    shooting: 60,
+    passing: 60,
+    dribbling: 60,
+    defending: 60,
+    physical: 60,
+  };
+  const buildPlayer = (
+    id: string,
+    teamId: string,
+    position: Player['position'],
+    rating: number,
+    wage: number,
+    isTransferListed = false,
+    askingPrice = 0
+  ): Player => ({
+    id,
+    name: id,
+    position,
+    subPosition: position === 'FWD' ? 'ST' : position,
+    altPositions: [],
+    overallRating: rating,
+    marketValue: Math.max(askingPrice, 1),
+    age: 24,
+    morale: 50,
+    energy: 100,
+    teamId,
+    isStarting: false,
+    isSub: false,
+    isTransferListed,
+    askingPrice,
+    matchesSuspended: 0,
+    injuryWeeks: 0,
+    wage,
+    contractLeft: 2,
+    impactCoefficient: 1,
+    matchRatingHistory: [],
+    minutesPlayed: 0,
+    goals: 0,
+    assists: 0,
+    cleanSheets: 0,
+    yellowCards: 0,
+    redCards: 0,
+    nationality: 'England',
+    stats,
+  });
+
+  const userTeam = buildTeam('user-team', 10, 'balanced recruitment');
+  const buyerTeam = buildTeam('buyer-team', 100, 'technical system-fit recruitment');
+  const listedUserPlayer = buildPlayer('listed-user-fwd', userTeam.id, 'FWD', 78, 12, true, 5);
+  const unlistedUserPlayer = buildPlayer('unlisted-user-fwd', userTeam.id, 'FWD', 80, 14, false, 0);
+  const buyerPlayers: Record<string, Player> = {};
+  (['GK', 'DEF', 'MID'] as const).forEach(position => {
+    const count = position === 'GK' ? 2 : 6;
+    for (let index = 0; index < count; index += 1) {
+      const id = `${buyerTeam.id}-${position}-${index}`;
+      buyerPlayers[id] = buildPlayer(id, buyerTeam.id, position, 65, 80);
+    }
+  });
+
+  const teams: Record<string, Team> = {
+    [userTeam.id]: {
+      ...userTeam,
+      lastStartingXI: [listedUserPlayer.id],
+      formationMap: { '0-0': listedUserPlayer.id },
+    },
+    [buyerTeam.id]: buyerTeam,
+  };
+  const players: Record<string, Player> = {
+    ...buyerPlayers,
+    [listedUserPlayer.id]: listedUserPlayer,
+    [unlistedUserPlayer.id]: unlistedUserPlayer,
   };
 
-  const result = computeWeeklyTransfers(players, data.teams, 'T1', { next: () => 0 }, 2);
+  const result = computeWeeklyTransfers(players, teams, userTeam.id, { next: () => 0 }, 2);
+  const soldPlayer = result.players[listedUserPlayer.id];
+  const protectedPlayer = result.players[unlistedUserPlayer.id];
+  const saleDecision = result.decisions.find(decision => (
+    decision.action === 'bought' && decision.playerId === listedUserPlayer.id
+  ));
+
+  assert(soldPlayer.teamId === buyerTeam.id, 'Explicitly user-listed player should be sellable to an AI team with a matching need');
+  assert(protectedPlayer.teamId === userTeam.id, 'Unlisted user player should remain protected from AI transfers');
+  assert(saleDecision?.fromTeamId === userTeam.id, 'User-listed sale decision should record the user team as seller');
+  assert(saleDecision?.fee === listedUserPlayer.askingPrice, 'User-listed sale should complete at the asking price');
+  assert(saleDecision?.rolePromise === 'starter', 'Urgent buyer need should create a starter role promise');
+  assert(Number.isFinite(saleDecision?.newWage) && (saleDecision?.newWage || 0) > 0, 'User-listed sale decision should include destination wage');
+  assert(soldPlayer.wage === saleDecision?.newWage, 'Sold user-listed player should receive destination-context wage');
+  assert(soldPlayer.wage !== listedUserPlayer.wage, 'Sold user-listed player should not preserve old wage unchanged');
+  assert(soldPlayer.morale >= 75, 'Starter role promise should raise the sold player morale baseline');
+  assert(!soldPlayer.isTransferListed && soldPlayer.askingPrice === 0, 'Sold player should be removed from the transfer list');
+  assert(result.teams[userTeam.id].budget === userTeam.budget + listedUserPlayer.askingPrice, 'User team budget should be credited with the sale fee');
+  assert(result.teams[buyerTeam.id].budget === buyerTeam.budget - listedUserPlayer.askingPrice, 'Buyer budget should be debited by the sale fee');
+  assert(!Object.values(result.teams[userTeam.id].formationMap || {}).includes(listedUserPlayer.id), 'Sold player should be removed from user formation map');
+  assert(!(result.teams[userTeam.id].lastStartingXI || []).includes(listedUserPlayer.id), 'Sold player should be removed from user last starting XI');
   assert(
-    result.players[userPlayer!.id].teamId === 'T1',
-    'User-listed player should remain on user team after AI transfer cycle'
-  );
-  assert(
-    result.decisions.every(d => d.playerId !== userPlayer!.id),
-    'No AI transfer decision should involve a user-listed player'
+    result.decisions.every(decision => decision.playerId !== unlistedUserPlayer.id),
+    'No AI transfer decision should involve an unlisted user player'
   );
 };
 
@@ -1114,9 +1259,9 @@ const runPhase10Tests = async () => {
   console.log('[OK] Trophy bonus is not double-awarded');
 
   // Area D: Transfer transactions
-  console.log('[D1] AI transfers exclude user-listed players...');
-  checkAiTransfersExcludeUserListedPlayers();
-  console.log('[OK] User-listed players excluded from AI transfer pool');
+  console.log('[D1] AI transfers handle user-listed sale flow...');
+  checkAiTransfersHandleUserListedSales();
+  console.log('[OK] User-listed sale flow works while unlisted user players remain protected');
 
   console.log('[D2] AI transfers assign contract and wage...');
   checkAiTransfersAssignContractAndWage();

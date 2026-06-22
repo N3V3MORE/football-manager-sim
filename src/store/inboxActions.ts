@@ -1,6 +1,6 @@
 import { GameState } from '../models/types';
 import { moveUserManagerToTeam } from '../core/careerEngine';
-import { buildRenewedPlayer, clearContractWarningMessages } from './contractActions';
+import { renewPlayerContractState } from './contractActions';
 import { applyLineupSuggestionToTeam } from './lineupActions';
 import {
   generateAssistantWeekMessages,
@@ -67,12 +67,11 @@ export const applyInboxActionState = (
     };
   } else if (message.action.type === 'renew_contract') {
     const { playerId, years, wage } = message.action.payload;
-    const player = state.players[playerId];
-    const userTeam = state.userTeamId ? state.teams[state.userTeamId] : null;
 
-    // Validation parity with direct contract renewal: player must be on user's
-    // team and contract terms must be positive.
-    if (!player || !userTeam || player.teamId !== userTeam.id) {
+    const renewalResult = renewPlayerContractState(state, playerId, years, wage);
+
+    if (!renewalResult.result.success) {
+      // Invalid or unauthorized — mark read and clear action, don't mutate player
       return {
         inboxMessages: state.inboxMessages.map(item =>
           item.id === messageId ? { ...item, isRead: true, action: undefined } : item
@@ -80,24 +79,15 @@ export const applyInboxActionState = (
       };
     }
 
-    if (years <= 0 || wage <= 0) {
-      return {
-        inboxMessages: state.inboxMessages.map(item =>
-          item.id === messageId ? { ...item, isRead: true, action: undefined } : item
-        ),
-      };
-    }
-
-    nextPlayers = {
-      ...state.players,
-      [playerId]: buildRenewedPlayer(player, years, wage),
-    };
+    // Success — apply the renewal changes from the shared action
+    nextPlayers = renewalResult.patch.players ?? state.players;
 
     return {
       players: nextPlayers,
       teams: nextTeams,
-      inboxMessages: clearContractWarningMessages(state.inboxMessages, playerId)
-        .map(item => item.id === messageId ? { ...item, isRead: true, action: undefined } : item),
+      inboxMessages: (renewalResult.patch.inboxMessages ?? state.inboxMessages).map(item =>
+        item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+      ),
     };
   } else if (message.action.type === 'accept_job_offer') {
     const { teamId } = message.action.payload;

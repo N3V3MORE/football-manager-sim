@@ -55,10 +55,16 @@ export const applySubstitutions = (
     : (isProtectingLead ? ENGINE_CONFIG.SUBS_LEADING_MINUTE_RANGE : ENGINE_CONFIG.SUBS_BALANCED_MINUTE_RANGE);
 
   for (let i = 0; i < maxSubs; i++) {
+    const isAvailableBenchPlayer = (player: Player) =>
+      !usedBench.has(player.id) && !sentOffPlayers.has(player.id);
+    const hasBenchGK = bench.some(player =>
+      isAvailableBenchPlayer(player) && player.position === 'GK'
+    );
     const offPool = starters.filter(player =>
       !usedOff.has(player.id) &&
       !sentOffPlayers.has(player.id) &&
-      (playerMinutes[player.id] ?? 90) > 0
+      (playerMinutes[player.id] ?? 90) > 0 &&
+      !(player.position === 'GK' && !hasBenchGK)
     );
     if (offPool.length === 0) break;
     const offPlayer = offPool
@@ -73,18 +79,23 @@ export const applySubstitutions = (
       })
       .sort((a, b) => b.priority - a.priority)[0].player;
 
-    const onPool = bench.filter(player => !usedBench.has(player.id));
+    const onPool = bench.filter(isAvailableBenchPlayer);
     if (onPool.length === 0) break;
+    // GK safety: if the off-player is a goalkeeper, the on-player must also be a goalkeeper.
+    const effectiveOnPool = offPlayer.position === 'GK'
+      ? onPool.filter(player => player.position === 'GK')
+      : onPool;
+    if (effectiveOnPool.length === 0) break;
     // Prefer positional compatibility over broad role preferences.
     // When a bench player shares the departing player's position, subPosition,
     // or an altPosition matching the departing subPosition, use that pool first.
-    const positional = onPool.filter(player =>
+    const positional = effectiveOnPool.filter(player =>
       player.position === offPlayer.position
       || player.subPosition === offPlayer.subPosition
       || player.altPositions?.includes(offPlayer.subPosition)
     );
-    const preferred = onPool.filter(player => preferredOnRoles.includes(inferRoleTag(player)));
-    const selectedPool = positional.length > 0 ? positional : (preferred.length > 0 ? preferred : onPool);
+    const preferred = effectiveOnPool.filter(player => preferredOnRoles.includes(inferRoleTag(player)));
+    const selectedPool = positional.length > 0 ? positional : (preferred.length > 0 ? preferred : effectiveOnPool);
     const onPlayer = selectedPool
       .map(player => {
         const role = inferRoleTag(player);

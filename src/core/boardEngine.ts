@@ -762,11 +762,21 @@ export const runBoardReview = (
   const financialObjective = updatedObjectives.find(objective => (
     objective.type === 'spend' || objective.type === 'max_spend'
   ));
-  if (financialObjective && isSeasonComplete && !financialObjective.met) {
+  // Idempotency: skip penalty if the financial objective was already failed
+  // before this review run. evaluateObjective sets failed=true for unmet
+  // spend/max_spend when seasonComplete, so alreadyFailedObjectiveIds will
+  // contain it on any re-invocation after the first season-end review.
+  if (
+    financialObjective &&
+    isSeasonComplete &&
+    !financialObjective.met &&
+    !alreadyFailedObjectiveIds.has(financialObjective.id)
+  ) {
     const penalty = financialObjective.type === 'max_spend'
       ? team.boardProfile.transferDiscipline === 'strict' ? 5 : 3
       : team.boardProfile.transferDiscipline === 'aggressive' ? 3 : 2;
     approvalChange -= penalty;
+    financialObjective.failed = true;
     reasons.push(financialObjective.description.toLowerCase());
   }
 

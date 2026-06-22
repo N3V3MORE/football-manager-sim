@@ -1,11 +1,12 @@
-import { BoardObjective, CompetitionState, Division, Fixture, LeagueDivision, Player, Team } from '../models/types';
+import { BoardObjective, CompetitionState, ContractDecision, Division, Fixture, LeagueDivision, Player, Team } from '../models/types';
 import {
   DIVISION_ORDER,
   PROMOTION_COUNT,
   RELEGATION_COUNT,
   sortTeamsByTable,
 } from './leagueUtils';
-import { getRenewalOffer, shouldRenewContract } from './contractUtils';
+import { getRenewalOffer } from './contractUtils';
+import { buildSquadPlan } from './squadPlanningEngine';
 import { rebuildFormationMap, removePlayerFromTeamSelections } from './formationMapUtils';
 import { getSlotsForFormation } from '../constants/formations';
 import { buildSeasonCompetitionBundle, getSeasonEuropeQualifiedTeamIds } from './competitionEngine';
@@ -201,6 +202,24 @@ export const advanceSeason = (
   const contractAdjustedPlayers = { ...players };
   const contractAdjustedTeams = { ...teams };
 
+  // Pre-compute squad-plan contract decisions for all AI teams that have expired
+  // players so a single, consistent plan drives renew/release/sell decisions.
+  const squadContractDecisionMap = new Map<string, ContractDecision>();
+  const aiTeamsWithExpiring = new Set<string>();
+  for (const player of Object.values(players)) {
+    if (player.contractLeft <= 0 && player.teamId !== userTeamId && contractAdjustedTeams[player.teamId]) {
+      aiTeamsWithExpiring.add(player.teamId);
+    }
+  }
+  for (const teamId of aiTeamsWithExpiring) {
+    const team = contractAdjustedTeams[teamId];
+    if (!team) continue;
+    const plan = buildSquadPlan(team, contractAdjustedPlayers);
+    for (const decision of plan.contractDecisions) {
+      squadContractDecisionMap.set(decision.playerId, decision);
+    }
+  }
+
   Object.values(players).forEach(player => {
     if (player.contractLeft > 0) return;
     const currentTeam = contractAdjustedTeams[player.teamId];
@@ -228,7 +247,9 @@ export const advanceSeason = (
       return;
     }
 
-    if (shouldRenewContract(player, currentTeam)) {
+    // AI-team: use squad-plan contract decision instead of shouldRenewContract.
+    const squadDecision = squadContractDecisionMap.get(player.id);
+    if (squadDecision && squadDecision.decision === 'renew') {
       const renewal = getRenewalOffer(player);
       contractAdjustedPlayers[player.id] = {
         ...player,
@@ -238,8 +259,10 @@ export const advanceSeason = (
       return;
     }
 
+    // Release, sell, or no squad-plan decision: attempt to move to a destination team.
     const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId, contractAdjustedPlayers);
     if (!destinationTeamId) {
+      // Conservative fallback: renew with standard terms when no suitable destination exists.
       const renewal = getRenewalOffer(player);
       contractAdjustedPlayers[player.id] = {
         ...player,

@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { useGameStore } from '@/src/store/gameStore';
 import { SeasonSummary, TrophyEntry } from '@/src/models/types';
 import { getCompetitionName } from '@/src/core/competitionEngine';
+import { getReviewVerdict } from '@/src/core/boardEngine';
 
 const OUTCOME_LABEL: Record<SeasonSummary['outcome'], string> = {
   champion: 'Champion',
@@ -59,20 +60,18 @@ export default function BoardScreen() {
         .join(' | ')
     : '';
 
+  const verdict = getReviewVerdict(approval, pressure, replacementRisk);
   let statusText = 'Stable';
   let statusColor = '#f59e0b';
-  if (approval < 15 || replacementRisk >= 75) {
+  if (verdict === 'critical') {
     statusText = 'Critical Review';
     statusColor = '#7f1d1d';
-  } else if (approval < 30 || pressure >= 60) {
+  } else if (verdict === 'warning') {
     statusText = 'Under Pressure';
     statusColor = '#ef4444';
-  } else if (approval >= 80) {
+  } else if (verdict === 'thriving') {
     statusText = 'Untouchable';
     statusColor = '#10B981';
-  } else if (approval >= 65) {
-    statusText = 'Secure';
-    statusColor = '#34d399';
   }
 
   const totalPlayed = careerRecord.totalWins + careerRecord.totalDraws + careerRecord.totalLosses;
@@ -143,9 +142,15 @@ export default function BoardScreen() {
             {objectives.length > 0 ? objectives.map(objective => (
               <View key={objective.id} style={styles.objCard}>
                 <Text style={styles.objDesc}>{objective.description}</Text>
-                <View style={[styles.statusBadge, objective.met ? styles.metBadge : styles.pendingBadge]}>
-                  <Text style={[styles.statusText, objective.met ? styles.metText : styles.pendingText]}>
-                    {objective.met ? 'Met' : 'In Progress'}
+                <View style={[
+                  styles.statusBadge,
+                  objective.met ? styles.metBadge : objective.failed ? styles.failedBadge : styles.pendingBadge
+                ]}>
+                  <Text style={[
+                    styles.statusText,
+                    objective.met ? styles.metText : objective.failed ? styles.failedText : styles.pendingText
+                  ]}>
+                    {objective.met ? 'Met' : objective.failed ? 'Failed' : 'In Progress'}
                   </Text>
                 </View>
               </View>
@@ -323,9 +328,11 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 0 },
   metBadge: { backgroundColor: '#064e3b' },
   pendingBadge: { backgroundColor: '#1e3a8a' },
+  failedBadge: { backgroundColor: '#7f1d1d' },
   statusText: { fontSize: 11, fontWeight: '900' },
   metText: { color: '#34d399' },
   pendingText: { color: '#60a5fa' },
+  failedText: { color: '#fca5a5' },
   empty: { color: '#64748b', fontStyle: 'italic' },
   careerCard: {
     backgroundColor: '#1e293b',

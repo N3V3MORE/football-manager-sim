@@ -7,9 +7,11 @@ type CurrentTeamCardProps = {
   injuredCount?: number;
   expiringCount?: number;
   onChangeTeam: () => void;
+  /** When false, hides the "Change Team" button and shows an explanatory message instead. Defaults to true. */
+  showChangeTeamButton?: boolean;
 };
 
-export function CurrentTeamCard({ team, injuredCount = 0, expiringCount = 0, onChangeTeam }: CurrentTeamCardProps) {
+export function CurrentTeamCard({ team, injuredCount = 0, expiringCount = 0, onChangeTeam, showChangeTeamButton = true }: CurrentTeamCardProps) {
   const manager = team?.manager;
   const hasAlerts = injuredCount > 0 || expiringCount > 0;
 
@@ -34,9 +36,17 @@ export function CurrentTeamCard({ team, injuredCount = 0, expiringCount = 0, onC
           </Text>
         </View>
       )}
-      <TouchableOpacity style={styles.primaryBtn} onPress={onChangeTeam}>
-        <Text style={styles.primaryBtnText}>Change Team</Text>
-      </TouchableOpacity>
+      {showChangeTeamButton ? (
+        <TouchableOpacity style={styles.primaryBtn} onPress={onChangeTeam}>
+          <Text style={styles.primaryBtnText}>Change Team</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.infoBanner}>
+          <Text style={styles.infoBannerText}>
+            Team changes are managed through career progression and job offers. Check your inbox at the end of the season for opportunities.
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -67,4 +77,18 @@ const styles = StyleSheet.create({
   managerMeta: { color: '#94a3b8', fontSize: 12, marginTop: 4, lineHeight: 17 },
   primaryBtn: { backgroundColor: '#38bdf8', borderRadius: 0, paddingVertical: 12, alignItems: 'center' },
   primaryBtnText: { color: '#0f172a', fontWeight: '900' },
+  infoBanner: {
+    backgroundColor: '#0f172a',
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#334155',
+    padding: 12,
+    marginTop: 4,
+  },
+  infoBannerText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
 });
