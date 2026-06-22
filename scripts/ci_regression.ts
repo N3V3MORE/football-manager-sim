@@ -42,6 +42,8 @@ import {
   mergeInboxMessages,
 } from '../src/store/inboxHelpers';
 import { sanitizePersistedState } from '../src/store/persistence';
+import { getSquadPolicy } from '../src/core/squadPolicy';
+import { FREE_AGENT_TEAM_ID } from '../src/core/freeAgentPool';
 
 const RED_CARD_EVENT_PATTERN = /red card|sent off|straight red|reaches for red/i;
 const buildTacticalSetupKey = (team: Team) => (
@@ -449,9 +451,10 @@ const runInvariantChecks = () => {
     stressedContextReview.signalBreakdown.wagePosture.wageBill > balancedContextReview.signalBreakdown.wagePosture.wageBill,
     'Structured wage posture should expose a higher stressed wage bill'
   );
-  assert.ok(
-    stressedContextReview.signalBreakdown.registrationDepth.positionShortages > balancedContextReview.signalBreakdown.registrationDepth.positionShortages,
-    'Structured registration depth should expose stressed position shortages'
+  assert.equal(
+    stressedContextReview.signalBreakdown.registrationDepth.positionShortages,
+    balancedContextReview.signalBreakdown.registrationDepth.positionShortages,
+    'Structured registration depth should not treat temporary injuries or suspensions as registration shortages'
   );
 
   const planSeverityValue = { none: 0, watch: 1, need: 2, urgent: 3 } as const;
@@ -799,32 +802,49 @@ const runInvariantChecks = () => {
   }
 
   const transferSeed = initGameData();
-  const transferBuyer = Object.values(transferSeed.teams)[0];
-  const transferSeller = Object.values(transferSeed.teams).find(team => (
-    team.id !== transferBuyer.id && Object.values(transferSeed.players).some(player => player.teamId === team.id && player.position === 'FWD')
-  ));
+  const transferBuyer = Object.values(transferSeed.teams).find(team => team.division === 'League Two' && !team.isExternal) || Object.values(transferSeed.teams)[0];
+  const transferSeller = Object.values(transferSeed.teams).find(team => {
+    if (team.id === transferBuyer.id || team.isExternal) return false;
+    const policy = getSquadPolicy(team);
+    const squad = Object.values(transferSeed.players).filter(player => player.teamId === team.id);
+    const forwards = squad.filter(player => player.position === 'FWD');
+    return squad.length > policy.structuralMinimum && forwards.length > policy.positionalMinimums.FWD;
+  });
   assert.ok(transferSeller, 'Expected a seller with a forward for transfer planning regression');
-  const transferTarget = Object.values(transferSeed.players).find(player => (
-    player.teamId === transferSeller!.id && player.position === 'FWD'
-  ));
+  const transferTarget = Object.values(transferSeed.players)
+    .filter(player => player.teamId === transferSeller!.id && player.position === 'FWD')
+    .sort((a, b) => a.overallRating - b.overallRating)[0];
   assert.ok(transferTarget, 'Expected a listed forward target for transfer planning regression');
   const transferPlayers = Object.fromEntries(
     Object.entries(transferSeed.players).map(([id, player]) => {
       if (player.teamId === transferBuyer.id && player.position === 'FWD') {
-        return [id, { ...player, injuryWeeks: 6 }];
+        return [id, { ...player, teamId: FREE_AGENT_TEAM_ID, isStarting: false, isSub: false }];
       }
       if (id === transferTarget.id) {
-        return [id, { ...player, isTransferListed: true, askingPrice: 1 }];
+        return [id, {
+          ...player,
+          overallRating: Math.max(player.overallRating, 65),
+          marketValue: 1,
+          wage: 5,
+          isStarting: false,
+          isSub: false,
+          isTransferListed: true,
+          askingPrice: 1,
+        }];
+      }
+      if (player.teamId === transferSeller!.id) {
+        return [id, { ...player, overallRating: Math.max(player.overallRating, 75) }];
       }
       return [id, player];
     })
   );
   const transferTeams = {
-    ...transferSeed.teams,
     [transferBuyer.id]: {
       ...transferBuyer,
       budget: Math.max(50, transferBuyer.budget),
+      operatingBudget: Math.max(50, transferBuyer.operatingBudget ?? transferBuyer.budget),
     },
+    [transferSeller!.id]: transferSeller!,
   };
   const alwaysTransferRng = { next: () => 0 };
   const closedWindowTransfers = computeWeeklyTransfers(transferPlayers, transferTeams, null, alwaysTransferRng, 10);

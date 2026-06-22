@@ -42,6 +42,7 @@ import { useGameStore } from '../src/store/gameStore';
 import { isPlayerUnavailable } from '../src/core/playerStatusUtils';
 import { BoardObjective, CompetitionState, Fixture, Player, Team } from '../src/models/types';
 import { buildSquadPlan } from '../src/core/squadPlanningEngine';
+import { FREE_AGENT_TEAM_ID, createFreeAgentTeam } from '../src/core/freeAgentPool';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
@@ -69,18 +70,29 @@ const checkYouthReplenishmentAtSeasonEnd = () => {
   assert(team, 'Expected a League Two team for youth replenishment test');
 
   const squadBefore = Object.values(data.players).filter(p => p.teamId === team!.id);
-  // Reduce squad below MIN_SQUAD_THRESHOLD (16)
+  // Reduce squad below the structural policy floor; replenishment now happens
+  // during season rollover after contract processing.
   const keepCount = 12;
-  const trimmedPlayers = { ...data.players };
+  const trimmedPlayers = Object.fromEntries(
+    Object.entries(data.players).map(([playerId, player]) => [playerId, { ...player, contractLeft: 2 }])
+  ) as Record<string, Player>;
   squadBefore.slice(keepCount).forEach(p => {
-    trimmedPlayers[p.id] = { ...p, teamId: 'free-agent-pool' };
+    trimmedPlayers[p.id] = { ...p, teamId: FREE_AGENT_TEAM_ID, isStarting: false, isSub: false };
   });
 
   const seasonWeekLimit = getSeasonWeekLimit(data.fixtures, data.competitions);
-  let state = {
+  let state: {
+    players: Record<string, Player>;
+    teams: Record<string, Team>;
+    fixtures: Record<string, Fixture>;
+    competitions: Record<string, CompetitionState>;
+    currentWeek: number;
+    news: string[];
+  } = {
     players: trimmedPlayers,
-    teams: data.teams,
+    teams: { ...data.teams, [FREE_AGENT_TEAM_ID]: createFreeAgentTeam() },
     fixtures: data.fixtures,
+    competitions: data.competitions,
     currentWeek: 1,
     news: [] as string[],
   };
@@ -101,8 +113,10 @@ const checkYouthReplenishmentAtSeasonEnd = () => {
     state.news = progression.news;
   }
 
-  // After season end, the underfilled squad should have received youth intake
-  const squadAfter = Object.values(state.players).filter(p => p.teamId === team!.id);
+  const rollover = advanceSeason(state.players, state.teams, state.competitions, null, state.news, undefined, rng);
+
+  // After season rollover, the underfilled squad should have received youth intake
+  const squadAfter = Object.values(rollover.players).filter(p => p.teamId === team!.id);
   assert(
     squadAfter.length > keepCount,
     `Youth replenishment should increase squad size above ${keepCount}, got ${squadAfter.length}`
@@ -721,6 +735,18 @@ const checkAiTransfersHandleUserListedSales = () => {
   const buyerTeam = buildTeam('buyer-team', 100, 'technical system-fit recruitment');
   const listedUserPlayer = buildPlayer('listed-user-fwd', userTeam.id, 'FWD', 78, 12, true, 5);
   const unlistedUserPlayer = buildPlayer('unlisted-user-fwd', userTeam.id, 'FWD', 80, 14, false, 0);
+  const userDepthPlayers: Record<string, Player> = {};
+  (['GK', 'DEF', 'MID'] as const).forEach(position => {
+    const count = position === 'GK' ? 2 : position === 'DEF' ? 8 : 7;
+    for (let index = 0; index < count; index += 1) {
+      const id = `${userTeam.id}-${position}-${index}`;
+      userDepthPlayers[id] = buildPlayer(id, userTeam.id, position, 70, 10);
+    }
+  });
+  for (let index = 0; index < 3; index += 1) {
+    const id = `${userTeam.id}-FWD-depth-${index}`;
+    userDepthPlayers[id] = buildPlayer(id, userTeam.id, 'FWD', 70, 10);
+  }
   const buyerPlayers: Record<string, Player> = {};
   (['GK', 'DEF', 'MID'] as const).forEach(position => {
     const count = position === 'GK' ? 2 : 6;
@@ -739,6 +765,7 @@ const checkAiTransfersHandleUserListedSales = () => {
     [buyerTeam.id]: buyerTeam,
   };
   const players: Record<string, Player> = {
+    ...userDepthPlayers,
     ...buyerPlayers,
     [listedUserPlayer.id]: listedUserPlayer,
     [unlistedUserPlayer.id]: unlistedUserPlayer,

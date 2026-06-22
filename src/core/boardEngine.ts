@@ -14,7 +14,8 @@ import {
 } from '../models/types';
 import { getDivisionTeamCount, sortTeamsByTable } from './leagueUtils';
 import { getCompetitionResultForTeam, hasReachedCompetitionRound } from './competitionEngine';
-import { isPlayerUnavailable } from './playerStatusUtils';
+import { getSquadPolicy } from './squadPolicy';
+import { isClubTeam } from './freeAgentPool';
 
 type ObjectiveResult = {
   objective: BoardObjective;
@@ -111,14 +112,6 @@ const getWagePressureThresholds = (discipline: BoardProfile['transferDiscipline'
   return { low: 0.4, high: 1.1, spendHigh: 0.84 };
 };
 
-const getAvailableSquadFloor = (division: Division) => {
-  if (division === 'Premier League') return 21;
-  if (division === 'Championship') return 20;
-  if (division === 'League One') return 19;
-  if (division === 'League Two') return 18;
-  return 20;
-};
-
 export const buildBoardSignalBreakdown = (
   team: Team,
   players?: Record<string, Player>
@@ -156,7 +149,8 @@ export const buildBoardSignalBreakdown = (
 
   const wageBill = squad.reduce((sum, player) => sum + (Number.isFinite(player.wage) ? player.wage : 0), 0);
   const spendRatio = (team.transferSpend || 0) / Math.max(1, team.budget + (team.transferSpend || 0));
-  const wagePressureRatio = wageBill / Math.max(450, team.budget * 100);
+  const wageResourceBase = team.operatingBudget !== undefined ? team.operatingBudget : team.budget;
+  const wagePressureRatio = wageBill / Math.max(450, wageResourceBase * 100);
   const wageThresholds = getWagePressureThresholds(team.boardProfile.transferDiscipline);
   let wagePosture: BoardSignalBreakdown['wagePosture'] = {
     score: 0,
@@ -179,8 +173,8 @@ export const buildBoardSignalBreakdown = (
     wagePosture = { ...wagePosture, score: 1 };
   }
 
-  const availablePlayers = squad.filter(player => !isPlayerUnavailable(player));
-  const availableByPosition = availablePlayers.reduce<Record<'GK' | 'DEF' | 'MID' | 'FWD', number>>(
+  const policy = getSquadPolicy(team);
+  const structuralByPosition = squad.reduce<Record<'GK' | 'DEF' | 'MID' | 'FWD', number>>(
     (acc, player) => {
       if (player.position in acc) acc[player.position] += 1;
       return acc;
@@ -188,16 +182,15 @@ export const buildBoardSignalBreakdown = (
     { GK: 0, DEF: 0, MID: 0, FWD: 0 }
   );
   const positionShortages = [
-    Math.max(0, 2 - availableByPosition.GK),
-    Math.max(0, 5 - availableByPosition.DEF),
-    Math.max(0, 5 - availableByPosition.MID),
-    Math.max(0, 3 - availableByPosition.FWD),
+    Math.max(0, policy.positionalMinimums.GK - structuralByPosition.GK),
+    Math.max(0, policy.positionalMinimums.DEF - structuralByPosition.DEF),
+    Math.max(0, policy.positionalMinimums.MID - structuralByPosition.MID),
+    Math.max(0, policy.positionalMinimums.FWD - structuralByPosition.FWD),
   ].reduce((sum, missing) => sum + missing, 0);
-  const availableFloor = getAvailableSquadFloor(team.division);
-  const missingDepth = Math.max(0, availableFloor - availablePlayers.length);
+  const missingDepth = Math.max(0, policy.structuralMinimum - squad.length);
   let registrationDepth: BoardSignalBreakdown['registrationDepth'] = {
     score: 0,
-    availablePlayers: availablePlayers.length,
+    availablePlayers: squad.length,
     positionShortages,
     missingDepth,
   };
@@ -214,7 +207,7 @@ export const buildBoardSignalBreakdown = (
       score: -1,
       reason: 'registration depth is trending thin',
     };
-  } else if (availablePlayers.length >= availableFloor + 2 && positionShortages === 0) {
+  } else if (squad.length >= policy.structuralMinimum + 2 && positionShortages === 0) {
     registrationDepth = { ...registrationDepth, score: 1 };
   }
 
@@ -268,7 +261,7 @@ const buildSquadContextSignal = (
 
 const getTeamPosition = (team: Team, teams: Record<string, Team>) => {
   const divisionTable = sortTeamsByTable(
-    Object.values(teams).filter(candidate => candidate.division === team.division)
+    Object.values(teams).filter(candidate => isClubTeam(candidate) && candidate.division === team.division)
   );
   const position = divisionTable.findIndex(candidate => candidate.id === team.id);
   return position >= 0 ? position + 1 : null;

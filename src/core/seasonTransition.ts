@@ -1,4 +1,4 @@
-import { BoardObjective, CompetitionState, ContractDecision, Division, Fixture, LeagueDivision, Player, Team } from '../models/types';
+import { BoardObjective, CompetitionState, Division, Fixture, LeagueDivision, Player, Team } from '../models/types';
 import {
   DIVISION_ORDER,
   PROMOTION_COUNT,
@@ -20,6 +20,10 @@ import {
 import { appointReplacementManager, refreshManagerForNewSeason } from './managerUtils';
 import { buildQuickSimLineup } from './lineupEngine';
 import { getBudgetForClass } from '../utils/calendar';
+import { isClubTeam } from './freeAgentPool';
+import { replenishUnderfilledSquads } from './youthIntake';
+import { getSquadPolicy } from './squadPolicy';
+import { RandomGenerator, resolveRandom } from './random';
 
 const resetTeamStats = (team: Team): Team => ({
   ...team,
@@ -35,7 +39,7 @@ const resetTeamStats = (team: Team): Team => ({
 });
 
 const getDivisionTeams = (teams: Record<string, Team>, division: LeagueDivision) => (
-  sortTeamsByTable(Object.values(teams).filter(team => team.division === division))
+  sortTeamsByTable(Object.values(teams).filter(team => isClubTeam(team) && team.division === division))
 );
 
 const formatTeamList = (teams: Team[]) => teams.map(team => team.name).join(', ');
@@ -67,7 +71,7 @@ const getActiveCompetitionIdsForTeam = (
   teamId: string,
   competitions: Record<string, CompetitionState>
 ) => (
-  Object.values(competitions)
+    Object.values(competitions)
     .filter(competition => competition.entrantTeamIds.includes(teamId))
     .map(competition => competition.id)
 );
@@ -86,9 +90,6 @@ const resetPlayerSeasonStats = (player: Player): Player => ({
   matchRatingHistory: [],
 });
 
-const MAX_SQUAD_SIZE = 28;
-const PREFERRED_SQUAD_SIZE = 24;
-
 const findContractDestinationTeamId = (
   player: Player,
   teams: Record<string, Team>,
@@ -98,7 +99,7 @@ const findContractDestinationTeamId = (
   const currentDivision = teams[player.teamId]?.division;
 
   const candidateTeams = Object.values(teams)
-    .filter(team => team.id !== player.teamId && team.id !== userTeamId)
+    .filter(team => isClubTeam(team) && team.id !== player.teamId && team.id !== userTeamId)
     .map(team => {
       const squad = Object.values(players).filter(p => p.teamId === team.id);
       const squadSize = squad.length;
@@ -107,7 +108,8 @@ const findContractDestinationTeamId = (
       // A positional need exists when the team has few players of this position
       const positionalNeedScore = Math.max(0, 3 - positionDepth);
       // Prefer teams that are not at capacity
-      const capacityScore = squadSize < PREFERRED_SQUAD_SIZE ? 2 : squadSize < MAX_SQUAD_SIZE ? 1 : 0;
+      const policy = getSquadPolicy(team);
+      const capacityScore = squadSize < policy.preferredSquadSize ? 2 : squadSize < policy.maximumSquadSize ? 1 : 0;
       // Budget fit: prefer teams that can afford the player's market value
       const budgetFit = team.budget - player.marketValue;
       const budgetScore = budgetFit >= 0 ? 1 : 0;
@@ -187,7 +189,8 @@ export const advanceSeason = (
   competitions: Record<string, CompetitionState>,
   userTeamId: string | null,
   news: string[],
-  skipReviewTeamIds?: string[]
+  skipReviewTeamIds?: string[],
+  rng?: RandomGenerator
 ): {
   players: Record<string, Player>;
   teams: Record<string, Team>;
@@ -198,32 +201,15 @@ export const advanceSeason = (
   generatedNews: string[];
   boardObjectives: BoardObjective[];
 } => {
+  const random = resolveRandom(rng);
   const seasonNews: string[] = [];
   const contractAdjustedPlayers = { ...players };
   const contractAdjustedTeams = { ...teams };
 
-  // Pre-compute squad-plan contract decisions for all AI teams that have expired
-  // players so a single, consistent plan drives renew/release/sell decisions.
-  const squadContractDecisionMap = new Map<string, ContractDecision>();
-  const aiTeamsWithExpiring = new Set<string>();
-  for (const player of Object.values(players)) {
-    if (player.contractLeft <= 0 && player.teamId !== userTeamId && contractAdjustedTeams[player.teamId]) {
-      aiTeamsWithExpiring.add(player.teamId);
-    }
-  }
-  for (const teamId of aiTeamsWithExpiring) {
-    const team = contractAdjustedTeams[teamId];
-    if (!team) continue;
-    const plan = buildSquadPlan(team, contractAdjustedPlayers);
-    for (const decision of plan.contractDecisions) {
-      squadContractDecisionMap.set(decision.playerId, decision);
-    }
-  }
-
   Object.values(players).forEach(player => {
     if (player.contractLeft > 0) return;
     const currentTeam = contractAdjustedTeams[player.teamId];
-    if (!currentTeam) return;
+    if (!isClubTeam(currentTeam)) return;
 
     if (player.teamId === userTeamId) {
       const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId, contractAdjustedPlayers);
@@ -247,8 +233,10 @@ export const advanceSeason = (
       return;
     }
 
-    // AI-team: use squad-plan contract decision instead of shouldRenewContract.
-    const squadDecision = squadContractDecisionMap.get(player.id);
+    // AI-team: use the current provisional squad plan so simultaneous expiries
+    // cannot all assume the other expiring players will stay.
+    const squadDecision = buildSquadPlan(currentTeam, contractAdjustedPlayers)
+      .contractDecisions.find(decision => decision.playerId === player.id);
     if (squadDecision && squadDecision.decision === 'renew') {
       const renewal = getRenewalOffer(player);
       contractAdjustedPlayers[player.id] = {
@@ -292,7 +280,7 @@ export const advanceSeason = (
     DIVISION_ORDER.map(division => [division, getDivisionTeams(contractAdjustedTeams, division)])
   ) as Record<LeagueDivision, Team[]>;
   const nextDivisionByTeamId: Record<string, Division> = Object.fromEntries(
-    Object.values(contractAdjustedTeams).map(team => [team.id, team.division])
+    Object.values(contractAdjustedTeams).filter(isClubTeam).map(team => [team.id, team.division])
   ) as Record<string, Division>;
 
   DIVISION_ORDER.forEach((division, index) => {
@@ -334,6 +322,7 @@ export const advanceSeason = (
 
   const reviewedTeams = Object.fromEntries(
     Object.entries(contractAdjustedTeams).map(([teamId, team]) => {
+      if (!isClubTeam(team)) return [teamId, team];
       const nextDivision = nextDivisionByTeamId[teamId] || team.division;
       const nextClubClass = nextClubClassByTeamId[teamId] || team.clubClass || 'C';
       const nextBoardProfile = buildBoardProfile(nextClubClass, nextDivision, Boolean(team.isExternal));
@@ -346,12 +335,8 @@ export const advanceSeason = (
           clubClass: nextClubClass,
           boardProfile: nextBoardProfile,
           boardApproval: team.boardApproval,
-          budget: nextClubClassByTeamId[teamId]
-            ? getBudgetForClass(nextClubClass)
-            : team.budget,
-          operatingBudget: nextClubClassByTeamId[teamId]
-            ? getBudgetForClass(nextClubClass)
-            : team.operatingBudget,
+          budget: getBudgetForClass(nextClubClass),
+          operatingBudget: getBudgetForClass(nextClubClass),
           manager: refreshManagerForNewSeason(team.manager, nextBoardProfile, nextDivision),
         };
         return [teamId, resetTeamStats(nextTeam)];
@@ -386,12 +371,8 @@ export const advanceSeason = (
         clubClass: nextClubClass,
         boardProfile: nextBoardProfile,
         boardApproval: review.nextApproval,
-        budget: nextClubClassByTeamId[teamId]
-          ? getBudgetForClass(nextClubClass)
-          : team.budget,
-        operatingBudget: nextClubClassByTeamId[teamId]
-          ? getBudgetForClass(nextClubClass)
-          : team.operatingBudget,
+        budget: getBudgetForClass(nextClubClass),
+        operatingBudget: getBudgetForClass(nextClubClass),
         manager: refreshManagerForNewSeason(review.nextManager, nextBoardProfile, nextDivision),
       };
 
@@ -415,9 +396,16 @@ export const advanceSeason = (
     })
   ) as Record<string, Team>;
 
-  let lineupSeededPlayers = nextPlayers;
+  const replenishedPlayers = replenishUnderfilledSquads(nextPlayers, reviewedTeams, random);
+  const newYouthCount = Object.keys(replenishedPlayers).length - Object.keys(nextPlayers).length;
+  if (newYouthCount > 0) {
+    seasonNews.push(`${newYouthCount} academy graduate${newYouthCount !== 1 ? 's' : ''} promoted to first-team squads.`);
+  }
+
+  let lineupSeededPlayers = replenishedPlayers;
   const lineupSeededTeams = Object.fromEntries(
     Object.entries(reviewedTeams).map(([teamId, team]) => {
+      if (!isClubTeam(team)) return [teamId, team];
       const seeded = reseedTeamLineupForNewSeason(team, lineupSeededPlayers);
       lineupSeededPlayers = seeded.players;
       return [teamId, seeded.team];

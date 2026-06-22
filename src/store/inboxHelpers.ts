@@ -430,6 +430,11 @@ const generateContractMessages = (
       const previous = previousPlayers?.[player.id];
       return !previous || previous.contractLeft > player.contractLeft || previous.injuryWeeks !== player.injuryWeeks || currentWeek >= 34 || currentWeek % 6 === 0;
     })
+    .sort((a, b) => {
+      const priorityDelta = (decisionByPlayerId[b.id]?.priority || 0) - (decisionByPlayerId[a.id]?.priority || 0);
+      if (priorityDelta !== 0) return priorityDelta;
+      return a.contractLeft - b.contractLeft;
+    })
     .slice(0, 3)
     .map(player => {
       const renewal = getRenewalOffer(player);

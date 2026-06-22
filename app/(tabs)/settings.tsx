@@ -83,6 +83,7 @@ export default function SettingsScreen() {
 
         <ContractWatchCard
           players={expiringPlayers}
+          allPlayers={players}
           team={userTeam}
           onRenew={renewPlayerContract}
         />

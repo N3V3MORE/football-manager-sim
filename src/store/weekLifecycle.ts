@@ -13,6 +13,8 @@ import {
   generateJobOfferCandidates,
 } from '../core/careerEngine';
 import { LiveMatchState, pruneInvalidLiveMatches, removeLiveMatchFixture } from './liveMatchHelpers';
+import { FREE_AGENT_TEAM_ID, ensureFreeAgentTeam, isClubTeam } from '../core/freeAgentPool';
+import { getSquadPolicy } from '../core/squadPolicy';
 import {
   generateAssistantWeekMessages,
   generateBoardInboxMessages,
@@ -327,8 +329,6 @@ const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
   };
 };
 
-const MAX_AI_SQUAD_SIZE = 28;
-
 /**
  * Gentle ongoing roster-size enforcement for AI teams.
  * Releases the lowest-rated non-starting, non-transfer-listed players
@@ -341,13 +341,14 @@ const enforceAiRosterSizes = (
   userTeamId: string | null
 ): Record<string, Player> => {
   let updatedPlayers = { ...players };
-  const aiTeams = Object.values(teams).filter(t => t.id !== userTeamId);
+  const aiTeams = Object.values(teams).filter(t => isClubTeam(t) && t.id !== userTeamId);
 
   aiTeams.forEach(team => {
     const squad = Object.values(updatedPlayers).filter(p => p.teamId === team.id);
-    if (squad.length <= MAX_AI_SQUAD_SIZE) return;
+    const policy = getSquadPolicy(team);
+    if (squad.length <= policy.maximumSquadSize) return;
 
-    const excess = squad.length - MAX_AI_SQUAD_SIZE;
+    const excess = squad.length - policy.maximumSquadSize;
     // Prioritise releasing: non-starting, non-sub, non-listed, lowest rating first
     const releaseCandidates = [...squad]
       .filter(p => !p.isStarting && !p.isSub && !p.isTransferListed)
@@ -357,7 +358,7 @@ const enforceAiRosterSizes = (
     toRelease.forEach(p => {
       updatedPlayers[p.id] = {
         ...p,
-        teamId: '__free_agent__',
+        teamId: FREE_AGENT_TEAM_ID,
         isStarting: false,
         isSub: false,
         isTransferListed: false,
@@ -462,9 +463,12 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
     transfersAppliedWeek: nextState.currentWeek,
   };
   // Gentle AI roster-size enforcement after transfers
+  const rosterEnforcedPlayers = enforceAiRosterSizes(nextState.players, nextState.teams, nextState.userTeamId);
+  const needsFreeAgentTeam = Object.values(rosterEnforcedPlayers).some(player => player.teamId === FREE_AGENT_TEAM_ID);
   nextState = {
     ...nextState,
-    players: enforceAiRosterSizes(nextState.players, nextState.teams, nextState.userTeamId),
+    players: rosterEnforcedPlayers,
+    teams: needsFreeAgentTeam ? ensureFreeAgentTeam(nextState.teams) : nextState.teams,
   };
   nextState = sanitizeFormationMaps(nextState);
 

@@ -17,6 +17,7 @@ import {
   sortTeamsByTable,
 } from './leagueUtils';
 import { RandomGenerator, resolveRandom } from './random';
+import { isClubTeam } from './freeAgentPool';
 
 const CARABAO_WEEKS = [3, 11, 19, 27, 35, 43, 51];
 const FA_CUP_WEEKS = [7, 15, 23, 31, 39, 47, 55];
@@ -326,7 +327,7 @@ export const getCompetitionAccent = (competitionId: CompetitionId) => COMPETITIO
 export const getContinentalClubNames = () => [...CONTINENTAL_CLUB_NAMES];
 
 export const buildInitialEuropeQualifiedTeamIds = (teams: Record<string, Team>) => (
-  sortTeamsByTable(Object.values(teams).filter(team => team.division === 'Premier League'))
+  sortTeamsByTable(Object.values(teams).filter(team => isClubTeam(team) && team.division === 'Premier League'))
     .sort((left, right) => {
       if (right.points !== left.points) return right.points - left.points;
       if (right.budget !== left.budget) return right.budget - left.budget;
@@ -341,7 +342,7 @@ export const getSeasonEuropeQualifiedTeamIds = (
   competitions: Record<string, CompetitionState>
 ) => {
   const premierTable = sortTeamsByTable(
-    Object.values(teams).filter(team => team.division === 'Premier League')
+    Object.values(teams).filter(team => isClubTeam(team) && team.division === 'Premier League')
   );
   const qualifiedTeamIds: string[] = [];
   const seen = new Set<string>();
@@ -379,7 +380,7 @@ export const buildSeasonCompetitionBundle = (
 
   DIVISION_ORDER.forEach(division => {
     const divisionTeamIds = sortTeamsByDivisionAndName(
-      Object.values(teams).filter(team => team.division === division)
+      Object.values(teams).filter(team => isClubTeam(team) && team.division === division)
     ).map(team => team.id);
     const leagueWeeks = LEAGUE_WEEKS.slice(0, division === 'Premier League' ? 38 : 46);
     const generated = buildRoundRobinFixtures(divisionTeamIds, division, fixtureCounter, leagueWeeks);
@@ -394,7 +395,7 @@ export const buildSeasonCompetitionBundle = (
   });
 
   const englishClubIds = Object.values(teams)
-    .filter(team => !team.isExternal && team.countryId === 'england')
+    .filter(team => isClubTeam(team) && !team.isExternal && team.countryId === 'england')
     .map(team => team.id);
 
   const carabaoBundle = buildKnockoutCompetition(
@@ -428,7 +429,7 @@ export const buildSeasonCompetitionBundle = (
   fixtureCounter = faCupBundle.nextCounter;
 
   const externalClubIds = Object.values(teams)
-    .filter(team => team.isExternal)
+    .filter(team => isClubTeam(team) && team.isExternal)
     .map(team => team.id);
   const englishEuropeEntrants = (europeQualifiedTeamIds && europeQualifiedTeamIds.length > 0)
     ? europeQualifiedTeamIds

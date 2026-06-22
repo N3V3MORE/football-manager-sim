@@ -16,7 +16,7 @@ import {
 } from '../src/core/postMatchAccounting';
 import { advanceSeason } from '../src/core/seasonTransition';
 import { applyTacticalAdaptation } from '../src/core/tacticalAdaptationEngine';
-import { InboxMessage, Player, Team } from '../src/models/types';
+import { InboxMessage, Player, Position, Team } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
 import { markAsSubState, toggleStartingState } from '../src/store/lineupActions';
 import { buyPlayerState } from '../src/store/transferActions';
@@ -26,6 +26,8 @@ import { advanceWeekState } from '../src/store/weekLifecycle';
 import { finishLiveMatchState, processLiveMatchMinuteState } from '../src/store/liveMatchActions';
 import { sanitizePersistedState } from '../src/store/persistence';
 import { isPlayerUnavailable } from '../src/core/playerStatusUtils';
+import { FREE_AGENT_TEAM_ID, createFreeAgentTeam } from '../src/core/freeAgentPool';
+import { getSquadPolicy } from '../src/core/squadPolicy';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) {
@@ -44,6 +46,118 @@ const createSeededRandom = (seed: number) => {
 };
 
 const readSource = (filePath: string) => fs.readFileSync(path.join(process.cwd(), filePath), 'utf8');
+
+const POSITION_META: Record<Position, { subPosition: string; altPositions: string[] }> = {
+  GK: { subPosition: 'GK', altPositions: ['GK'] },
+  DEF: { subPosition: 'CB', altPositions: ['CB', 'RB', 'LB'] },
+  MID: { subPosition: 'CM', altPositions: ['CM', 'CDM', 'CAM'] },
+  FWD: { subPosition: 'ST', altPositions: ['ST', 'LW', 'RW'] },
+};
+
+type TestTeamOverrides = Partial<Omit<Team, 'boardProfile' | 'manager'>> & {
+  boardProfile?: Partial<Team['boardProfile']>;
+  manager?: Partial<Team['manager']>;
+};
+
+const buildTestTeam = (template: Team, id: string, name: string, overrides: TestTeamOverrides = {}): Team => {
+  const { boardProfile: boardProfileOverrides, manager: managerOverrides, ...teamOverrides } = overrides;
+  const boardProfile = { ...template.boardProfile, ...boardProfileOverrides };
+  return {
+    ...template,
+    ...teamOverrides,
+    id,
+    name,
+    division: teamOverrides.division || 'Premier League',
+    isExternal: teamOverrides.isExternal ?? false,
+    clubClass: teamOverrides.clubClass || 'C',
+    boardProfile,
+    manager: {
+      ...template.manager,
+      ...managerOverrides,
+      id: managerOverrides?.id || `${id}-manager`,
+      teamId: id,
+      teamName: name,
+    },
+    budget: teamOverrides.budget ?? 100,
+    operatingBudget: teamOverrides.operatingBudget ?? teamOverrides.budget ?? 100,
+    transferSpend: teamOverrides.transferSpend ?? 0,
+    played: teamOverrides.played ?? 1,
+    activeFormation: teamOverrides.activeFormation || '4-3-3',
+  };
+};
+
+const buildTestPlayer = (
+  template: Player,
+  id: string,
+  teamId: string,
+  position: Position,
+  rating: number,
+  overrides: Partial<Player> = {}
+): Player => ({
+  ...template,
+  ...overrides,
+  id,
+  name: overrides.name || id,
+  teamId,
+  position,
+  subPosition: overrides.subPosition || POSITION_META[position].subPosition,
+  altPositions: overrides.altPositions || POSITION_META[position].altPositions,
+  overallRating: rating,
+  marketValue: overrides.marketValue ?? Math.max(1, Math.round((rating - 45) / 2)),
+  age: overrides.age ?? 25,
+  morale: overrides.morale ?? 70,
+  energy: overrides.energy ?? 95,
+  isStarting: overrides.isStarting ?? false,
+  isSub: overrides.isSub ?? false,
+  isTransferListed: overrides.isTransferListed ?? false,
+  askingPrice: overrides.askingPrice ?? 0,
+  matchesSuspended: overrides.matchesSuspended ?? 0,
+  injuryWeeks: overrides.injuryWeeks ?? 0,
+  wage: overrides.wage ?? 20,
+  contractLeft: overrides.contractLeft ?? 3,
+  impactCoefficient: overrides.impactCoefficient ?? 1,
+  matchRatingHistory: overrides.matchRatingHistory ?? [],
+  minutesPlayed: overrides.minutesPlayed ?? 0,
+  goals: overrides.goals ?? 0,
+  assists: overrides.assists ?? 0,
+  cleanSheets: overrides.cleanSheets ?? 0,
+  yellowCards: overrides.yellowCards ?? 0,
+  redCards: overrides.redCards ?? 0,
+  nationality: overrides.nationality || 'English',
+});
+
+const addSquadPlayers = (
+  players: Record<string, Player>,
+  template: Player,
+  teamId: string,
+  prefix: string,
+  counts: Record<Position, number>,
+  options: {
+    rating?: number;
+    positionRatings?: Partial<Record<Position, number>>;
+    starterCounts?: Partial<Record<Position, number>>;
+    wage?: number;
+    age?: number;
+  } = {}
+) => {
+  (Object.keys(counts) as Position[]).forEach(position => {
+    for (let index = 0; index < counts[position]; index += 1) {
+      const id = `${prefix}-${position.toLowerCase()}-${index}`;
+      players[id] = buildTestPlayer(
+        template,
+        id,
+        teamId,
+        position,
+        options.positionRatings?.[position] ?? options.rating ?? 70,
+        {
+          age: options.age,
+          wage: options.wage,
+          isStarting: index < (options.starterCounts?.[position] || 0),
+        }
+      );
+    }
+  });
+};
 
 const checkFormationSlotLookupUsesExactFormation = () => {
   const threeFiveTwoSlots = getSlotsForFormation('3-5-2');
@@ -1233,6 +1347,205 @@ const checkAiTransferListingsExpireOutsideWindow = () => {
   );
 };
 
+const checkAiBuyerAtMaximumSquadSizeCannotBuy = () => {
+  const data = initGameData('Arsenal');
+  const templateTeam = Object.values(data.teams)[0];
+  const templatePlayer = Object.values(data.players)[0];
+  assert(templateTeam && templatePlayer, 'Expected templates for AI transfer capacity regression');
+
+  const buyer = buildTestTeam(templateTeam, 'capacity-buyer', 'Capacity Buyer', {
+    boardProfile: { ambition: 'stability', transferDiscipline: 'balanced' },
+    manager: { transferIdentity: 'balanced' },
+  });
+  const seller = buildTestTeam(templateTeam, 'capacity-seller', 'Capacity Seller', {
+    boardProfile: { ambition: 'stability', transferDiscipline: 'balanced' },
+  });
+  const players: Record<string, Player> = {};
+  addSquadPlayers(players, templatePlayer, buyer.id, 'capacity-buyer', { GK: 2, DEF: 10, MID: 13, FWD: 3 }, {
+    rating: 70,
+    starterCounts: { GK: 1, DEF: 4, MID: 3, FWD: 3 },
+  });
+  addSquadPlayers(players, templatePlayer, seller.id, 'capacity-seller', { GK: 2, DEF: 7, MID: 8, FWD: 5 }, {
+    rating: 82,
+    starterCounts: { GK: 1, DEF: 4, MID: 3, FWD: 3 },
+  });
+  const target = buildTestPlayer(templatePlayer, 'capacity-target', seller.id, 'FWD', 78, {
+    isTransferListed: true,
+    askingPrice: 5,
+    marketValue: 5,
+    wage: 20,
+  });
+  players[target.id] = target;
+
+  const result = computeWeeklyTransfers(players, { [buyer.id]: buyer, [seller.id]: seller }, null, { next: () => 0 }, 2);
+  assert(result.players[target.id].teamId === seller.id, 'AI buyer already at 28 players should not buy another player');
+  assert(
+    !result.decisions.some(decision => decision.action === 'bought' && decision.teamId === buyer.id && decision.playerId === target.id),
+    'AI transfer decisions should not record a purchase blocked by maximum squad size'
+  );
+};
+
+const checkAiStaleListedTargetIsRevalidated = () => {
+  const data = initGameData('Arsenal');
+  const templateTeam = Object.values(data.teams)[0];
+  const templatePlayer = Object.values(data.players)[0];
+  assert(templateTeam && templatePlayer, 'Expected templates for stale listing regression');
+
+  const buyerOne = buildTestTeam(templateTeam, 'stale-buyer-one', 'Stale Buyer One', {
+    boardProfile: { ambition: 'stability', transferDiscipline: 'balanced' },
+  });
+  const buyerTwo = buildTestTeam(templateTeam, 'stale-buyer-two', 'Stale Buyer Two', {
+    boardProfile: { ambition: 'stability', transferDiscipline: 'balanced' },
+  });
+  const seller = buildTestTeam(templateTeam, 'stale-seller', 'Stale Seller', {
+    boardProfile: { ambition: 'stability', transferDiscipline: 'balanced' },
+  });
+  const players: Record<string, Player> = {};
+  [buyerOne, buyerTwo].forEach((buyer, index) => {
+    addSquadPlayers(players, templatePlayer, buyer.id, `stale-buyer-${index}`, { GK: 2, DEF: 8, MID: 8, FWD: 3 }, {
+      rating: 70,
+      starterCounts: { GK: 1, DEF: 4, MID: 3, FWD: 3 },
+    });
+  });
+  addSquadPlayers(players, templatePlayer, seller.id, 'stale-seller', { GK: 2, DEF: 7, MID: 8, FWD: 5 }, {
+    rating: 82,
+    starterCounts: { GK: 1, DEF: 4, MID: 3, FWD: 5 },
+  });
+  const target = buildTestPlayer(templatePlayer, 'stale-target', seller.id, 'FWD', 78, {
+    isTransferListed: true,
+    askingPrice: 5,
+    marketValue: 5,
+    wage: 20,
+  });
+  players[target.id] = target;
+
+  const result = computeWeeklyTransfers(
+    players,
+    { [buyerOne.id]: buyerOne, [buyerTwo.id]: buyerTwo, [seller.id]: seller },
+    null,
+    { next: () => 0 },
+    2
+  );
+  const targetPurchases = result.decisions.filter(decision => decision.action === 'bought' && decision.playerId === target.id);
+  assert(targetPurchases.length === 1, `Listed target should only be bought once after stale revalidation, got ${targetPurchases.length}`);
+  assert(result.players[target.id].teamId === buyerOne.id, 'The first buyer should complete the only valid purchase');
+};
+
+const checkEliteAiRejectsUnderStandardTarget = () => {
+  const data = initGameData('Arsenal');
+  const templateTeam = Object.values(data.teams)[0];
+  const templatePlayer = Object.values(data.players)[0];
+  assert(templateTeam && templatePlayer, 'Expected templates for elite quality regression');
+
+  const buyer = buildTestTeam(templateTeam, 'elite-buyer', 'Elite Buyer', {
+    boardProfile: { ambition: 'elite', transferDiscipline: 'balanced' },
+    manager: { transferIdentity: 'premium star recruitment' },
+  });
+  const seller = buildTestTeam(templateTeam, 'elite-seller', 'Elite Seller', {
+    boardProfile: { ambition: 'stability', transferDiscipline: 'balanced' },
+  });
+  const players: Record<string, Player> = {};
+  addSquadPlayers(players, templatePlayer, buyer.id, 'elite-buyer', { GK: 2, DEF: 8, MID: 8, FWD: 3 }, {
+    rating: 78,
+    starterCounts: { GK: 1, DEF: 4, MID: 3, FWD: 3 },
+  });
+  addSquadPlayers(players, templatePlayer, seller.id, 'elite-seller', { GK: 2, DEF: 7, MID: 8, FWD: 5 }, {
+    rating: 82,
+    starterCounts: { GK: 1, DEF: 4, MID: 3, FWD: 5 },
+  });
+  const target = buildTestPlayer(templatePlayer, 'elite-target', seller.id, 'FWD', 72, {
+    isTransferListed: true,
+    askingPrice: 5,
+    marketValue: 5,
+    wage: 20,
+  });
+  players[target.id] = target;
+
+  const result = computeWeeklyTransfers(players, { [buyer.id]: buyer, [seller.id]: seller }, null, { next: () => 0 }, 2);
+  assert(result.players[target.id].teamId === seller.id, 'Elite AI club should reject a target below the ambition quality floor');
+};
+
+const checkExperiencedAiPrefersOlderEqualTarget = () => {
+  const data = initGameData('Arsenal');
+  const templateTeam = Object.values(data.teams)[0];
+  const templatePlayer = Object.values(data.players)[0];
+  assert(templateTeam && templatePlayer, 'Expected templates for experienced identity regression');
+
+  const buyer = buildTestTeam(templateTeam, 'experienced-buyer', 'Experienced Buyer', {
+    boardProfile: { ambition: 'stability', transferDiscipline: 'balanced' },
+    manager: { transferIdentity: 'experienced veteran recruitment' },
+  });
+  const seller = buildTestTeam(templateTeam, 'experienced-seller', 'Experienced Seller', {
+    boardProfile: { ambition: 'stability', transferDiscipline: 'balanced' },
+  });
+  const players: Record<string, Player> = {};
+  addSquadPlayers(players, templatePlayer, buyer.id, 'experienced-buyer', { GK: 2, DEF: 8, MID: 8, FWD: 3 }, {
+    rating: 70,
+    starterCounts: { GK: 1, DEF: 4, MID: 3, FWD: 3 },
+  });
+  addSquadPlayers(players, templatePlayer, seller.id, 'experienced-seller', { GK: 2, DEF: 7, MID: 8, FWD: 5 }, {
+    rating: 82,
+    starterCounts: { GK: 1, DEF: 4, MID: 3, FWD: 5 },
+  });
+  const youngerTarget = buildTestPlayer(templatePlayer, 'experienced-young-target', seller.id, 'FWD', 76, {
+    age: 22,
+    isTransferListed: true,
+    askingPrice: 5,
+    marketValue: 5,
+    wage: 20,
+  });
+  const olderTarget = buildTestPlayer(templatePlayer, 'experienced-old-target', seller.id, 'FWD', 76, {
+    age: 31,
+    isTransferListed: true,
+    askingPrice: 5,
+    marketValue: 5,
+    wage: 20,
+  });
+  players[youngerTarget.id] = youngerTarget;
+  players[olderTarget.id] = olderTarget;
+
+  const result = computeWeeklyTransfers(players, { [buyer.id]: buyer, [seller.id]: seller }, null, { next: () => 0 }, 2);
+  assert(result.players[olderTarget.id].teamId === buyer.id, 'Experienced AI identity should prefer the older equal-value target');
+  assert(result.players[youngerTarget.id].teamId === seller.id, 'Experienced AI identity should leave the younger equal-value target behind');
+};
+
+const checkAiTransferRespectsOperatingWageAffordability = () => {
+  const data = initGameData('Arsenal');
+  const templateTeam = Object.values(data.teams)[0];
+  const templatePlayer = Object.values(data.players)[0];
+  assert(templateTeam && templatePlayer, 'Expected templates for AI wage affordability regression');
+
+  const buyer = buildTestTeam(templateTeam, 'wage-buyer', 'Wage Buyer', {
+    boardProfile: { ambition: 'stability', transferDiscipline: 'balanced' },
+    budget: 100,
+    operatingBudget: 0.1,
+  });
+  const seller = buildTestTeam(templateTeam, 'wage-seller', 'Wage Seller', {
+    boardProfile: { ambition: 'stability', transferDiscipline: 'balanced' },
+  });
+  const players: Record<string, Player> = {};
+  addSquadPlayers(players, templatePlayer, buyer.id, 'wage-buyer', { GK: 2, DEF: 8, MID: 8, FWD: 3 }, {
+    rating: 70,
+    wage: 20,
+    starterCounts: { GK: 1, DEF: 4, MID: 3, FWD: 3 },
+  });
+  addSquadPlayers(players, templatePlayer, seller.id, 'wage-seller', { GK: 2, DEF: 7, MID: 8, FWD: 5 }, {
+    rating: 82,
+    starterCounts: { GK: 1, DEF: 4, MID: 3, FWD: 5 },
+  });
+  const target = buildTestPlayer(templatePlayer, 'wage-target', seller.id, 'FWD', 78, {
+    isTransferListed: true,
+    askingPrice: 5,
+    marketValue: 5,
+    wage: 250,
+  });
+  players[target.id] = target;
+
+  const result = computeWeeklyTransfers(players, { [buyer.id]: buyer, [seller.id]: seller }, null, { next: () => 0 }, 2);
+  assert(result.players[target.id].teamId === seller.id, 'AI buyer should not buy a player whose wage exceeds operating affordability');
+  assert(result.teams[buyer.id].budget === buyer.budget, 'Rejected wage-affordability transfer should not spend transfer budget');
+};
+
 const checkSeasonEndProgressionUpdatesMatchAbility = () => {
   const data = initGameData();
   const seasonWeekLimit = getSeasonWeekLimit(data.fixtures, data.competitions);
@@ -1315,6 +1628,159 @@ const checkContractDeparturesPreferViableDestinations = () => {
   );
 };
 
+const checkFreeAgentSaveReloadEquivalence = () => {
+  const data = initGameData('Arsenal');
+  const templateTeam = Object.values(data.teams)[0];
+  const templatePlayer = Object.values(data.players)[0];
+  assert(templateTeam && templatePlayer, 'Expected templates for free-agent persistence regression');
+
+  const freeAgent = buildTestPlayer(templatePlayer, 'persisted-free-agent', FREE_AGENT_TEAM_ID, 'MID', 64, {
+    isStarting: false,
+    isSub: false,
+    isTransferListed: false,
+  });
+  const brokenReference = buildTestPlayer(templatePlayer, 'broken-reference-player', 'missing-club', 'DEF', 62, {
+    isStarting: true,
+    isSub: true,
+    isTransferListed: true,
+    askingPrice: 3,
+  });
+  const state = {
+    currentWeek: 4,
+    userTeamId: templateTeam.id,
+    teams: { [templateTeam.id]: templateTeam },
+    players: {
+      [freeAgent.id]: freeAgent,
+      [brokenReference.id]: brokenReference,
+    },
+    fixtures: {},
+    competitions: {},
+    news: [],
+    inboxMessages: [],
+    boardObjectives: [],
+    boardReviewAppliedWeek: 0,
+  };
+
+  const summarize = (value: ReturnType<typeof sanitizePersistedState>) => JSON.stringify({
+    hasFreeAgentTeam: Boolean(value.teams?.[FREE_AGENT_TEAM_ID]),
+    freeAgent: value.players?.[freeAgent.id],
+    brokenReference: value.players?.[brokenReference.id],
+  });
+  const sanitizedOnce = sanitizePersistedState(state);
+  const sanitizedTwice = sanitizePersistedState(JSON.parse(JSON.stringify(sanitizedOnce)));
+
+  assert(sanitizedOnce.teams?.[FREE_AGENT_TEAM_ID], 'Sanitizing a save with free agents should create the durable free-agent team');
+  assert(
+    sanitizedOnce.players?.[freeAgent.id]?.teamId === FREE_AGENT_TEAM_ID,
+    'Existing free-agent players should remain in the shared free-agent pool after load'
+  );
+  assert(
+    sanitizedOnce.players?.[brokenReference.id]?.teamId === FREE_AGENT_TEAM_ID,
+    'Players with missing teams should be reassigned to the shared free-agent pool'
+  );
+  assert(
+    sanitizedOnce.players?.[brokenReference.id]?.isStarting === false &&
+      sanitizedOnce.players?.[brokenReference.id]?.isSub === false &&
+      sanitizedOnce.players?.[brokenReference.id]?.isTransferListed === false,
+    'Players repaired into the free-agent pool should not retain club selection or listing flags'
+  );
+  assert(summarize(sanitizedOnce) === summarize(sanitizedTwice), 'Free-agent save sanitation should be stable across reloads');
+};
+
+const checkSeasonRolloverReplenishesMinimumSquadAndGoalkeepers = () => {
+  const data = initGameData('Arsenal');
+  const team = Object.values(data.teams).find(item => item.division === 'Premier League');
+  assert(team, 'Expected a Premier League team for rollover replenishment regression');
+
+  let keptOutfield = 0;
+  const players = Object.fromEntries(Object.entries(data.players).map(([playerId, player]) => {
+    if (player.teamId !== team!.id) return [playerId, player];
+    if (player.position !== 'GK' && keptOutfield < 8) {
+      keptOutfield += 1;
+      return [playerId, { ...player, contractLeft: 2, isStarting: false, isSub: false }];
+    }
+    return [playerId, { ...player, teamId: FREE_AGENT_TEAM_ID, isStarting: false, isSub: false }];
+  })) as Record<string, Player>;
+
+  const rollover = advanceSeason(
+    players,
+    { ...data.teams, [FREE_AGENT_TEAM_ID]: createFreeAgentTeam() },
+    data.competitions,
+    null,
+    [],
+    undefined,
+    { next: createSeededRandom(2026062201) }
+  );
+  const nextTeam = rollover.teams[team!.id];
+  const policy = getSquadPolicy(nextTeam);
+  const squad = Object.values(rollover.players).filter(player => player.teamId === nextTeam.id);
+  const goalkeeperCount = squad.filter(player => player.position === 'GK').length;
+
+  assert(
+    squad.length >= policy.structuralMinimum,
+    `Season rollover should replenish ${nextTeam.name} to structural minimum ${policy.structuralMinimum}, got ${squad.length}`
+  );
+  assert(
+    goalkeeperCount >= policy.positionalMinimums.GK,
+    `Season rollover should guarantee goalkeeper coverage ${policy.positionalMinimums.GK}, got ${goalkeeperCount}`
+  );
+};
+
+const checkSimultaneousExpiriesRecomputeAgainstProvisionalSquad = () => {
+  const data = initGameData('Arsenal');
+  const team = Object.values(data.teams).find(item => item.division === 'Premier League');
+  const templatePlayer = Object.values(data.players)[0];
+  assert(team && templatePlayer, 'Expected team and player templates for simultaneous expiry regression');
+
+  const players: Record<string, Player> = Object.fromEntries(
+    Object.entries(data.players).map(([playerId, player]) => [
+      playerId,
+      player.teamId === team!.id
+        ? { ...player, teamId: FREE_AGENT_TEAM_ID, isStarting: false, isSub: false }
+        : player,
+    ])
+  ) as Record<string, Player>;
+  addSquadPlayers(players, templatePlayer, team!.id, 'expiry-stable', { GK: 2, DEF: 7, MID: 7, FWD: 2 }, {
+    rating: 74,
+    starterCounts: { GK: 1, DEF: 4, MID: 3, FWD: 2 },
+  });
+  const expiringForwardIds = ['expiry-forward-a', 'expiry-forward-b', 'expiry-forward-c'];
+  expiringForwardIds.forEach((playerId, index) => {
+    players[playerId] = buildTestPlayer(templatePlayer, playerId, team!.id, 'FWD', 64 + index, {
+      age: 27,
+      wage: 18,
+      marketValue: 5,
+      contractLeft: 0,
+      isStarting: false,
+      isSub: false,
+    });
+  });
+
+  const rollover = advanceSeason(
+    players,
+    { ...data.teams, [FREE_AGENT_TEAM_ID]: createFreeAgentTeam() },
+    data.competitions,
+    null,
+    [],
+    undefined,
+    { next: createSeededRandom(2026062202) }
+  );
+  const nextTeam = rollover.teams[team!.id];
+  const retainedExpiringForwards = expiringForwardIds.filter(playerId => rollover.players[playerId]?.teamId === nextTeam.id);
+  const nextSquad = Object.values(rollover.players).filter(player => player.teamId === nextTeam.id);
+  const forwardCount = nextSquad.filter(player => player.position === 'FWD').length;
+  const policy = getSquadPolicy(nextTeam);
+
+  assert(
+    retainedExpiringForwards.length > 0,
+    'Simultaneous same-position expiries should be recomputed against provisional departures so at least one forward is renewed'
+  );
+  assert(
+    forwardCount >= policy.positionalMinimums.FWD,
+    `Season rollover should leave at least ${policy.positionalMinimums.FWD} forwards after contracts and youth intake, got ${forwardCount}`
+  );
+};
+
 const checkUiContractsMatchEngineState = () => {
   const statsScreen = readSource('app/stats.tsx');
   const hubScreen = readSource('app/(tabs)/index.tsx');
@@ -1324,6 +1790,7 @@ const checkUiContractsMatchEngineState = () => {
   const calendarUtils = readSource('src/utils/calendar.ts');
   const squadScreen = readSource('app/(tabs)/squad.tsx');
   const tacticsScreen = readSource('app/(tabs)/tactics.tsx');
+  const contractWatchCard = readSource('components/settings/contract-watch-card.tsx');
 
   assert(
     /All-Competition Stats/.test(statsScreen) && /playerTeam\.division === userTeam\.division/.test(statsScreen),
@@ -1356,6 +1823,14 @@ const checkUiContractsMatchEngineState = () => {
   assert(
     !/Conserves 25%|35% more energy|astronomical energy drain|30% better tackling/.test(tacticsScreen),
     'Tactics copy should not claim effects the engine does not implement'
+  );
+  assert(
+    /buildSquadPlan\(team,\s*allPlayers\)/.test(contractWatchCard) && /allPlayers=\{players\}/.test(settingsScreen),
+    'Contract Watch should derive contract advice from the same buildSquadPlan inputs as the engine'
+  );
+  assert(
+    /decisionByPlayerId\[b\.id\]\?\.priority/.test(contractWatchCard),
+    'Contract Watch should sort expiring deals by squad-plan decision priority'
   );
 };
 
@@ -1681,10 +2156,26 @@ const runRegressionChecks = () => {
   console.log('[OK] Season reporting lifecycle guards passed');
   checkAiTransferListingsExpireOutsideWindow();
   console.log('[OK] AI transfer listing expiry passed');
+  checkAiBuyerAtMaximumSquadSizeCannotBuy();
+  console.log('[OK] AI transfer maximum squad guard passed');
+  checkAiStaleListedTargetIsRevalidated();
+  console.log('[OK] AI stale listing revalidation passed');
+  checkEliteAiRejectsUnderStandardTarget();
+  console.log('[OK] AI elite target quality guard passed');
+  checkExperiencedAiPrefersOlderEqualTarget();
+  console.log('[OK] AI experienced target preference passed');
+  checkAiTransferRespectsOperatingWageAffordability();
+  console.log('[OK] AI wage affordability guard passed');
   checkSeasonEndProgressionUpdatesMatchAbility();
   console.log('[OK] Season-end player progression ability update passed');
   checkContractDeparturesPreferViableDestinations();
   console.log('[OK] Contract departure destination quality passed');
+  checkFreeAgentSaveReloadEquivalence();
+  console.log('[OK] Free-agent save/reload equivalence passed');
+  checkSeasonRolloverReplenishesMinimumSquadAndGoalkeepers();
+  console.log('[OK] Season rollover replenishment coverage passed');
+  checkSimultaneousExpiriesRecomputeAgainstProvisionalSquad();
+  console.log('[OK] Simultaneous contract expiry recomputation passed');
   checkUiContractsMatchEngineState();
   console.log('[OK] UI data contract checks passed');
   checkInitialGameSetupCanBeSeeded();

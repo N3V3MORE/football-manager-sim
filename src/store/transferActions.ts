@@ -3,6 +3,7 @@ import { removePlayerFromTeamSelections } from '../core/formationMapUtils';
 import { computeWeeklyTransfers } from '../core/progressionEngine';
 import { StoreActionResult } from './contractActions';
 import { isTransferWindowOpen } from '../utils/calendar';
+import { isWageOfferAccepted } from '../core/transferFinance';
 
 type TransferActionState = Pick<GameState, 'currentWeek' | 'players' | 'teams' | 'userTeamId'>;
 type TransferActionPatch = Partial<Pick<GameState, 'players' | 'teams'>> | TransferActionState;
@@ -89,7 +90,7 @@ export const buyPlayerState = (
     };
   }
 
-  if (wageOffered > 0 && wageOffered < player.wage * 0.9) {
+  if (wageOffered > 0 && !isWageOfferAccepted(player, wageOffered)) {
     return {
       patch: state,
       result: { success: false, message: `${player.name} rejected your wage offer of GBP ${wageOffered}k/w.` },

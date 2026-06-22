@@ -21,6 +21,7 @@ import { buildGenericManager, deriveInitialBoardApproval, hydrateManagerContext 
 import { buildLegacyInboxMessages } from './inboxHelpers';
 import { LiveMatchState, pruneInvalidLiveMatches } from './liveMatchHelpers';
 import { buildManagedTeamObjectives } from './managedTeamObjectives';
+import { createFreeAgentTeam, FREE_AGENT_TEAM_ID } from '../core/freeAgentPool';
 
 export type PersistedStoreState = Partial<GameState & {
   liveMatches: Record<string, LiveMatchState>;
@@ -96,10 +97,6 @@ const VALID_COMPETITION_IDS: ReadonlySet<CompetitionId> = new Set([
   'europe',
 ]);
 
-/** Durable team id used for players whose team reference is broken or who are
- *  released into a free-agent pool. Must exist in teams for referential integrity. */
-export const FREE_AGENT_TEAM_ID = '__free_agent__';
-
 const clampNumber = (value: unknown, min: number, max: number, fallback: number): number => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
@@ -117,33 +114,6 @@ export const hashStringToSeed = (input: string): number => {
     hash |= 0; // Convert to 32-bit int
   }
   return hash >>> 0;
-};
-
-const createFreeAgentTeam = (): Team => {
-  const profile = buildBoardProfile('F', 'Continental', true);
-  const manager = buildGenericManager('Free Agent Pool', FREE_AGENT_TEAM_ID, 'Continental', 40, profile);
-  return {
-    id: FREE_AGENT_TEAM_ID,
-    name: 'Free Agents',
-    division: 'Continental',
-    isExternal: true,
-    clubClass: 'F',
-    boardProfile: profile,
-    manager: hydrateManagerContext(manager, profile, 'Continental'),
-    points: 0,
-    goalsFor: 0,
-    goalsAgainst: 0,
-    wins: 0,
-    draws: 0,
-    losses: 0,
-    played: 0,
-    activeFormation: '4-4-2',
-    form: [],
-    tactics: { mentality: 'Balanced', passingStyle: 'Mixed', tempo: 'Normal', defensiveLine: 'Standard', pressing: 'Medium' },
-    budget: 0,
-    transferSpend: 0,
-    boardApproval: 50,
-  };
 };
 
 /** Ensure every player.teamId points to a valid team by creating a durable

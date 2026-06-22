@@ -4,6 +4,9 @@ import { ENGINE_CONFIG } from '../config/engineConfig';
 import { RandomGenerator, resolveRandom } from './random';
 import { buildSquadPlan } from './squadPlanningEngine';
 import { isTransferWindowOpen } from '../utils/calendar';
+import { getSquadPolicy } from './squadPolicy';
+import { getMinimumAcceptedWage } from './transferFinance';
+import { isClubTeam } from './freeAgentPool';
 
 type PositionKey = Player['position'];
 type PlanningSeverity = 'none' | 'watch' | 'need' | 'urgent';
@@ -75,8 +78,8 @@ const getManagerIdentityProfile = (identity: string): ManagerIdentityProfile => 
   if (lower.includes('star') || lower.includes('premium') || lower.includes('marquee')) {
     return { label: 'star', buyChanceMod: 0.08, agePreference: 'peak', ratingWeight: 1.4, priceSensitivity: 0.5, ageSensitivity: 0.5 };
   }
-  if (lower.includes('experienced') || lower.includes('proven') || lower.includes('veteran')) {
-    return { label: 'experienced', buyChanceMod: 0.02, agePreference: 'experienced', ratingWeight: 1.1, priceSensitivity: 1.0, ageSensitivity: -0.3 };
+  if (lower.includes('experienced') || lower.includes('experience') || lower.includes('proven') || lower.includes('veteran') || lower.includes('league-ready') || lower.includes('promotion-tested')) {
+    return { label: 'experienced', buyChanceMod: 0.02, agePreference: 'experienced', ratingWeight: 1.1, priceSensitivity: 1.0, ageSensitivity: 0.8 };
   }
   if (lower.includes('technical')) {
     return { label: 'technical', buyChanceMod: 0.0, agePreference: 'peak', ratingWeight: 1.2, priceSensitivity: 0.8, ageSensitivity: 0.8 };
@@ -129,8 +132,78 @@ const calculateDestinationWage = (
   const contextWage = avgWage * ratingRatio;
   const blendedWage = player.wage * 0.3 + contextWage * 0.7;
 
-  return clamp(Math.round(blendedWage * severityMultiplier * disciplineMultiplier), 1, 500);
+  return clamp(
+    Math.max(getMinimumAcceptedWage(player), Math.round(blendedWage * severityMultiplier * disciplineMultiplier)),
+    1,
+    500
+  );
 };
+
+const canAffordWage = (team: Team, wage: number) => {
+  const operatingBudget = team.operatingBudget !== undefined ? team.operatingBudget : team.budget;
+  return Number.isFinite(operatingBudget) && operatingBudget >= (wage / 1000) * 4;
+};
+
+const getPositionCounts = (squad: Player[]) => (
+  squad.reduce<Record<PositionKey, number>>((acc, player) => {
+    acc[player.position] += 1;
+    return acc;
+  }, { GK: 0, DEF: 0, MID: 0, FWD: 0 })
+);
+
+const sellerCanLosePlayer = (seller: Team | undefined, target: Player, allPlayers: Record<string, Player>) => {
+  if (!seller) return true;
+  const policy = getSquadPolicy(seller);
+  const squadAfterSale = Object.values(allPlayers).filter(player => player.teamId === seller.id && player.id !== target.id);
+  const counts = getPositionCounts(squadAfterSale);
+  return squadAfterSale.length >= policy.structuralMinimum && counts[target.position] >= policy.positionalMinimums[target.position];
+};
+
+const buyerHasCapacity = (buyer: Team, allPlayers: Record<string, Player>) => {
+  const policy = getSquadPolicy(buyer);
+  const squadSize = Object.values(allPlayers).filter(player => player.teamId === buyer.id).length;
+  return squadSize < policy.maximumSquadSize;
+};
+
+const meetsTargetQuality = (
+  buyer: Team,
+  target: Player,
+  buyerSquadAvgRating: number,
+  severity: PlanningSeverity
+) => {
+  const allowedGap = severity === 'urgent' ? 10 : 8;
+  const ambitionFloor = buyer.boardProfile.ambition === 'elite'
+    ? 74
+    : buyer.boardProfile.ambition === 'europe'
+      ? 70
+      : buyer.boardProfile.ambition === 'promotion'
+        ? 64
+        : 55;
+  return target.overallRating >= Math.max(ambitionFloor, buyerSquadAvgRating - allowedGap);
+};
+
+const isValidPurchase = ({
+  buyer,
+  seller,
+  target,
+  allPlayers,
+  newWage,
+  buyerSquadAvgRating,
+  severity,
+}: {
+  buyer: Team;
+  seller?: Team;
+  target: Player;
+  allPlayers: Record<string, Player>;
+  newWage: number;
+  buyerSquadAvgRating: number;
+  severity: PlanningSeverity;
+}) => (
+  buyerHasCapacity(buyer, allPlayers) &&
+  sellerCanLosePlayer(seller, target, allPlayers) &&
+  meetsTargetQuality(buyer, target, buyerSquadAvgRating, severity) &&
+  canAffordWage(buyer, newWage)
+);
 
 const determineRolePromise = (
   severity: PlanningSeverity,
@@ -223,7 +296,7 @@ const expireAiTransferListings = (
   userTeamId: string | null
 ) => {
   const aiTeamIds = new Set(Object.values(teams)
-    .filter(team => team.id !== userTeamId)
+    .filter(team => isClubTeam(team) && team.id !== userTeamId)
     .map(team => team.id));
   let changed = false;
   const updatedPlayers = { ...players };
@@ -261,7 +334,7 @@ export const computeWeeklyTransfers = (
   const updatedTeams = { ...teams };
   const decisions: AITransferDecision[] = [];
 
-  const aiTeams = Object.values(updatedTeams).filter(t => t.id !== userTeamId);
+  const aiTeams = Object.values(updatedTeams).filter(t => isClubTeam(t) && t.id !== userTeamId);
 
   // Phase 1: All AI Teams evaluate their squads and list players
   aiTeams.forEach(team => {
@@ -282,11 +355,15 @@ export const computeWeeklyTransfers = (
       return acc;
     }, { GK: 0, DEF: 0, MID: 0, FWD: 0 });
     
-    const minDepth: Record<PositionKey, number> = { GK: 2, DEF: 6, MID: 6, FWD: 4 };
+    const policy = getSquadPolicy(team);
 
     squad.forEach(p => {
-      if (protectedPlayers.has(p.id) || p.isTransferListed) return;
       const positionNeed = needByPosition[p.position];
+      if (p.isTransferListed && (protectedPlayers.has(p.id) || (positionNeed && NEED_SEVERITY_VALUE[positionNeed.severity] >= NEED_SEVERITY_VALUE.need))) {
+        updatedPlayers[p.id] = { ...updatedPlayers[p.id], isTransferListed: false, askingPrice: 0 };
+        return;
+      }
+      if (protectedPlayers.has(p.id) || p.isTransferListed) return;
       if (positionNeed && NEED_SEVERITY_VALUE[positionNeed.severity] >= NEED_SEVERITY_VALUE.need) return;
 
       let shouldList = false;
@@ -314,7 +391,7 @@ export const computeWeeklyTransfers = (
         listReason = `${p.name} is a backup outside the protected core and the board will listen to offers.`;
       }
 
-      const minimumDepth = Math.max(positionNeed?.targetDepth || 0, minDepth[p.position] || 2);
+      const minimumDepth = Math.max(positionNeed?.targetDepth || 0, policy.positionalMinimums[p.position]);
       if (shouldList && (depthByPosition[p.position] || 0) > minimumDepth) {
         updatedPlayers[p.id] = { ...updatedPlayers[p.id], isTransferListed: true, askingPrice: p.marketValue };
         depthByPosition[p.position] = Math.max(0, (depthByPosition[p.position] || 0) - 1);
@@ -363,7 +440,8 @@ export const computeWeeklyTransfers = (
 
     // Filter available targets from the global pool (ensure target team hasn't been modified heavily or isn't the buyer)
     const targets = globalListedPlayers.filter(p =>
-      p.teamId !== team.id &&
+          isClubTeam(updatedTeams[p.teamId]) &&
+          p.teamId !== team.id &&
       p.position === priorityNeed.position &&
       p.askingPrice <= budgetLimit &&
       updatedPlayers[p.id]?.isTransferListed // Ensure another team didn't buy them in this loop
@@ -397,13 +475,22 @@ export const computeWeeklyTransfers = (
         const moraleBase = rolePromise === 'starter' ? 75 : rolePromise === 'rotation' ? 65 : 55;
 
         const buyer = updatedTeams[team.id];
+        const seller = updatedTeams[bestTarget.teamId];
+        if (!isValidPurchase({
+          buyer,
+          seller,
+          target: bestTarget,
+          allPlayers: updatedPlayers,
+          newWage,
+          buyerSquadAvgRating,
+          severity: priorityNeed.severity,
+        })) return;
         updatedTeams[team.id] = {
           ...buyer,
           budget: buyer.budget - bestTarget.askingPrice,
           transferSpend: buyer.transferSpend + bestTarget.askingPrice,
         };
 
-        const seller = updatedTeams[bestTarget.teamId];
         if (seller) {
           updatedTeams[bestTarget.teamId] = removePlayerFromTeamSelections(
             { ...seller, budget: seller.budget + bestTarget.askingPrice },
@@ -495,13 +582,22 @@ export const computeWeeklyTransfers = (
             const moraleBase = rolePromise === 'starter' ? 75 : rolePromise === 'rotation' ? 65 : 55;
 
             const buyer = updatedTeams[team.id];
+            const userTeam = updatedTeams[userTeamId];
+            if (!isValidPurchase({
+              buyer,
+              seller: userTeam,
+              target: bestUserTarget,
+              allPlayers: updatedPlayers,
+              newWage,
+              buyerSquadAvgRating,
+              severity: priorityNeed.severity,
+            })) return;
             updatedTeams[team.id] = {
               ...buyer,
               budget: buyer.budget - bestUserTarget.askingPrice,
               transferSpend: buyer.transferSpend + bestUserTarget.askingPrice,
             };
 
-            const userTeam = updatedTeams[userTeamId];
             if (userTeam) {
               updatedTeams[userTeamId] = removePlayerFromTeamSelections(
                 { ...userTeam, budget: userTeam.budget + bestUserTarget.askingPrice },

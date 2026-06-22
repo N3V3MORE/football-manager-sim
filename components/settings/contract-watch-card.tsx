@@ -1,11 +1,13 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getContractAdviceLabel, getRenewalOffer, shouldRenewContract } from '@/src/core/contractUtils';
+import { getRenewalOffer } from '@/src/core/contractUtils';
+import { buildSquadPlan } from '@/src/core/squadPlanningEngine';
 import { formatContractLength, getPlayerAvailabilityStatus } from '@/src/core/playerStatusUtils';
 import { Player, Team } from '@/src/models/types';
 
 type ContractWatchCardProps = {
   players: Player[];
+  allPlayers: Record<string, Player>;
   team: Team | null;
   onRenew: (playerId: string, years: number, wage: number) => void;
 };
@@ -16,13 +18,23 @@ const ADVICE_STYLES = {
   replace: { container: { backgroundColor: '#172033', borderColor: '#334155' }, text: { color: '#cbd5e1' } },
 } as const;
 
-export function ContractWatchCard({ players, team, onRenew }: ContractWatchCardProps) {
+const getDecisionAdvice = (decision?: ReturnType<typeof buildSquadPlan>['contractDecisions'][number]) => {
+  if (decision?.decision === 'renew') return 'renew';
+  if (decision?.decision === 'sell') return 'cash in';
+  return 'replace';
+};
+
+export function ContractWatchCard({ players, allPlayers, team, onRenew }: ContractWatchCardProps) {
   if (!team) return null;
+  const decisionByPlayerId = buildSquadPlan(team, allPlayers).contractDecisions.reduce<Record<string, ReturnType<typeof buildSquadPlan>['contractDecisions'][number]>>((acc, decision) => {
+    acc[decision.playerId] = decision;
+    return acc;
+  }, {});
 
   const visiblePlayers = [...players]
     .sort((a, b) => {
-      const renewDelta = Number(shouldRenewContract(b, team)) - Number(shouldRenewContract(a, team));
-      if (renewDelta !== 0) return renewDelta;
+      const priorityDelta = (decisionByPlayerId[b.id]?.priority || 0) - (decisionByPlayerId[a.id]?.priority || 0);
+      if (priorityDelta !== 0) return priorityDelta;
       const contractDelta = a.contractLeft - b.contractLeft;
       if (contractDelta !== 0) return contractDelta;
       return b.overallRating - a.overallRating;
@@ -39,7 +51,7 @@ export function ContractWatchCard({ players, team, onRenew }: ContractWatchCardP
         <>
           {visiblePlayers.map(player => {
             const offer = getRenewalOffer(player);
-            const advice = getContractAdviceLabel(player, team);
+            const advice = getDecisionAdvice(decisionByPlayerId[player.id]);
             const palette = ADVICE_STYLES[advice];
 
             return (

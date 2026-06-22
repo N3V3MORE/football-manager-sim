@@ -8,21 +8,9 @@ import {
   Team,
 } from '../models/types';
 import { isContractExpiringSoon } from './playerStatusUtils';
+import { getSquadPolicy } from './squadPolicy';
 
 const POSITIONS: Position[] = ['GK', 'DEF', 'MID', 'FWD'];
-
-/**
- * Short-term injuries (≤2 weeks) should not trigger permanent squad-depth
- * purchases. Treat those players as available for depth-planning purposes
- * so the AI doesn't overreact to a temporary absence.
- */
-const SHORT_TERM_INJURY_THRESHOLD = 2;
-
-const isPlayerUnavailableForPlanning = (player: Player): boolean => {
-  if (player.matchesSuspended > 0) return true;
-  if ((player.injuryWeeks || 0) > SHORT_TERM_INJURY_THRESHOLD) return true;
-  return false;
-};
 
 const SEVERITY_VALUE: Record<SquadNeedSeverity, number> = {
   none: 0,
@@ -40,19 +28,6 @@ const average = (values: number[]) => (
 const getTeamSquad = (players: Record<string, Player>, teamId: string) => (
   Object.values(players).filter(player => player.teamId === teamId)
 );
-
-const getTargetDepth = (team: Team, position: Position) => {
-  const isPremierLevel = team.division === 'Premier League' || team.division === 'Continental';
-  const baseDepth: Record<Position, number> = isPremierLevel || team.boardProfile.ambition === 'promotion'
-    ? { GK: 2, DEF: 6, MID: 6, FWD: 4 }
-    : { GK: 2, DEF: 5, MID: 5, FWD: 3 };
-
-  if (team.boardProfile.ambition === 'elite' || team.boardProfile.ambition === 'europe') {
-    return baseDepth[position] + (position === 'GK' ? 0 : 1);
-  }
-
-  return baseDepth[position];
-};
 
 const getMoreSevere = (current: SquadNeedSeverity, candidate: SquadNeedSeverity) => (
   SEVERITY_VALUE[candidate] > SEVERITY_VALUE[current] ? candidate : current
@@ -110,13 +85,13 @@ export const evaluateSquadNeeds = (
   players: Record<string, Player>
 ): SquadNeed[] => {
   const squad = getTeamSquad(players, team.id);
+  const policy = getSquadPolicy(team);
   const totalWageBill = squad.reduce((sum, player) => sum + (Number.isFinite(player.wage) ? player.wage : 0), 0);
 
   return POSITIONS.map(position => {
     const positionPlayers = squad.filter(player => player.position === position);
-    const availablePlayers = positionPlayers.filter(player => !isPlayerUnavailableForPlanning(player));
-    const currentDepth = availablePlayers.length;
-    const targetDepth = getTargetDepth(team, position);
+    const currentDepth = positionPlayers.length;
+    const targetDepth = policy.preferredDepth[position];
     const averageAge = average(positionPlayers.map(player => player.age));
     const wageLoad = positionPlayers.reduce((sum, player) => sum + (Number.isFinite(player.wage) ? player.wage : 0), 0);
     const wageShare = totalWageBill > 0 ? wageLoad / totalWageBill : 0;
