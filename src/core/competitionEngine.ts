@@ -18,6 +18,7 @@ import {
 } from './leagueUtils';
 import { RandomGenerator, resolveRandom } from './random';
 import { isPlayableClub } from './freeAgentPool';
+import { LEAGUE_END_ORDINAL, weekToDateOrdinal } from '../utils/calendar';
 
 const CARABAO_WEEKS = [3, 8, 13, 18, 24, 31, 39];
 const FA_CUP_WEEKS = [7, 14, 21, 28, 35, 42, 50];
@@ -127,11 +128,13 @@ const CLUB_CLASS_STRENGTH: Record<string, number> = {
 
 const createRoundState = (
   key: CompetitionRoundKey,
-  week: number
+  week: number,
+  dateOrdinal = weekToDateOrdinal(week)
 ): CompetitionRoundState => ({
   key,
   label: ROUND_LABELS[key],
   week,
+  dateOrdinal,
   entrantTeamIds: [],
   fixtureIds: [],
   byeTeamIds: [],
@@ -218,6 +221,7 @@ const scheduleKnockoutRound = (
     fixtures[fixtureId] = {
       id: fixtureId,
       week: round.week,
+      dateOrdinal: round.dateOrdinal,
       competitionId,
       competitionType,
       round: round.key,
@@ -277,6 +281,7 @@ const buildKnockoutCompetition = (
   season: number,
   entrantTeamIds: string[],
   weekSlots: number[],
+  dateOrdinalSlots: number[],
   roundKeys: CompetitionRoundKey[],
   teams: Record<string, Team>,
   fixtureCounterStart: number,
@@ -286,7 +291,11 @@ const buildKnockoutCompetition = (
   fixtures: Record<string, Fixture>;
   nextCounter: number;
 } => {
-  const rounds = roundKeys.map((key, index) => createRoundState(key, weekSlots[index] || weekSlots[weekSlots.length - 1]));
+  const rounds = roundKeys.map((key, index) => createRoundState(
+    key,
+    weekSlots[index] || weekSlots[weekSlots.length - 1],
+    dateOrdinalSlots[index] ?? weekToDateOrdinal(weekSlots[index] || weekSlots[weekSlots.length - 1])
+  ));
   const scheduledRound = scheduleKnockoutRound(
     competitionId,
     competitionType,
@@ -376,13 +385,22 @@ export const buildSeasonCompetitionBundle = (
   const fixtures: Record<string, Fixture> = {};
   const competitions: Record<string, CompetitionState> = {};
   let fixtureCounter = 1;
+  const buildLeagueDateOrdinals = (roundCount: number) => Array.from({ length: roundCount }, (_, index) => (
+    Math.round((index / Math.max(1, roundCount - 1)) * LEAGUE_END_ORDINAL)
+  ));
 
   DIVISION_ORDER.forEach(division => {
     const divisionTeamIds = sortTeamsByDivisionAndName(
       Object.values(teams).filter(team => isPlayableClub(team) && team.division === division)
     ).map(team => team.id);
     const leagueWeeks = LEAGUE_WEEKS.slice(0, division === 'Premier League' ? 38 : 46);
-    const generated = buildRoundRobinFixtures(divisionTeamIds, division, fixtureCounter, leagueWeeks);
+    const generated = buildRoundRobinFixtures(
+      divisionTeamIds,
+      division,
+      fixtureCounter,
+      leagueWeeks,
+      buildLeagueDateOrdinals(leagueWeeks.length)
+    );
     fixtureCounter = generated.nextCounter;
     Object.assign(fixtures, generated.fixtures);
     competitions[LEAGUE_COMPETITION_BY_DIVISION[division]] = buildLeagueCompetitionState(
@@ -403,6 +421,7 @@ export const buildSeasonCompetitionBundle = (
     season,
     englishClubIds,
     CARABAO_WEEKS,
+    CARABAO_WEEKS.map(week => weekToDateOrdinal(week) - 2),
     DOMESTIC_CUP_ROUNDS,
     teams,
     fixtureCounter,
@@ -418,6 +437,7 @@ export const buildSeasonCompetitionBundle = (
     season,
     englishClubIds,
     FA_CUP_WEEKS,
+    FA_CUP_WEEKS.map(week => weekToDateOrdinal(week) - 1),
     DOMESTIC_CUP_ROUNDS,
     teams,
     fixtureCounter,
@@ -440,6 +460,7 @@ export const buildSeasonCompetitionBundle = (
     season,
     europeEntrants,
     EUROPE_WEEKS,
+    EUROPE_WEEKS.map(week => weekToDateOrdinal(week) - 3),
     EUROPE_ROUNDS,
     teams,
     fixtureCounter,
@@ -460,8 +481,9 @@ export const buildSeasonCompetitionBundle = (
   return { fixtures, competitions };
 };
 
-const resolveFixtureWinnerId = (fixture: Fixture, rng?: RandomGenerator) => {
+const resolveFixtureWinnerId = (fixture: Fixture, rng?: RandomGenerator): string | undefined => {
   if (fixture.winnerTeamId) return fixture.winnerTeamId;
+  if (fixture.resolution === 'void' || fixture.resolution === 'forfeit') return undefined;
   if ((fixture.homeScore || 0) > (fixture.awayScore || 0)) return fixture.homeTeamId;
   if ((fixture.awayScore || 0) > (fixture.homeScore || 0)) return fixture.awayTeamId;
   // Tied knockout: resolve via penalty shootout instead of silently advancing the home team.
@@ -476,9 +498,11 @@ const resolveFixtureWinnerId = (fixture: Fixture, rng?: RandomGenerator) => {
   return fixture.homeTeamId;
 };
 
-const resolveFixtureLoserId = (fixture: Fixture, rng?: RandomGenerator) => {
+const resolveFixtureLoserIds = (fixture: Fixture, rng?: RandomGenerator): string[] => {
+  if (fixture.resolution === 'void') return [fixture.homeTeamId, fixture.awayTeamId];
   const winnerTeamId = resolveFixtureWinnerId(fixture, rng);
-  return winnerTeamId === fixture.homeTeamId ? fixture.awayTeamId : fixture.homeTeamId;
+  if (!winnerTeamId) return [];
+  return [winnerTeamId === fixture.homeTeamId ? fixture.awayTeamId : fixture.homeTeamId];
 };
 
 const describeRoundDraw = (
@@ -526,8 +550,10 @@ export const resolveCompetitionProgression = (
       if (currentRound.completed || currentRound.fixtureIds.length === 0) return;
       if (currentRound.fixtureIds.some(fixtureId => !nextFixtures[fixtureId]?.isPlayed)) return;
 
-      const winnerTeamIds = currentRound.fixtureIds.map(fixtureId => resolveFixtureWinnerId(nextFixtures[fixtureId], rng));
-      const loserTeamIds = currentRound.fixtureIds.map(fixtureId => resolveFixtureLoserId(nextFixtures[fixtureId], rng));
+      const winnerTeamIds = currentRound.fixtureIds
+        .map(fixtureId => resolveFixtureWinnerId(nextFixtures[fixtureId], rng))
+        .filter((teamId): teamId is string => Boolean(teamId));
+      const loserTeamIds = currentRound.fixtureIds.flatMap(fixtureId => resolveFixtureLoserIds(nextFixtures[fixtureId], rng));
       const updatedRound: CompetitionRoundState = {
         ...currentRound,
         completed: true,
@@ -548,7 +574,7 @@ export const resolveCompetitionProgression = (
         if (advancingTeamIds.length > 0) {
           updatedCompetition.championTeamId = advancingTeamIds[0];
         }
-        updatedCompetition.runnerUpTeamId = finalFixture ? resolveFixtureLoserId(nextFixtures[finalFixture], rng) : undefined;
+        updatedCompetition.runnerUpTeamId = finalFixture ? resolveFixtureLoserIds(nextFixtures[finalFixture], rng)[0] : undefined;
         updatedCompetition.currentRound = currentRound.key;
         nextCompetitions[competition.id] = updatedCompetition;
         const champion = updatedCompetition.championTeamId ? teams[updatedCompetition.championTeamId] : null;

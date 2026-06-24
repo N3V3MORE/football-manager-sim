@@ -85,7 +85,7 @@ export default function MatchScreen() {
       setMatchFinished(false);
       setLogs(['Match is ready to start!']);
     }
-  }, [fixtureId, restoreStateKey]);
+  }, [fixtureId, restoreStateKey, isPlaying, liveMatches, fixtures]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;

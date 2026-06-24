@@ -42,7 +42,7 @@ import { useGameStore } from '../src/store/gameStore';
 import { isPlayerUnavailable } from '../src/core/playerStatusUtils';
 import { BoardObjective, CompetitionState, Fixture, Player, Team } from '../src/models/types';
 import { buildSquadPlan } from '../src/core/squadPlanningEngine';
-import { FREE_AGENT_TEAM_ID, createFreeAgentTeam } from '../src/core/freeAgentPool';
+import { FREE_AGENT_TEAM_ID, createFreeAgentTeam, isPlayableClub } from '../src/core/freeAgentPool';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
@@ -186,7 +186,7 @@ const checkPopulationStabilityOverSeasons = () => {
   );
 
   // Verify every team still has a minimum squad
-  Object.values(state.teams).forEach(team => {
+  Object.values(state.teams).filter(isPlayableClub).forEach(team => {
     const squad = Object.values(state.players).filter(p => p.teamId === team.id);
     assert(squad.length >= 11, `${team.name} should have at least 11 players after 2 seasons (got ${squad.length})`);
   });

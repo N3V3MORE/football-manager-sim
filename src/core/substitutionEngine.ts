@@ -55,6 +55,7 @@ export const applySubstitutions = (
   else if (team.tactics.mentality === 'Attacking') maxSubs = 3 + Math.floor(random() * ENGINE_CONFIG.SUBS_ATTACKING_BONUS_RANGE);
   else if (team.tactics.mentality === 'Defensive') maxSubs = 2 + Math.floor(random() * ENGINE_CONFIG.SUBS_DEFENSIVE_BONUS_RANGE);
   if (options?.maxSubsOverride !== undefined) maxSubs = options.maxSubsOverride;
+  let tacticalWindowCap = maxSubs;
   if (substitutionState) {
     const minute = options.minuteOverride ?? 60;
     const tiredPlayers = starters.filter(player => {
@@ -68,11 +69,15 @@ export const applySubstitutions = (
     const mentalityPressure = team.tactics.mentality === 'Attacking' ? 0.05 : team.tactics.mentality === 'Defensive' ? -0.03 : 0;
     const actChance = Math.max(0.12, Math.min(0.92, baseChance + minutePressure + fatiguePressure + mentalityPressure));
     if (tiredPlayers.length === 0 && random() > actChance) return;
+    const multiChangeRoll = random();
+    tacticalWindowCap = multiChangeRoll < 0.08 || tiredPlayers.length >= 5
+      ? 3
+      : (multiChangeRoll < 0.32 || tiredPlayers.length >= 3 ? 2 : 1);
   }
 
   const remainingMatchSubs = substitutionState ? Math.max(0, matchSubLimit - substitutionState.substitutesUsed) : 5;
   const remainingTacticalSubs = substitutionState ? Math.max(0, maxSubs - substitutionState.substitutesUsed) : maxSubs;
-  maxSubs = Math.min(remainingMatchSubs, remainingTacticalSubs, bench.length, maxSubs);
+  maxSubs = Math.min(remainingMatchSubs, remainingTacticalSubs, bench.length, maxSubs, tacticalWindowCap);
   if (maxSubs <= 0) return;
   const usedBench = new Set<string>();
   const usedOff = new Set<string>();

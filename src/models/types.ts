@@ -130,6 +130,7 @@ export interface Player {
   askingPrice: number;      // asking price in millions GBP (0 if not listed)
   matchesSuspended: number; // dynamically used for suspensions
   suspensionAppliedWeek?: number; // week when the current suspension was applied; skips decrement in same week
+  suspensionAppliedFixtureId?: string; // fixture that created the active suspension; avoids serving it in the same match
   injuryWeeks: number;      // full weeks unavailable through injury
   injuryAppliedWeek?: number; // week when the current injury was applied; skips decrement in same week
   injuryType?: string;
@@ -236,6 +237,8 @@ export type SquadPlan = {
 export interface Fixture {
   id: string;
   week: number;
+  /** Day offset from season start used for chronological ordering and fixture dates. */
+  dateOrdinal?: number;
   division?: LeagueDivision;
   competitionId: CompetitionId;
   competitionType: CompetitionType;
@@ -247,7 +250,7 @@ export interface Fixture {
   awayScore: number | null;
   isPlayed: boolean;
   winnerTeamId?: string;
-  resolution?: 'regular' | 'penalties' | 'forfeit';
+  resolution?: 'regular' | 'penalties' | 'forfeit' | 'void';
 }
 
 export type InboxMessageSource = 'assistant' | 'system';
@@ -331,6 +334,7 @@ export interface CompetitionRoundState {
   key: CompetitionRoundKey;
   label: string;
   week: number;
+  dateOrdinal?: number;
   entrantTeamIds: string[];
   fixtureIds: string[];
   byeTeamIds: string[];

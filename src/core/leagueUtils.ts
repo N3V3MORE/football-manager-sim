@@ -68,12 +68,14 @@ type RoundRobinMatch = { home: string; away: string };
 const createLeagueFixture = (
   id: string,
   week: number,
+  dateOrdinal: number | undefined,
   division: LeagueDivision,
   homeTeamId: string,
   awayTeamId: string
 ): Fixture => ({
   id,
   week,
+  dateOrdinal,
   division,
   competitionId: LEAGUE_COMPETITION_BY_DIVISION[division],
   competitionType: 'league',
@@ -209,7 +211,8 @@ export const buildRoundRobinFixtures = (
   teamIds: string[],
   division: LeagueDivision,
   fixtureCounterStart = 1,
-  weekSlots?: number[]
+  weekSlots?: number[],
+  dateOrdinals?: number[]
 ) => {
   const fixtures: Record<string, Fixture> = {};
   const indexedIds: (string | null)[] = teamIds.length % 2 !== 0 ? [...teamIds, null] : [...teamIds];
@@ -241,17 +244,19 @@ export const buildRoundRobinFixtures = (
   let fixtureCounter = fixtureCounterStart;
   firstHalfRounds.forEach((roundFixtures, roundIndex) => {
     const week = weekSlots?.[roundIndex] ?? roundIndex + 1;
+    const dateOrdinal = dateOrdinals?.[roundIndex];
     roundFixtures.forEach(fixture => {
       const fixtureId = `F${fixtureCounter++}`;
-      fixtures[fixtureId] = createLeagueFixture(fixtureId, week, division, fixture.home, fixture.away);
+      fixtures[fixtureId] = createLeagueFixture(fixtureId, week, dateOrdinal, division, fixture.home, fixture.away);
     });
   });
 
   [...firstHalfRounds].reverse().forEach((roundFixtures, secondHalfIndex) => {
     const week = weekSlots?.[rounds + secondHalfIndex] ?? rounds + secondHalfIndex + 1;
+    const dateOrdinal = dateOrdinals?.[rounds + secondHalfIndex];
     roundFixtures.forEach(fixture => {
       const fixtureId = `F${fixtureCounter++}`;
-      fixtures[fixtureId] = createLeagueFixture(fixtureId, week, division, fixture.away, fixture.home);
+      fixtures[fixtureId] = createLeagueFixture(fixtureId, week, dateOrdinal, division, fixture.away, fixture.home);
     });
   });
 

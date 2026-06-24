@@ -5,10 +5,11 @@ import { router } from 'expo-router';
 import { CalendarFixtureRow } from '@/components/calendar/calendar-fixture-row';
 import { CalendarWindowBanner } from '@/components/calendar/calendar-window-banner';
 import { useGameStore } from '@/src/store/gameStore';
-import { formatSeasonLabel, formatShortDate, getWindowStatus } from '@/src/utils/calendar';
+import { formatFixtureShortDate, formatSeasonLabel, getWindowStatus } from '@/src/utils/calendar';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { PageHeader } from '@/components/ui/page-header';
 import { Fixture } from '@/src/models/types';
+import { compareFixturesChronologically } from '@/src/core/fixtureLifecycle';
 
 type WindowBanner = {
   text: string;
@@ -45,7 +46,7 @@ export default function CalendarScreen() {
       if (!userTeamId) return [];
       return Object.values(allFixtures)
         .filter(fixture => fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId)
-        .sort((a, b) => a.week - b.week);
+        .sort(compareFixturesChronologically);
     },
     [allFixtures, userTeamId]
   );
@@ -72,7 +73,7 @@ export default function CalendarScreen() {
       return [{
         id: fixture.id,
         week: fixture.week,
-        dateLabel: formatShortDate(fixture.week, seasonNumber),
+        dateLabel: formatFixtureShortDate(fixture, seasonNumber),
         competitionLabel: competition?.shortName || fixture.competitionId,
         roundLabel,
         isHome,

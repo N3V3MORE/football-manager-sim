@@ -8,7 +8,8 @@ import { CareerStatsCard } from '@/components/hub/career-stats-card';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { getSeasonWeekLimit, sortTeamsByTable } from '@/src/core/leagueUtils';
 import { getCompetitionPanelForTeam, getCompetitionShortName } from '@/src/core/competitionEngine';
-import { formatShortDate } from '@/src/utils/calendar';
+import { formatFixtureShortDate, formatShortDate } from '@/src/utils/calendar';
+import { compareFixturesChronologically } from '@/src/core/fixtureLifecycle';
 import { Fixture, Player, Team } from '@/src/models/types';
 import { HubHeader } from '@/components/hub/hub-header';
 import { MiniTableCard } from '@/components/hub/mini-table-card';
@@ -20,6 +21,7 @@ import { UpcomingFixturesCard, UpcomingFixtureCardRow } from '@/components/hub/u
 import { Ionicons } from '@expo/vector-icons';
 
 type UpcomingFixtureRow = {
+  id: string;
   week: number;
   match: Fixture | undefined;
 };
@@ -74,10 +76,12 @@ export default function HubScreen() {
   );
 
   const myNextMatch = useMemo(
-    () => weekFixtures.find(fixture =>
-      !fixture.isPlayed &&
-      (fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId)
-    ),
+    () => weekFixtures
+      .filter(fixture =>
+        !fixture.isPlayed &&
+        (fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId)
+      )
+      .sort(compareFixturesChronologically)[0],
     [weekFixtures, userTeamId]
   );
 
@@ -126,18 +130,18 @@ export default function HubScreen() {
 
   const seasonWeekLimit = useMemo(() => getSeasonWeekLimit(fixtures, competitions), [competitions, fixtures]);
   const upcomingFixtures = useMemo<UpcomingFixtureRow[]>(() => {
-    const rows: UpcomingFixtureRow[] = [];
-    for (let week = currentWeek; week <= Math.min(currentWeek + 4, seasonWeekLimit); week++) {
-      const match = fixtureList.find(
-        fixture => fixture.week === week && (fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId)
-      );
-      rows.push({ week, match });
-    }
-    return rows;
+    const matches = fixtureList
+      .filter(fixture => fixture.week >= currentWeek && (fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId))
+      .sort(compareFixturesChronologically)
+      .slice(0, 5)
+      .map(match => ({ id: match.id, week: match.week, match }));
+
+    if (matches.length > 0) return matches;
+    return [{ id: `rest-${currentWeek}`, week: Math.min(currentWeek, seasonWeekLimit), match: undefined }];
   }, [currentWeek, fixtureList, seasonWeekLimit, userTeamId]);
 
   const upcomingFixtureRows = useMemo<UpcomingFixtureCardRow[]>(() => (
-    upcomingFixtures.map(({ week, match }) => {
+    upcomingFixtures.map(({ id, week, match }) => {
       const opponentId = match
         ? (match.homeTeamId === userTeamId ? match.awayTeamId : match.homeTeamId)
         : null;
@@ -146,8 +150,9 @@ export default function HubScreen() {
       const isHome = match?.homeTeamId === userTeamId;
 
       return {
+        id,
         week,
-        dateLabel: weekToDate(week),
+        dateLabel: match ? formatFixtureShortDate(match) : weekToDate(week),
         isCurrentWeek: week === currentWeek,
         isHome: !!isHome,
         opponentName: opponent?.name || null,
@@ -213,7 +218,7 @@ export default function HubScreen() {
 
   const myPosition = miniTableData.myPosition;
   const myRecord = `${myTeam.wins}W ${myTeam.draws}D ${myTeam.losses}L`;
-  const nextFixtureLabel = `${myNextMatch ? getCompetitionShortName(myNextMatch.competitionId) : 'Matchday'} | ${homeTheme?.stadium || 'TBD'} | ${weekToDate(currentWeek)}`;
+  const nextFixtureLabel = `${myNextMatch ? getCompetitionShortName(myNextMatch.competitionId) : 'Matchday'} | ${homeTheme?.stadium || 'TBD'} | ${myNextMatch ? formatFixtureShortDate(myNextMatch) : weekToDate(currentWeek)}`;
   const competitionPanels = [
     getCompetitionPanelForTeam('carabao-cup', competitions, fixtures, teams, myTeam.id, currentWeek),
     getCompetitionPanelForTeam('fa-cup', competitions, fixtures, teams, myTeam.id, currentWeek),

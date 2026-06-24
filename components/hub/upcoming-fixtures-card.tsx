@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getSecondaryKitColor } from '@/src/constants/teamColors';
 
 export type UpcomingFixtureCardRow = {
+  id: string;
   week: number;
   dateLabel: string;
   isCurrentWeek: boolean;
@@ -23,7 +24,7 @@ export function UpcomingFixturesCard({ rows, onPress }: UpcomingFixturesCardProp
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
       <Text style={styles.cardTitle}>Upcoming Fixtures</Text>
       {rows.map((row) => (
-        <View key={row.week} style={[styles.calRow, row.isCurrentWeek && styles.calRowCurrent]}>
+        <View key={row.id} style={[styles.calRow, row.isCurrentWeek && styles.calRowCurrent]}>
           <View style={styles.calDateBlock}>
             <Text style={[styles.calWeek, row.isCurrentWeek && styles.calWeekCurrent]}>Wk {row.week}</Text>
             <Text style={styles.calDate}>{row.dateLabel}</Text>

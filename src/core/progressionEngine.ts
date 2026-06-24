@@ -54,9 +54,10 @@ const getAverageRecentRating = (player: Player) => {
 const getSeasonProgressionDelta = (
   player: Player,
   team: Team | undefined,
+  totalClubMatches: number | undefined,
   rng: () => number
 ) => {
-  const teamMinutes = Math.max(1, (team?.played || 0) * 90);
+  const teamMinutes = Math.max(1, (totalClubMatches ?? team?.played ?? 0) * 90);
   const minutesShare = Math.min(1, (player.minutesPlayed || 0) / teamMinutes);
   const recentRating = getAverageRecentRating(player);
   const performanceBoost = Math.max(-0.16, Math.min(0.18, (recentRating - 6.6) * 0.08));
@@ -172,26 +173,17 @@ export const computeWeeklyProgression = (
 
   const allPlayers = Object.values(players);
   const updatedPlayers = { ...players };
-  // Only decrement suspensions for teams that actually played a fixture this week.
-  const teamsWithFixtureThisWeek = new Set(playedFixtures
-    .filter(f => f.isPlayed)
-    .flatMap(f => [f.homeTeamId, f.awayTeamId]));
   allPlayers.forEach(player => {
     const newEnergy = Math.min(100, player.energy + ENGINE_CONFIG.WEEKLY_ENERGY_RECOVERY);
-    const playerTeamPlayed = teamsWithFixtureThisWeek.has(player.teamId);
-    const shouldDecrementSuspension = playerTeamPlayed && (!player.suspensionAppliedWeek || player.suspensionAppliedWeek < currentWeek);
     const shouldDecrementInjury = !player.injuryAppliedWeek || player.injuryAppliedWeek < currentWeek;
-    const newSuspension = shouldDecrementSuspension ? Math.max(0, player.matchesSuspended - 1) : player.matchesSuspended;
     const newInjuryWeeks = shouldDecrementInjury ? Math.max(0, (player.injuryWeeks || 0) - 1) : (player.injuryWeeks || 0);
     if (
       newEnergy !== player.energy ||
-      newSuspension !== player.matchesSuspended ||
       newInjuryWeeks !== (player.injuryWeeks || 0)
     ) {
       updatedPlayers[player.id] = {
         ...player,
         energy: newEnergy,
-        matchesSuspended: newSuspension,
         injuryWeeks: newInjuryWeeks,
         injuryType: newInjuryWeeks > 0 ? player.injuryType : undefined,
       };
@@ -247,9 +239,15 @@ export const computeWeeklyProgression = (
   }
 
   if (currentWeek === seasonWeekLimit) {
+    const playedMatchesByTeam = Object.values(fixtures).reduce<Record<string, number>>((counts, fixture) => {
+      if (!fixture.isPlayed) return counts;
+      counts[fixture.homeTeamId] = (counts[fixture.homeTeamId] || 0) + 1;
+      counts[fixture.awayTeamId] = (counts[fixture.awayTeamId] || 0) + 1;
+      return counts;
+    }, {});
     Object.values(updatedPlayers).forEach(player => {
       const team = updatedTeams[player.teamId];
-      let overallRating = player.overallRating + getSeasonProgressionDelta(player, team, random);
+      let overallRating = player.overallRating + getSeasonProgressionDelta(player, team, playedMatchesByTeam[player.teamId], random);
       overallRating = Math.max(1, Math.min(99, overallRating));
 
       const nextAge = player.age + 1;

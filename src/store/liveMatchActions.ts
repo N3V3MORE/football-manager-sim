@@ -18,6 +18,7 @@ import { isPlayerUnavailable } from '../core/playerStatusUtils';
 import { resolveCompetitionProgression } from '../core/competitionEngine';
 import { removePlayerFromTeamSelections } from '../core/formationMapUtils';
 import { selectDesignatedGoalkeeperId, selectEmergencyGoalkeeperId, validateMatchdayXI } from '../core/matchdayValidation';
+import { applyFixtureSuspensionService, getAdministrativeFixtureOutcome } from '../core/fixtureLifecycle';
 import {
   LiveMatchState,
   drainLiveMatchEnergy,
@@ -41,12 +42,28 @@ type LiveMatchActionPatch = LiveMatchActionState | Partial<LiveMatchActionState>
 
 const LIVE_SUBSTITUTION_CHECKPOINTS = [56, 66, 76, 84];
 
-const createLiveSubstitutionState = () => ({
+type LiveSubstitutionState = {
+  substitutesUsed: number;
+  substitutionWindowsUsed: number;
+  maxSubstitutes?: number;
+  maxWindows?: number;
+};
+
+const createLiveSubstitutionState = (): LiveSubstitutionState => ({
   substitutesUsed: 0,
   substitutionWindowsUsed: 0,
   maxSubstitutes: 5,
   maxWindows: 3,
 });
+
+const canUseLiveSubstitutionWindow = (state: LiveSubstitutionState) => (
+  state.substitutesUsed < (state.maxSubstitutes || 5) && state.substitutionWindowsUsed < (state.maxWindows || 3)
+);
+
+const recordLiveSubstitution = (state: LiveSubstitutionState) => {
+  state.substitutesUsed += 1;
+  state.substitutionWindowsUsed += 1;
+};
 
 const replaceFormationMapPlayer = (team: LiveMatchActionState['teams'][string], offPlayerId: string, onPlayerId: string) => {
   const formationMap = team.formationMap || {};
@@ -73,11 +90,14 @@ export const processLiveMatchMinuteState = (
   const fixture = state.fixtures[fixtureId];
   if (!fixture || fixture.isPlayed) return { patch: state, event: eventMsg };
   const activeRng = rng ?? createFixtureEventRandomGenerator(fixtureId, getPossessionIndexForMinute(minute) ?? minute, state.rngState ?? 1);
-  const random = activeRng.next;
 
   const storedLiveState = state.liveMatches?.[fixtureId];
   const processedMinutes = new Set(storedLiveState?.processedMinutes || []);
   if (processedMinutes.has(minute)) return { patch: state, event: eventMsg };
+  const highestProcessedMinute = processedMinutes.size > 0 ? Math.max(...processedMinutes) : 0;
+  if (minute !== highestProcessedMinute + 1) {
+    throw new Error(`Live match minutes must be processed sequentially; expected ${highestProcessedMinute + 1}, got ${minute}.`);
+  }
 
   const updatedPlayers = { ...state.players };
   const updatedTeams = { ...state.teams };
@@ -113,24 +133,29 @@ export const processLiveMatchMinuteState = (
   const homeValidation = validateMatchdayXI(homeStarters, { teamId: homeTeam.id });
   const awayValidation = validateMatchdayXI(awayStarters, { teamId: awayTeam.id });
   if (!homeValidation.ok || !awayValidation.ok) {
-    const hScore = homeValidation.ok === awayValidation.ok ? 0 : homeValidation.ok ? 3 : 0;
-    const aScore = homeValidation.ok === awayValidation.ok ? 0 : awayValidation.ok ? 3 : 0;
-    const winnerTeamId = fixture.isKnockout
-      ? hScore === aScore
-        ? (random() < 0.5 ? homeTeam.id : awayTeam.id)
-        : hScore > aScore ? homeTeam.id : awayTeam.id
-      : undefined;
-    const includeTableStats = fixture.competitionType === 'league';
+    const outcome = getAdministrativeFixtureOutcome(fixture, homeValidation.ok, awayValidation.ok);
     updatedTeams[homeTeam.id] = {
-      ...updateTeamStats(homeTeam, hScore, aScore, includeTableStats),
+      ...(outcome.resolution === 'void'
+        ? homeTeam
+        : updateTeamStats(homeTeam, outcome.homeScore, outcome.awayScore, outcome.includeTableStats)),
       lastStartingXI: homeValidation.ok ? homeStarters.map(player => player.id) : [],
     };
     updatedTeams[awayTeam.id] = {
-      ...updateTeamStats(awayTeam, aScore, hScore, includeTableStats),
+      ...(outcome.resolution === 'void'
+        ? awayTeam
+        : updateTeamStats(awayTeam, outcome.awayScore, outcome.homeScore, outcome.includeTableStats)),
       lastStartingXI: awayValidation.ok ? awayStarters.map(player => player.id) : [],
     };
     eventMsg = `Fixture resolved by forfeit: ${homeValidation.reason || 'home XI legal'}; ${awayValidation.reason || 'away XI legal'}.`;
-    const forfeitedFixture = { ...updatedFixture, homeScore: hScore, awayScore: aScore, isPlayed: true, winnerTeamId, resolution: 'forfeit' as const };
+    const forfeitedFixture = {
+      ...updatedFixture,
+      homeScore: outcome.homeScore,
+      awayScore: outcome.awayScore,
+      isPlayed: true,
+      winnerTeamId: outcome.winnerTeamId,
+      resolution: outcome.resolution,
+    };
+    const suspensionServedPlayers = applyFixtureSuspensionService(updatedPlayers, forfeitedFixture);
     const nextFixtures = { ...state.fixtures, [fixtureId]: forfeitedFixture };
     const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, updatedTeams);
     return {
@@ -138,6 +163,7 @@ export const processLiveMatchMinuteState = (
         fixtures: competitionProgression.fixtures,
         competitions: competitionProgression.competitions,
         teams: updatedTeams,
+        players: suspensionServedPlayers,
         news: competitionProgression.generatedNews.length > 0
           ? [...competitionProgression.generatedNews, ...state.news].slice(0, 20)
           : state.news,
@@ -249,7 +275,8 @@ export const processLiveMatchMinuteState = (
 
       const bench = isHome ? availableHomeBench : availableAwayBench;
       const reserveGoalkeeper = bench.find(player => player.position === 'GK' && !sentOffPlayers.has(player.id) && !isPlayerUnavailable(player));
-      if (reserveGoalkeeper && xi.length >= 7) {
+      const substitutionState = isHome ? homeSubstitutionState : awaySubstitutionState;
+      if (reserveGoalkeeper && xi.length >= 7 && canUseLiveSubstitutionWindow(substitutionState)) {
         const outfielderOff = [...xi]
           .filter(player => player.position !== 'GK')
           .sort((a, b) => a.overallRating - b.overallRating)[0];
@@ -271,16 +298,14 @@ export const processLiveMatchMinuteState = (
           homeTeam = replaceFormationMapPlayer(homeTeam, outfielderOff.id, reserveGoalkeeper.id);
           updatedTeams[homeTeam.id] = homeTeam;
           homeGoalkeeperId = reserveGoalkeeper.id;
-          homeSubstitutionState.substitutesUsed = Math.min(homeSubstitutionState.maxSubstitutes || 5, homeSubstitutionState.substitutesUsed + 1);
-          homeSubstitutionState.substitutionWindowsUsed = Math.min(homeSubstitutionState.maxWindows || 3, homeSubstitutionState.substitutionWindowsUsed + 1);
+          recordLiveSubstitution(homeSubstitutionState);
         } else {
           awayStarters = awayStarters.map(player => player.id === outfielderOff.id ? reserveGoalkeeper : player);
           availableAwayBench = availableAwayBench.filter(player => player.id !== reserveGoalkeeper.id);
           awayTeam = replaceFormationMapPlayer(awayTeam, outfielderOff.id, reserveGoalkeeper.id);
           updatedTeams[awayTeam.id] = awayTeam;
           awayGoalkeeperId = reserveGoalkeeper.id;
-          awaySubstitutionState.substitutesUsed = Math.min(awaySubstitutionState.maxSubstitutes || 5, awaySubstitutionState.substitutesUsed + 1);
-          awaySubstitutionState.substitutionWindowsUsed = Math.min(awaySubstitutionState.maxWindows || 3, awaySubstitutionState.substitutionWindowsUsed + 1);
+          recordLiveSubstitution(awaySubstitutionState);
         }
         const coverMessage = `${isHome ? homeTeam.name : awayTeam.name} bring on reserve goalkeeper ${reserveGoalkeeper.name}.`;
         eventMsg = eventMsg ? `${eventMsg} ${coverMessage}` : coverMessage;
@@ -299,6 +324,7 @@ export const processLiveMatchMinuteState = (
         redCards: player.redCards + 1,
         matchesSuspended: 3,
         suspensionAppliedWeek: fixture.week,
+        suspensionAppliedFixtureId: fixture.id,
       };
       addContribution(playerId, 'redCards');
       sentOffPlayers.add(playerId);
@@ -393,28 +419,34 @@ export const processLiveMatchMinuteState = (
   if (!homeContinuation.ok || !awayContinuation.ok) {
     const homeCanContinue = homeContinuation.ok;
     const awayCanContinue = awayContinuation.ok;
-    if (homeCanContinue && !awayCanContinue) updatedFixture.homeScore = Math.max(updatedFixture.homeScore || 0, (updatedFixture.awayScore || 0) + 1, 3);
-    if (awayCanContinue && !homeCanContinue) updatedFixture.awayScore = Math.max(updatedFixture.awayScore || 0, (updatedFixture.homeScore || 0) + 1, 3);
-    const winnerTeamId = fixture.isKnockout
-      ? homeCanContinue === awayCanContinue
-        ? undefined
-        : homeCanContinue ? homeTeam.id : awayTeam.id
-      : undefined;
+    const outcome = getAdministrativeFixtureOutcome(fixture, homeCanContinue, awayCanContinue);
+    if (outcome.resolution === 'void') {
+      updatedFixture.homeScore = outcome.homeScore;
+      updatedFixture.awayScore = outcome.awayScore;
+    } else {
+      if (homeCanContinue && !awayCanContinue) updatedFixture.homeScore = Math.max(updatedFixture.homeScore || 0, (updatedFixture.awayScore || 0) + 1, outcome.homeScore);
+      if (awayCanContinue && !homeCanContinue) updatedFixture.awayScore = Math.max(updatedFixture.awayScore || 0, (updatedFixture.homeScore || 0) + 1, outcome.awayScore);
+    }
     const forfeitedFixture = {
       ...updatedFixture,
       isPlayed: true,
-      winnerTeamId,
-      resolution: 'forfeit' as const,
+      winnerTeamId: outcome.winnerTeamId,
+      resolution: outcome.resolution,
     };
-    const includeTableStats = fixture.competitionType === 'league';
+    const includeTableStats = outcome.includeTableStats;
     updatedTeams[homeTeam.id] = {
-      ...updateTeamStats(homeTeam, forfeitedFixture.homeScore || 0, forfeitedFixture.awayScore || 0, includeTableStats),
+      ...(outcome.resolution === 'void'
+        ? homeTeam
+        : updateTeamStats(homeTeam, forfeitedFixture.homeScore || 0, forfeitedFixture.awayScore || 0, includeTableStats)),
       lastStartingXI: homeStarterIds,
     };
     updatedTeams[awayTeam.id] = {
-      ...updateTeamStats(awayTeam, forfeitedFixture.awayScore || 0, forfeitedFixture.homeScore || 0, includeTableStats),
+      ...(outcome.resolution === 'void'
+        ? awayTeam
+        : updateTeamStats(awayTeam, forfeitedFixture.awayScore || 0, forfeitedFixture.homeScore || 0, includeTableStats)),
       lastStartingXI: awayStarterIds,
     };
+    const suspensionServedPlayers = applyFixtureSuspensionService(updatedPlayers, forfeitedFixture);
     const nextFixtures = { ...state.fixtures, [fixtureId]: forfeitedFixture };
     const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, updatedTeams);
     return {
@@ -422,7 +454,7 @@ export const processLiveMatchMinuteState = (
         fixtures: competitionProgression.fixtures,
         competitions: competitionProgression.competitions,
         teams: updatedTeams,
-        players: updatedPlayers,
+        players: suspensionServedPlayers,
         news: competitionProgression.generatedNews.length > 0
           ? [...competitionProgression.generatedNews, ...state.news].slice(0, 20)
           : state.news,
@@ -642,6 +674,7 @@ export const finishLiveMatchState = (
       updatedTeams[injuredTeam.id] = removePlayerFromTeamSelections(injuredTeam, event.playerId);
     }
   });
+  const suspensionServedPlayers = applyFixtureSuspensionService(updatedPlayers, updatedFixture);
   const nextFixtures = { ...state.fixtures, [fixtureId]: updatedFixture };
   const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, updatedTeams);
   const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);
@@ -650,7 +683,7 @@ export const finishLiveMatchState = (
     userTeamId: state.userTeamId,
     fixture: updatedFixture,
     teams: updatedTeams,
-    players: updatedPlayers,
+    players: suspensionServedPlayers,
     previousPlayers,
   });
 
@@ -658,7 +691,7 @@ export const finishLiveMatchState = (
     fixtures: competitionProgression.fixtures,
     competitions: competitionProgression.competitions,
     teams: updatedTeams,
-    players: updatedPlayers,
+    players: suspensionServedPlayers,
     news: competitionProgression.generatedNews.length > 0
       ? [...competitionProgression.generatedNews, ...state.news].slice(0, 20)
       : state.news,

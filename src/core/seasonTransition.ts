@@ -20,7 +20,7 @@ import {
 import { appointReplacementManager, refreshManagerForNewSeason } from './managerUtils';
 import { buildQuickSimLineup } from './lineupEngine';
 import { getBudgetForClass } from '../utils/calendar';
-import { isPlayableClub } from './freeAgentPool';
+import { FREE_AGENT_TEAM_ID, ensureFreeAgentTeam, isPlayableClub } from './freeAgentPool';
 import { replenishUnderfilledSquads } from './youthIntake';
 import { getSquadPolicy } from './squadPolicy';
 import { RandomGenerator, resolveRandom } from './random';
@@ -83,6 +83,7 @@ const resetPlayerSeasonStats = (player: Player): Player => ({
   ...player,
   matchesSuspended: player.matchesSuspended,
   suspensionAppliedWeek: undefined,
+  suspensionAppliedFixtureId: undefined,
   injuryWeeks: Math.max(0, (player.injuryWeeks || 0) - OFF_SEASON_INJURY_RECOVERY_WEEKS),
   injuryAppliedWeek: undefined,
   injuryType: (player.injuryWeeks || 0) > OFF_SEASON_INJURY_RECOVERY_WEEKS ? player.injuryType : undefined,
@@ -210,7 +211,7 @@ export const advanceSeason = (
   const random = resolveRandom(rng);
   const seasonNews: string[] = [];
   let contractAdjustedPlayers = { ...players };
-  let contractAdjustedTeams = { ...teams };
+  let contractAdjustedTeams = ensureFreeAgentTeam({ ...teams });
 
   Object.values(players).forEach(player => {
     if (player.contractLeft > 0) return;
@@ -220,10 +221,12 @@ export const advanceSeason = (
     if (player.teamId === userTeamId) {
       const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId, contractAdjustedPlayers);
       if (!destinationTeamId) {
-        contractAdjustedPlayers[player.id] = {
-          ...player,
-          contractLeft: 1,
-        };
+        const moved = movePlayerToTeam(contractAdjustedPlayers, contractAdjustedTeams, player.id, FREE_AGENT_TEAM_ID, {
+          contractLeft: 0,
+        });
+        contractAdjustedPlayers = moved.players;
+        contractAdjustedTeams = moved.teams;
+        seasonNews.push(`${player.name} leaves ${currentTeam.name} after his contract expires.`);
         return;
       }
       const moved = movePlayerToTeam(contractAdjustedPlayers, contractAdjustedTeams, player.id, destinationTeamId, {
@@ -253,13 +256,11 @@ export const advanceSeason = (
     // Release, sell, or no squad-plan decision: attempt to move to a destination team.
     const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId, contractAdjustedPlayers);
     if (!destinationTeamId) {
-      // Conservative fallback: renew with standard terms when no suitable destination exists.
-      const renewal = getRenewalOffer(player);
-      contractAdjustedPlayers[player.id] = {
-        ...player,
-        contractLeft: renewal.years,
-        wage: renewal.wage,
-      };
+      const moved = movePlayerToTeam(contractAdjustedPlayers, contractAdjustedTeams, player.id, FREE_AGENT_TEAM_ID, {
+        contractLeft: 0,
+      });
+      contractAdjustedPlayers = moved.players;
+      contractAdjustedTeams = moved.teams;
       return;
     }
 
@@ -426,7 +427,8 @@ export const advanceSeason = (
   const nextSeasonBundle = buildSeasonCompetitionBundle(
     lineupSeededTeams,
     currentSeasonNumber + 1,
-    europeQualifiedTeamIds
+    europeQualifiedTeamIds,
+    { next: random }
   );
 
   const boardObjectives = userTeamId && lineupSeededTeams[userTeamId]

@@ -17,6 +17,7 @@ import { FREE_AGENT_TEAM_ID, ensureFreeAgentTeam, isPlayableClub } from '../core
 import { getSquadPolicy } from '../core/squadPolicy';
 import { createFixtureEventRandomGenerator } from '../core/random';
 import { buildMovedPlayer } from '../core/playerMovement';
+import { compareFixturesChronologically } from '../core/fixtureLifecycle';
 import {
   generateAssistantWeekMessages,
   generateBoardInboxMessages,
@@ -30,23 +31,6 @@ import {
 
 export type WeeklyLifecycleState = GameState & {
   liveMatches: Record<string, LiveMatchState>;
-};
-
-const FIXTURE_CHRONOLOGY: Record<string, number> = {
-  europe: 0,
-  'carabao-cup': 1,
-  'fa-cup': 2,
-  'premier-league': 3,
-  championship: 3,
-  'league-one': 3,
-  'league-two': 3,
-};
-
-const compareFixturesChronologically = (left: { week: number; competitionId: string; id: string }, right: { week: number; competitionId: string; id: string }) => {
-  if (left.week !== right.week) return left.week - right.week;
-  const competitionDelta = (FIXTURE_CHRONOLOGY[left.competitionId] ?? 99) - (FIXTURE_CHRONOLOGY[right.competitionId] ?? 99);
-  if (competitionDelta !== 0) return competitionDelta;
-  return left.id.localeCompare(right.id, undefined, { numeric: true });
 };
 
 const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TState): TState => {

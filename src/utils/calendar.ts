@@ -1,6 +1,7 @@
 // ─── Premier League Calendar ──────────────────────────────────────────────────
 // Season 2024/25 starts on Sat 10 Aug 2024.
-// Each matchweek is 7 days apart. Week 38 ≈ Sun 25 May 2025.
+// Week numbers are simulation slots; fixtures can carry date ordinals so midweek
+// league/cup matches can share the same numbered week without moving dates back.
 //
 // ⚠️ IMPORTANT: All date-formatting functions accept an optional `season` parameter
 // (defaults to 1). Callers MUST pass the current season number to ensure dates
@@ -8,10 +9,43 @@
 // display incorrect dates after season 1. Phase 8 tracks the UI sweep for this.
 
 import { ENGINE_CONFIG } from '../config/engineConfig';
+import type { Fixture } from '../models/types';
 
 export const SEASON_START = new Date(2024, 7, 10); // Aug 10 2024
+export const WINTER_WINDOW_OPEN_ORDINAL = 144; // 1 Jan 2025 in season one
+export const LEAGUE_END_ORDINAL = 288; // 25 May 2025 in season one
+export const SEASON_FINAL_ORDINAL = 309; // Leaves roughly eight off-season weeks
 
 const getSeasonStart = (season = 1) => new Date(2024 + Math.max(0, season - 1), 7, 10);
+
+const interpolateOrdinal = (
+  week: number,
+  startWeek: number,
+  startOrdinal: number,
+  endWeek: number,
+  endOrdinal: number
+) => {
+  if (endWeek <= startWeek) return startOrdinal;
+  const ratio = (week - startWeek) / (endWeek - startWeek);
+  return Math.round(startOrdinal + (endOrdinal - startOrdinal) * ratio);
+};
+
+export const weekToDateOrdinal = (week: number): number => {
+  const normalizedWeek = Math.max(1, week);
+  if (normalizedWeek <= 19) {
+    return interpolateOrdinal(normalizedWeek, 1, 0, 19, WINTER_WINDOW_OPEN_ORDINAL);
+  }
+  if (normalizedWeek <= 38) {
+    return interpolateOrdinal(normalizedWeek, 19, WINTER_WINDOW_OPEN_ORDINAL, 38, LEAGUE_END_ORDINAL);
+  }
+  return interpolateOrdinal(normalizedWeek, 38, LEAGUE_END_ORDINAL, 51, SEASON_FINAL_ORDINAL);
+};
+
+export const dateOrdinalToDate = (dateOrdinal: number, season = 1): Date => {
+  const d = getSeasonStart(season);
+  d.setDate(d.getDate() + Math.max(0, Math.round(dateOrdinal)));
+  return d;
+};
 
 /**
  * Returns a formatted season label like "2024/25 Fixtures".
@@ -24,17 +58,16 @@ export const formatSeasonLabel = (season = 1): string => {
 
 /**
  * Returns a JS Date for the given matchweek.
- */
-/**
- * Returns a JS Date for the given matchweek.
  * @param week - Matchweek number (1-based).
  * @param season - Season number (1 = 2024/25, 2 = 2025/26, etc.). Must be passed for correct year-boundary display.
  */
 export const weekToDate = (week: number, season = 1): Date => {
-  const d = getSeasonStart(season);
-  d.setDate(d.getDate() + (week - 1) * 7);
-  return d;
+  return dateOrdinalToDate(weekToDateOrdinal(week), season);
 };
+
+export const fixtureToDate = (fixture: Pick<Fixture, 'week' | 'dateOrdinal'>, season = 1): Date => (
+  dateOrdinalToDate(fixture.dateOrdinal ?? weekToDateOrdinal(fixture.week), season)
+);
 
 /**
  * Returns a short human-readable date string e.g. "Sat 10 Aug"
@@ -52,6 +85,13 @@ export const formatMatchDate = (week: number, season = 1): string => {
  */
 export const formatShortDate = (week: number, season = 1): string => {
   return weekToDate(week, season).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+  });
+};
+
+export const formatFixtureShortDate = (fixture: Pick<Fixture, 'week' | 'dateOrdinal'>, season = 1): string => {
+  return fixtureToDate(fixture, season).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
   });

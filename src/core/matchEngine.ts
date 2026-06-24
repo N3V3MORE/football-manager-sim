@@ -12,6 +12,7 @@ import { isPlayerUnavailable } from './playerStatusUtils';
 import { createFixtureEventRandomGenerator, RandomGenerator, resolveRandom } from './random';
 import { applyMatchResult } from './teamUtils';
 import { selectEmergencyGoalkeeperId, selectDesignatedGoalkeeperId, validateMatchdayXI } from './matchdayValidation';
+import { applyFixtureSuspensionService, getAdministrativeFixtureOutcome } from './fixtureLifecycle';
 import {
   addPlayerStat,
   avgStat,
@@ -44,6 +45,26 @@ const createSubstitutionState = (): MatchSubstitutionState => ({
   maxSubstitutes: 5,
   maxWindows: 3,
 });
+
+const canUseSubstitutionWindow = (state: MatchSubstitutionState) => (
+  state.substitutesUsed < state.maxSubstitutes && state.substitutionWindowsUsed < state.maxWindows
+);
+
+const recordSubstitution = (state: MatchSubstitutionState) => {
+  state.substitutesUsed += 1;
+  state.substitutionWindowsUsed += 1;
+};
+
+const drainQuickMatchEnergy = (players: Player[], team: Team) => {
+  const drainMultiplier =
+    (team.tactics.tempo === 'Fast' ? ENGINE_CONFIG.TEMPO_FAST_DRAIN_MULTIPLIER : 1.0) *
+    (team.tactics.pressing === 'High' ? ENGINE_CONFIG.PRESSING_HIGH_DRAIN_MULTIPLIER : 1.0);
+  const drain = (ENGINE_CONFIG.BASE_POST_MATCH_ENERGY_DRAIN / ENGINE_CONFIG.TOTAL_POSSESSIONS) * drainMultiplier;
+  return players.map(player => ({
+    ...player,
+    energy: Math.max(0, player.energy - drain),
+  }));
+};
 
 const replaceFormationMapPlayer = (team: Team, offPlayerId: string, onPlayerId: string): Team => {
   const formationMap = team.formationMap || {};
@@ -515,7 +536,6 @@ export const quickSimMatch = (
   options?: { rng?: RandomGenerator }
 ): { players: Record<string, Player>, teams: Record<string, Team>, fixture: Fixture, events: string[] } => {
   const rng = options?.rng ?? createFixtureEventRandomGenerator(fixtureId, 0);
-  const random = rng.next;
   const fixture = fixtures[fixtureId];
   if (!fixture || fixture.isPlayed) return { players, teams, fixture, events: [] };
 
@@ -536,32 +556,29 @@ export const quickSimMatch = (
   if (!homeValidation.ok || !awayValidation.ok) {
     const homeCanPlay = homeValidation.ok;
     const awayCanPlay = awayValidation.ok;
-    const hScore = homeCanPlay === awayCanPlay ? 0 : homeCanPlay ? 3 : 0;
-    const aScore = homeCanPlay === awayCanPlay ? 0 : awayCanPlay ? 3 : 0;
-    const winnerTeamId = fixture.isKnockout
-      ? hScore === aScore
-        ? (random() < 0.5 ? homeTeam.id : awayTeam.id)
-        : hScore > aScore ? homeTeam.id : awayTeam.id
-      : undefined;
-    const includeTableStats = fixture.competitionType === 'league';
+    const outcome = getAdministrativeFixtureOutcome(fixture, homeCanPlay, awayCanPlay);
     updatedTeams[homeTeam.id] = {
-      ...applyMatchResult(homeTeam, hScore, aScore, includeTableStats),
+      ...(outcome.resolution === 'void'
+        ? homeTeam
+        : applyMatchResult(homeTeam, outcome.homeScore, outcome.awayScore, outcome.includeTableStats)),
       lastStartingXI: homeCanPlay ? homeStarters.map(player => player.id) : [],
     };
     updatedTeams[awayTeam.id] = {
-      ...applyMatchResult(awayTeam, aScore, hScore, includeTableStats),
+      ...(outcome.resolution === 'void'
+        ? awayTeam
+        : applyMatchResult(awayTeam, outcome.awayScore, outcome.homeScore, outcome.includeTableStats)),
       lastStartingXI: awayCanPlay ? awayStarters.map(player => player.id) : [],
     };
     const updatedFixture = {
       ...fixture,
-      homeScore: hScore,
-      awayScore: aScore,
+      homeScore: outcome.homeScore,
+      awayScore: outcome.awayScore,
       isPlayed: true,
-      winnerTeamId,
-      resolution: 'forfeit' as const,
+      winnerTeamId: outcome.winnerTeamId,
+      resolution: outcome.resolution,
     };
     matchEvents.push(`Fixture resolved by forfeit: ${homeValidation.reason || 'home XI legal'}; ${awayValidation.reason || 'away XI legal'}.`);
-    return { players: updatedPlayers, teams: updatedTeams, fixture: updatedFixture, events: matchEvents };
+    return { players: applyFixtureSuspensionService(updatedPlayers, updatedFixture), teams: updatedTeams, fixture: updatedFixture, events: matchEvents };
   }
 
   let hScore = 0;
@@ -598,6 +615,7 @@ export const quickSimMatch = (
   const matchContributions: Record<string, PlayerMatchContribution> = {};
   let forcedWinnerTeamId: string | undefined;
   let forcedResolution: Fixture['resolution'] | undefined;
+  let forcedIncludeTableStats: boolean | undefined;
   const addContribution = (playerId: string, key: keyof PlayerMatchContribution) => {
     matchContributions[playerId] = {
       ...matchContributions[playerId],
@@ -629,7 +647,8 @@ export const quickSimMatch = (
 
     const bench = isHome ? availableHomeBench : availableAwayBench;
     const reserveGoalkeeper = bench.find(player => player.position === 'GK' && !sentOffPlayers.has(player.id) && !isPlayerUnavailable(player));
-    if (reserveGoalkeeper && xi.length >= 7) {
+    const substitutionState = isHome ? homeSubstitutionState : awaySubstitutionState;
+    if (reserveGoalkeeper && xi.length >= 7 && canUseSubstitutionWindow(substitutionState)) {
       const outfielderOff = [...xi]
         .filter(player => player.position !== 'GK')
         .sort((a, b) => a.overallRating - b.overallRating)[0];
@@ -650,8 +669,7 @@ export const quickSimMatch = (
           homeTeam = replaceFormationMapPlayer(homeTeam, outfielderOff.id, reserveGoalkeeper.id);
           updatedTeams[homeTeam.id] = homeTeam;
           homeGoalkeeperId = reserveGoalkeeper.id;
-          homeSubstitutionState.substitutesUsed = Math.min(homeSubstitutionState.maxSubstitutes, homeSubstitutionState.substitutesUsed + 1);
-          homeSubstitutionState.substitutionWindowsUsed = Math.min(homeSubstitutionState.maxWindows, homeSubstitutionState.substitutionWindowsUsed + 1);
+          recordSubstitution(homeSubstitutionState);
           refreshHomeProfile();
         } else {
           currentAwayXI = currentAwayXI.map(player => player.id === outfielderOff.id ? reserveGoalkeeper : player);
@@ -659,8 +677,7 @@ export const quickSimMatch = (
           awayTeam = replaceFormationMapPlayer(awayTeam, outfielderOff.id, reserveGoalkeeper.id);
           updatedTeams[awayTeam.id] = awayTeam;
           awayGoalkeeperId = reserveGoalkeeper.id;
-          awaySubstitutionState.substitutesUsed = Math.min(awaySubstitutionState.maxSubstitutes, awaySubstitutionState.substitutesUsed + 1);
-          awaySubstitutionState.substitutionWindowsUsed = Math.min(awaySubstitutionState.maxWindows, awaySubstitutionState.substitutionWindowsUsed + 1);
+          recordSubstitution(awaySubstitutionState);
           refreshAwayProfile();
         }
         matchEvents.push(`${isHome ? homeTeam.name : awayTeam.name} sacrifice ${outfielderOff.name} to bring on reserve goalkeeper ${reserveGoalkeeper.name}.`);
@@ -688,6 +705,7 @@ export const quickSimMatch = (
       redCards: player.redCards + 1,
       matchesSuspended: 3,
       suspensionAppliedWeek: fixture.week,
+      suspensionAppliedFixtureId: fixture.id,
     };
     sentOffPlayers.add(playerId);
     sentOffMinutes[playerId] = minute;
@@ -751,6 +769,10 @@ export const quickSimMatch = (
       });
       appliedCheckpointIndex += 1;
     }
+    currentHomeXI = drainQuickMatchEnergy(currentHomeXI, homeTeam);
+    currentAwayXI = drainQuickMatchEnergy(currentAwayXI, awayTeam);
+    refreshHomeProfile();
+    refreshAwayProfile();
     const homeLiveValidation = validateMatchdayXI(currentHomeXI, {
       teamId: homeTeam.id,
       designatedGoalkeeperId: homeGoalkeeperId,
@@ -762,13 +784,17 @@ export const quickSimMatch = (
       allowEmergencyGoalkeeper: true,
     });
     if (!homeLiveValidation.ok || !awayLiveValidation.ok) {
-      forcedResolution = 'forfeit';
-      if (homeLiveValidation.ok && !awayLiveValidation.ok) {
-        forcedWinnerTeamId = homeTeam.id;
-        hScore = Math.max(hScore, aScore + 1, 3);
+      const outcome = getAdministrativeFixtureOutcome(fixture, homeLiveValidation.ok, awayLiveValidation.ok);
+      forcedResolution = outcome.resolution;
+      forcedWinnerTeamId = outcome.winnerTeamId;
+      forcedIncludeTableStats = outcome.includeTableStats;
+      if (outcome.resolution === 'void') {
+        hScore = 0;
+        aScore = 0;
+      } else if (homeLiveValidation.ok && !awayLiveValidation.ok) {
+        hScore = Math.max(hScore, aScore + 1, outcome.homeScore);
       } else if (awayLiveValidation.ok && !homeLiveValidation.ok) {
-        forcedWinnerTeamId = awayTeam.id;
-        aScore = Math.max(aScore, hScore + 1, 3);
+        aScore = Math.max(aScore, hScore + 1, outcome.awayScore);
       }
       matchEvents.push(`Match abandoned: ${homeLiveValidation.reason || 'home XI legal'}; ${awayLiveValidation.reason || 'away XI legal'}.`);
       break;
@@ -910,17 +936,17 @@ export const quickSimMatch = (
     winnerTeamId,
     resolution,
   };
-  const includeTableStats = fixture.competitionType === 'league';
+  const includeTableStats = forcedIncludeTableStats ?? fixture.competitionType === 'league';
 
   const updateLog = (t: Team, gf: number, ga: number, matchStarters: Player[]) => ({
-    ...applyMatchResult(t, gf, ga, includeTableStats),
+    ...(resolution === 'void' ? t : applyMatchResult(t, gf, ga, includeTableStats)),
     lastStartingXI: matchStarters.map(p => p.id),
   });
 
   updatedTeams[homeTeam.id] = updateLog(homeTeam, hScore, aScore, homeStarters);
   updatedTeams[awayTeam.id] = updateLog(awayTeam, aScore, hScore, awayStarters);
 
-  return { players: updatedPlayers, teams: updatedTeams, fixture: updatedFixture, events: matchEvents };
+  return { players: applyFixtureSuspensionService(updatedPlayers, updatedFixture), teams: updatedTeams, fixture: updatedFixture, events: matchEvents };
 };
 
 // Form and morale modifiers are applied at the match call site.

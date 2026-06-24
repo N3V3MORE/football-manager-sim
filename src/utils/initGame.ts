@@ -407,7 +407,7 @@ export const initGameData = (userTeamSelection?: string, rng?: RandomGenerator) 
     markBestStarters(squad, players);
   });
 
-  const { fixtures, competitions } = buildSeasonCompetitionBundle(teams, 1);
+  const { fixtures, competitions } = buildSeasonCompetitionBundle(teams, 1, undefined, { next: random });
 
   return { teams, players, fixtures, competitions, teamClasses };
 };

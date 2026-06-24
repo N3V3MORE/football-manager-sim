@@ -44,10 +44,16 @@ import {
 import { sanitizePersistedState } from '../src/store/persistence';
 import { getSquadPolicy } from '../src/core/squadPolicy';
 import { FREE_AGENT_TEAM_ID } from '../src/core/freeAgentPool';
-import { weekToDate } from '../src/utils/calendar';
+import { fixtureToDate, LEAGUE_END_ORDINAL, weekToDate } from '../src/utils/calendar';
 import { validateMatchdayXI } from '../src/core/matchdayValidation';
 import { advanceWeekState } from '../src/store/weekLifecycle';
 import { getRenewalOffer } from '../src/core/contractUtils';
+import {
+  applyFixtureSuspensionService,
+  compareFixturesChronologically,
+  getFixtureDateOrdinal,
+} from '../src/core/fixtureLifecycle';
+import { processLiveMatchMinuteState } from '../src/store/liveMatchActions';
 
 const RED_CARD_EVENT_PATTERN = /red card|sent off|straight red|reaches for red/i;
 const buildTacticalSetupKey = (team: Team) => (
@@ -79,6 +85,15 @@ const assertCalendarAndSchedulerInvariants = () => {
   const lastWeek = getSeasonWeekLimit(data.fixtures, data.competitions);
   assert.ok(weekToDate(lastWeek, 1).getTime() < weekToDate(1, 2).getTime(), 'Season calendar must finish before next season starts');
   assert.ok(fixtures.some(fixture => fixture.competitionType === 'league' && fixtures.some(other => other.week === fixture.week && other.competitionType !== 'league')), 'League and cup fixtures should be allowed to share a week');
+  const chronologicalFixtures = [...fixtures].sort(compareFixturesChronologically);
+  chronologicalFixtures.forEach((fixture, index) => {
+    if (index === 0) return;
+    const previous = chronologicalFixtures[index - 1];
+    assert.ok(
+      fixtureToDate(fixture, 1).getTime() >= fixtureToDate(previous, 1).getTime(),
+      `Fixture dates must not move backwards (${previous.id} -> ${fixture.id})`
+    );
+  });
 
   const divisions: LeagueDivision[] = ['Premier League', 'Championship', 'League One', 'League Two'];
   divisions.forEach(division => {
@@ -87,6 +102,10 @@ const assertCalendarAndSchedulerInvariants = () => {
     const leagueFixtures = fixtures
       .filter(fixture => fixture.division === division && fixture.competitionType === 'league')
       .sort((a, b) => a.week - b.week || a.id.localeCompare(b.id, undefined, { numeric: true }));
+    assert.ok(
+      Math.max(...leagueFixtures.map(getFixtureDateOrdinal)) <= LEAGUE_END_ORDINAL,
+      `${division} league fixtures should finish by the league-season date window`
+    );
     const firstHalfWeeks = divisionTeams.length - 1;
     const pairMeetings = new Map<string, Set<string>>();
     const firstHalfHomes = Object.fromEntries(divisionTeams.map(team => [team.id, 0]));
@@ -152,6 +171,50 @@ const assertMatchResolutionInvariants = () => {
   };
   const advanced = advanceWeekState(state);
   assert.equal(Object.values(advanced.fixtures).some(item => item.week <= 1 && !item.isPlayed), false, 'No due fixture should remain unplayed after week advancement');
+
+  const suspendedPlayer = Object.values(data.players).find(player => player.teamId === fixture!.homeTeamId)!;
+  const servedSuspension = applyFixtureSuspensionService({
+    [suspendedPlayer.id]: { ...suspendedPlayer, matchesSuspended: 1, suspensionAppliedFixtureId: 'previous-fixture' },
+  }, fixture!);
+  assert.equal(servedSuspension[suspendedPlayer.id].matchesSuspended, 0, 'Suspensions should be served per missed fixture');
+  const sameFixtureSuspension = applyFixtureSuspensionService({
+    [suspendedPlayer.id]: { ...suspendedPlayer, matchesSuspended: 3, suspensionAppliedFixtureId: fixture!.id },
+  }, fixture!);
+  assert.equal(sameFixtureSuspension[suspendedPlayer.id].matchesSuspended, 3, 'A new red-card ban must not be served by the same fixture');
+
+  assert.throws(
+    () => processLiveMatchMinuteState(state, fixture!.id, 15),
+    /sequentially/,
+    'Live minute processing should reject out-of-order minutes'
+  );
+
+  const invalidFixture = Object.values(data.fixtures).find(item => item.competitionType === 'league')!;
+  const invalidTeams = new Set([invalidFixture.homeTeamId, invalidFixture.awayTeamId]);
+  const invalidPlayers = Object.fromEntries(Object.entries(data.players).map(([playerId, player]) => [
+    playerId,
+    invalidTeams.has(player.teamId) ? { ...player, injuryWeeks: 1, injuryType: 'Unavailable' } : player,
+  ]));
+  const invalidResult = quickSimMatch(invalidFixture.id, invalidPlayers, data.teams, data.fixtures, null, { rng: createSeededRandomGenerator(2026062401) });
+  assert.equal(invalidResult.fixture.resolution, 'void', 'Double-invalid fixtures should be void rather than random forfeits');
+  assert.equal(invalidResult.fixture.winnerTeamId, undefined, 'Double-invalid fixtures should not pick a winner');
+  assert.equal(invalidResult.teams[invalidFixture.homeTeamId].played, data.teams[invalidFixture.homeTeamId].played, 'Void league fixture should not add home table stats');
+  assert.equal(invalidResult.teams[invalidFixture.awayTeamId].played, data.teams[invalidFixture.awayTeamId].played, 'Void league fixture should not add away table stats');
+
+  const cupRound = data.competitions['carabao-cup'].rounds[0];
+  const voidCupFixtureId = cupRound.fixtureIds[0];
+  const cupFixtures = { ...data.fixtures };
+  cupRound.fixtureIds.forEach((fixtureId, index) => {
+    const cupFixture = cupFixtures[fixtureId];
+    cupFixtures[fixtureId] = index === 0
+      ? { ...cupFixture, isPlayed: true, homeScore: 0, awayScore: 0, resolution: 'void' as const, winnerTeamId: undefined }
+      : { ...cupFixture, isPlayed: true, homeScore: 1, awayScore: 0, resolution: 'regular' as const, winnerTeamId: cupFixture.homeTeamId };
+  });
+  const cupProgression = resolveCompetitionProgression(cupFixtures, data.competitions, data.teams, createSeededRandomGenerator(2026062402));
+  const completedCupRound = cupProgression.competitions['carabao-cup'].rounds[0];
+  const voidCupFixture = cupFixtures[voidCupFixtureId];
+  assert.equal(cupProgression.fixtures[voidCupFixtureId].resolution, 'void', 'Void knockout fixture must not be rewritten as penalties');
+  assert.equal(completedCupRound.winnerTeamIds.includes(voidCupFixture.homeTeamId), false, 'Void home team should not advance');
+  assert.equal(completedCupRound.winnerTeamIds.includes(voidCupFixture.awayTeamId), false, 'Void away team should not advance');
 };
 
 const assertSubstitutionAndShootoutInvariants = () => {
