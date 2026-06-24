@@ -247,7 +247,7 @@ export interface Fixture {
   awayScore: number | null;
   isPlayed: boolean;
   winnerTeamId?: string;
-  resolution?: 'regular' | 'penalties';
+  resolution?: 'regular' | 'penalties' | 'forfeit';
 }
 
 export type InboxMessageSource = 'assistant' | 'system';

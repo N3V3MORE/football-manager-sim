@@ -129,7 +129,10 @@ export const applySharedPostMatchAccounting = ({
     rating += (contribution.assists || 0) * 0.45;
     rating -= (contribution.yellowCards || 0) * 0.25;
     rating -= (contribution.redCards || 0) * 1.25;
-    rating += (player.impactCoefficient ?? 1.0) - 1.0;
+    const positiveContributions = (contribution.goals || 0) + (contribution.assists || 0);
+    if (positiveContributions > 0) {
+      rating += Math.min(0.4, ((player.impactCoefficient ?? 1.0) - 1.0) * positiveContributions * 0.5);
+    }
     if (minutes < 30) rating -= ENGINE_CONFIG.MATCH_RATING_SHORT_CAMEO_PENALTY;
     rating = Math.max(1.0, Math.min(10.0, Math.round(rating * 10) / 10));
 

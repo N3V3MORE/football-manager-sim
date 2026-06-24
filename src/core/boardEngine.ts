@@ -15,7 +15,7 @@ import {
 import { getDivisionTeamCount, sortTeamsByTable } from './leagueUtils';
 import { getCompetitionResultForTeam, hasReachedCompetitionRound } from './competitionEngine';
 import { getSquadPolicy } from './squadPolicy';
-import { isClubTeam } from './freeAgentPool';
+import { isPlayableClub } from './freeAgentPool';
 
 type ObjectiveResult = {
   objective: BoardObjective;
@@ -261,7 +261,7 @@ const buildSquadContextSignal = (
 
 const getTeamPosition = (team: Team, teams: Record<string, Team>) => {
   const divisionTable = sortTeamsByTable(
-    Object.values(teams).filter(candidate => isClubTeam(candidate) && candidate.division === team.division)
+    Object.values(teams).filter(candidate => isPlayableClub(candidate) && candidate.division === team.division)
   );
   const position = divisionTable.findIndex(candidate => candidate.id === team.id);
   return position >= 0 ? position + 1 : null;

@@ -1,7 +1,7 @@
 import { Player, Position, Team } from '../models/types';
 import { computeMarketValue } from '../utils/calendar';
 import { getSquadPolicy } from './squadPolicy';
-import { isClubTeam } from './freeAgentPool';
+import { isPlayableClub } from './freeAgentPool';
 
 const YOUTH_FIRST_NAMES = ['Alex', 'Ben', 'Callum', 'Dan', 'Ethan', 'Finn', 'George', 'Harry', 'Isaac', 'Jack'];
 const YOUTH_LAST_NAMES = ['Adams', 'Brown', 'Clark', 'Davies', 'Evans', 'Fisher', 'Green', 'Harris', 'Irvine', 'Jones'];
@@ -52,14 +52,15 @@ const generateYouthPlayer = (
   const age = 16 + Math.floor(rng() * 3);
   const rating = 40 + Math.floor(rng() * 16);
   const marketValue = computeMarketValue(rating, age);
+  const aroundRating = (offset = 0, spread = 8) => clampRating(rating + offset + Math.floor((rng() * spread * 2) - spread));
 
   const baseStats = {
-    pace: clampRating(40 + Math.floor(rng() * 30)),
-    shooting: clampRating(35 + Math.floor(rng() * 25)),
-    passing: clampRating(35 + Math.floor(rng() * 30)),
-    dribbling: clampRating(35 + Math.floor(rng() * 30)),
-    defending: clampRating(35 + Math.floor(rng() * 25)),
-    physical: clampRating(40 + Math.floor(rng() * 30)),
+    pace: aroundRating(2),
+    shooting: aroundRating(-4),
+    passing: aroundRating(-1),
+    dribbling: aroundRating(-1),
+    defending: aroundRating(-3),
+    physical: aroundRating(1),
   };
 
   let stats: Player['stats'];
@@ -69,30 +70,30 @@ const generateYouthPlayer = (
     case 'GK':
       stats = {
         ...baseStats,
-        shooting: clampRating(10 + Math.floor(rng() * 15)),
-        gk_diving: clampRating(40 + Math.floor(rng() * 40)),
-        gk_handling: clampRating(40 + Math.floor(rng() * 40)),
-        gk_kicking: clampRating(35 + Math.floor(rng() * 35)),
-        gk_reflexes: clampRating(40 + Math.floor(rng() * 40)),
-        gk_speed: clampRating(35 + Math.floor(rng() * 35)),
-        gk_positioning: clampRating(40 + Math.floor(rng() * 40)),
+        shooting: clampRating(Math.max(8, rating - 28 + Math.floor(rng() * 8))),
+        gk_diving: aroundRating(3),
+        gk_handling: aroundRating(1),
+        gk_kicking: aroundRating(-3),
+        gk_reflexes: aroundRating(4),
+        gk_speed: aroundRating(-2),
+        gk_positioning: aroundRating(2),
       };
       subPosition = 'GK';
       altPositions = ['GK'];
       break;
     case 'DEF':
-      stats = { ...baseStats, defending: clampRating(baseStats.defending + 15), physical: clampRating(baseStats.physical + 10) };
+      stats = { ...baseStats, defending: aroundRating(8), physical: aroundRating(5) };
       subPosition = 'CB';
       altPositions = ['CB', 'RB', 'LB'];
       break;
     case 'MID':
-      stats = { ...baseStats, passing: clampRating(baseStats.passing + 15), dribbling: clampRating(baseStats.dribbling + 10) };
+      stats = { ...baseStats, passing: aroundRating(8), dribbling: aroundRating(5) };
       subPosition = 'CM';
       altPositions = ['CM', 'CDM', 'CAM'];
       break;
     case 'FWD':
     default:
-      stats = { ...baseStats, shooting: clampRating(baseStats.shooting + 15), pace: clampRating(baseStats.pace + 10) };
+      stats = { ...baseStats, shooting: aroundRating(8), pace: aroundRating(5) };
       subPosition = 'ST';
       altPositions = ['ST', 'LW', 'RW'];
       break;
@@ -139,7 +140,7 @@ export const replenishUnderfilledSquads = (
   const nextPlayers = { ...players };
   let nextId = parseInt(getNextPlayerId(players), 10);
 
-  Object.values(teams).filter(isClubTeam).forEach(team => {
+  Object.values(teams).filter(isPlayableClub).forEach(team => {
     let squad = Object.values(nextPlayers).filter(player => player.teamId === team.id);
     const policy = getSquadPolicy(team);
     let counts = getPositionCounts(squad);

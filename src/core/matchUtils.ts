@@ -142,14 +142,27 @@ export const scaleLineupForMatch = (
   homeAdvantage = 1,
   clubClass?: string
 ) => (
-  players.map(player => ({
-    ...player,
-    stats: {
-      ...player.stats,
-      passing: player.stats.passing * formMultiplier * moraleMultiplier * homeAdvantage * getClubClassMatchMultiplier(clubClass),
-      shooting: player.stats.shooting * formMultiplier * moraleMultiplier * homeAdvantage * getClubClassMatchMultiplier(clubClass),
-      defending: (player.stats.defending || 50) * formMultiplier * moraleMultiplier * homeAdvantage * getClubClassMatchMultiplier(clubClass),
-      dribbling: (player.stats.dribbling || 50) * formMultiplier * moraleMultiplier * homeAdvantage * getClubClassMatchMultiplier(clubClass),
-    },
-  }))
+  players.map(player => {
+    const clubMultiplier = getClubClassMatchMultiplier(clubClass);
+    const teamMoraleMultiplier = 1 + ((moraleMultiplier - 1) * 0.5);
+    const individualMoraleMultiplier = 1 + (((player.morale || 50) - 50) / 50) * 0.04;
+    const energy = clamp(player.energy ?? 100, 0, 100);
+    const fatigueRatio = Math.max(0, 70 - energy) / 70;
+    const technicalConditionMultiplier = 1 - Math.pow(fatigueRatio, 1.7) * 0.16;
+    const physicalConditionMultiplier = 1 - Math.pow(fatigueRatio, 1.55) * 0.24;
+    const baseMultiplier = formMultiplier * teamMoraleMultiplier * individualMoraleMultiplier * homeAdvantage * clubMultiplier;
+
+    return {
+      ...player,
+      stats: {
+        ...player.stats,
+        pace: (player.stats.pace || 50) * baseMultiplier * physicalConditionMultiplier,
+        physical: (player.stats.physical || 50) * baseMultiplier * physicalConditionMultiplier,
+        passing: player.stats.passing * baseMultiplier * technicalConditionMultiplier,
+        shooting: player.stats.shooting * baseMultiplier * technicalConditionMultiplier,
+        defending: (player.stats.defending || 50) * baseMultiplier * technicalConditionMultiplier,
+        dribbling: (player.stats.dribbling || 50) * baseMultiplier * technicalConditionMultiplier,
+      },
+    };
+  })
 );

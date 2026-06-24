@@ -1,12 +1,12 @@
 import { Player, Team } from '../models/types';
-import { removePlayerFromTeamSelections } from './formationMapUtils';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { RandomGenerator, resolveRandom } from './random';
 import { buildSquadPlan } from './squadPlanningEngine';
 import { isTransferWindowOpen } from '../utils/calendar';
 import { getSquadPolicy } from './squadPolicy';
 import { getMinimumAcceptedWage } from './transferFinance';
-import { isClubTeam } from './freeAgentPool';
+import { isPlayableClub } from './freeAgentPool';
+import { movePlayerToTeam } from './playerMovement';
 
 type PositionKey = Player['position'];
 type PlanningSeverity = 'none' | 'watch' | 'need' | 'urgent';
@@ -296,7 +296,7 @@ const expireAiTransferListings = (
   userTeamId: string | null
 ) => {
   const aiTeamIds = new Set(Object.values(teams)
-    .filter(team => isClubTeam(team) && team.id !== userTeamId)
+    .filter(team => isPlayableClub(team) && team.id !== userTeamId)
     .map(team => team.id));
   let changed = false;
   const updatedPlayers = { ...players };
@@ -330,11 +330,11 @@ export const computeWeeklyTransfers = (
   }
 
   const random = resolveRandom(rng);
-  const updatedPlayers = { ...players };
-  const updatedTeams = { ...teams };
+  let updatedPlayers = { ...players };
+  let updatedTeams = { ...teams };
   const decisions: AITransferDecision[] = [];
 
-  const aiTeams = Object.values(updatedTeams).filter(t => isClubTeam(t) && t.id !== userTeamId);
+  const aiTeams = Object.values(updatedTeams).filter(t => isPlayableClub(t) && t.id !== userTeamId);
 
   // Phase 1: All AI Teams evaluate their squads and list players
   aiTeams.forEach(team => {
@@ -440,7 +440,7 @@ export const computeWeeklyTransfers = (
 
     // Filter available targets from the global pool (ensure target team hasn't been modified heavily or isn't the buyer)
     const targets = globalListedPlayers.filter(p =>
-          isClubTeam(updatedTeams[p.teamId]) &&
+          isPlayableClub(updatedTeams[p.teamId]) &&
           p.teamId !== team.id &&
       p.position === priorityNeed.position &&
       p.askingPrice <= budgetLimit &&
@@ -485,30 +485,21 @@ export const computeWeeklyTransfers = (
           buyerSquadAvgRating,
           severity: priorityNeed.severity,
         })) return;
-        updatedTeams[team.id] = {
-          ...buyer,
-          budget: buyer.budget - bestTarget.askingPrice,
-          transferSpend: buyer.transferSpend + bestTarget.askingPrice,
-        };
-
-        if (seller) {
-          updatedTeams[bestTarget.teamId] = removePlayerFromTeamSelections(
-            { ...seller, budget: seller.budget + bestTarget.askingPrice },
-            bestTarget.id
-          );
-        }
-
-        updatedPlayers[bestTarget.id] = {
-          ...updatedPlayers[bestTarget.id],
-          teamId: team.id,
-          isTransferListed: false,
-          askingPrice: 0,
-          isStarting: false,
-          isSub: false,
-          wage: newWage,
-          contractLeft: Math.max(updatedPlayers[bestTarget.id].contractLeft, 2),
-          morale: Math.max(moraleBase, updatedPlayers[bestTarget.id].morale),
-        };
+        const moved = movePlayerToTeam(
+          updatedPlayers,
+          updatedTeams,
+          bestTarget.id,
+          team.id,
+          {
+            wage: newWage,
+            contractLeft: Math.max(updatedPlayers[bestTarget.id].contractLeft, 2),
+            morale: Math.max(moraleBase, updatedPlayers[bestTarget.id].morale),
+          },
+          seller ? { budget: seller.budget + bestTarget.askingPrice } : undefined,
+          { budget: buyer.budget - bestTarget.askingPrice, transferSpend: buyer.transferSpend + bestTarget.askingPrice }
+        );
+        updatedPlayers = moved.players;
+        updatedTeams = moved.teams;
         decisions.push({
           week: currentWeek,
           action: 'bought',
@@ -592,30 +583,21 @@ export const computeWeeklyTransfers = (
               buyerSquadAvgRating,
               severity: priorityNeed.severity,
             })) return;
-            updatedTeams[team.id] = {
-              ...buyer,
-              budget: buyer.budget - bestUserTarget.askingPrice,
-              transferSpend: buyer.transferSpend + bestUserTarget.askingPrice,
-            };
-
-            if (userTeam) {
-              updatedTeams[userTeamId] = removePlayerFromTeamSelections(
-                { ...userTeam, budget: userTeam.budget + bestUserTarget.askingPrice },
-                bestUserTarget.id
-              );
-            }
-
-            updatedPlayers[bestUserTarget.id] = {
-              ...updatedPlayers[bestUserTarget.id],
-              teamId: team.id,
-              isTransferListed: false,
-              askingPrice: 0,
-              isStarting: false,
-              isSub: false,
-              wage: newWage,
-              contractLeft: Math.max(updatedPlayers[bestUserTarget.id].contractLeft, 2),
-              morale: Math.max(moraleBase, updatedPlayers[bestUserTarget.id].morale),
-            };
+            const moved = movePlayerToTeam(
+              updatedPlayers,
+              updatedTeams,
+              bestUserTarget.id,
+              team.id,
+              {
+                wage: newWage,
+                contractLeft: Math.max(updatedPlayers[bestUserTarget.id].contractLeft, 2),
+                morale: Math.max(moraleBase, updatedPlayers[bestUserTarget.id].morale),
+              },
+              userTeam ? { budget: userTeam.budget + bestUserTarget.askingPrice } : undefined,
+              { budget: buyer.budget - bestUserTarget.askingPrice, transferSpend: buyer.transferSpend + bestUserTarget.askingPrice }
+            );
+            updatedPlayers = moved.players;
+            updatedTeams = moved.teams;
 
             decisions.push({
               week: currentWeek,

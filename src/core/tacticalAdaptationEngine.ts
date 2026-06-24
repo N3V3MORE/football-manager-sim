@@ -2,6 +2,9 @@ import { Formation, Player, Team } from '../models/types';
 import { getSlotsForFormation } from '../constants/formations';
 import { RandomGenerator, resolveRandom } from './random';
 import { isPlayerUnavailable } from './playerStatusUtils';
+import { isPlayableClub } from './freeAgentPool';
+import { buildQuickSimLineup } from './lineupEngine';
+import { rebuildFormationMap } from './formationMapUtils';
 
 const ADAPTIVE_FORMATIONS: Formation[] = [
   '4-3-3',
@@ -110,6 +113,25 @@ const pickAdaptiveFormation = (
   return null;
 };
 
+const applyAtomicFormationChange = (
+  team: Team,
+  formation: Formation,
+  updatedPlayers: Record<string, Player>
+): Team => {
+  const lineupUpdates = buildQuickSimLineup(team.id, updatedPlayers, formation);
+  Object.entries(lineupUpdates).forEach(([playerId, updates]) => {
+    const player = updatedPlayers[playerId];
+    if (player) updatedPlayers[playerId] = { ...player, ...updates };
+  });
+  const starters = Object.values(updatedPlayers).filter(player => player.teamId === team.id && player.isStarting && !isPlayerUnavailable(player));
+  return {
+    ...team,
+    activeFormation: formation,
+    formationMap: rebuildFormationMap(getSlotsForFormation(formation), starters, {}),
+    lastStartingXI: starters.map(player => player.id).slice(0, 11),
+  };
+};
+
 export const applyTacticalAdaptation = (
   updatedPlayers: Record<string, Player>,
   updatedTeams: Record<string, Team>,
@@ -118,6 +140,7 @@ export const applyTacticalAdaptation = (
 ) => {
   const random = resolveRandom(rng);
   Object.values(updatedTeams).forEach(team => {
+    if (!isPlayableClub(team)) return;
     if (excludedTeamIds.has(team.id)) return;
     if (team.played < 4 || team.played % 2 !== 0) return;
     if (team.lastTacticalAdaptationPlayed === team.played) return;
@@ -215,7 +238,7 @@ export const applyTacticalAdaptation = (
         .filter(player => player.teamId === team.id && !isPlayerUnavailable(player));
       const candidate = pickAdaptiveFormation(nextTeam, teamPlayers, formationMode!, rng);
       if (candidate && candidate !== nextTeam.activeFormation) {
-        nextTeam = { ...nextTeam, activeFormation: candidate };
+        nextTeam = applyAtomicFormationChange(nextTeam, candidate, updatedPlayers);
         teamChanged = true;
       }
     }
@@ -226,7 +249,7 @@ export const applyTacticalAdaptation = (
       const pressureMode: 'attack' | 'defense' = goalsAgainstPerGame >= goalsForPerGame ? 'defense' : 'attack';
       const candidate = pickAdaptiveFormation(nextTeam, teamPlayers, pressureMode, rng);
       if (candidate && candidate !== nextTeam.activeFormation) {
-        nextTeam = { ...nextTeam, activeFormation: candidate };
+        nextTeam = applyAtomicFormationChange(nextTeam, candidate, updatedPlayers);
         teamChanged = true;
       }
     }

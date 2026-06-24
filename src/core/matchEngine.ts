@@ -9,8 +9,9 @@ import { rebuildFormationMap, removePlayerFromTeamSelections } from './formation
 import { applyMinuteCaps, buildStarterBenchMinuteMap } from './minuteMapUtils';
 import { applyMatchInjuries } from './injuryEngine';
 import { isPlayerUnavailable } from './playerStatusUtils';
-import { defaultRandomGenerator, RandomGenerator, resolveRandom } from './random';
+import { createFixtureEventRandomGenerator, RandomGenerator, resolveRandom } from './random';
 import { applyMatchResult } from './teamUtils';
+import { selectEmergencyGoalkeeperId, selectDesignatedGoalkeeperId, validateMatchdayXI } from './matchdayValidation';
 import {
   addPlayerStat,
   avgStat,
@@ -29,6 +30,97 @@ export { buildTeamShapeProfile } from './shapeEngine';
 export { getFormModifier, getMoraleModifier, runDuel } from './matchUtils';
 
 const LOW_INTENSITY_COMMENTARY_CHANCE = 0.04;
+
+type MatchSubstitutionState = {
+  substitutesUsed: number;
+  substitutionWindowsUsed: number;
+  maxSubstitutes: number;
+  maxWindows: number;
+};
+
+const createSubstitutionState = (): MatchSubstitutionState => ({
+  substitutesUsed: 0,
+  substitutionWindowsUsed: 0,
+  maxSubstitutes: 5,
+  maxWindows: 3,
+});
+
+const replaceFormationMapPlayer = (team: Team, offPlayerId: string, onPlayerId: string): Team => {
+  const formationMap = team.formationMap || {};
+  let changed = false;
+  const nextMap = Object.fromEntries(Object.entries(formationMap).map(([slotKey, playerId]) => {
+    if (playerId !== offPlayerId) return [slotKey, playerId];
+    changed = true;
+    return [slotKey, onPlayerId];
+  }));
+  return changed ? { ...team, formationMap: nextMap } : team;
+};
+
+const removeFromFormationMap = (team: Team, playerId: string): Team => {
+  if (!team.formationMap) return team;
+  const nextMap = Object.fromEntries(Object.entries(team.formationMap).filter(([, mappedId]) => mappedId !== playerId));
+  return { ...team, formationMap: nextMap };
+};
+
+export const buildCurrentMatchProfile = (
+  team: Team,
+  players: Player[],
+  formMultiplier: number,
+  homeAdvantage: number,
+  designatedGoalkeeperId?: string
+) => {
+  const designatedPlayers = players.map(player => {
+    if (player.id !== designatedGoalkeeperId || player.position === 'GK') return player;
+    const emergencyKeeperBase = Math.max(player.stats.defending || 50, player.stats.physical || 50, player.overallRating * 0.75);
+    return {
+      ...player,
+      position: 'GK' as const,
+      subPosition: 'GK',
+      altPositions: Array.from(new Set(['GK', ...(player.altPositions || [])])),
+      stats: {
+        ...player.stats,
+        gk_diving: player.stats.gk_diving || emergencyKeeperBase,
+        gk_handling: player.stats.gk_handling || emergencyKeeperBase * 0.92,
+        gk_kicking: player.stats.gk_kicking || player.stats.passing || emergencyKeeperBase,
+        gk_reflexes: player.stats.gk_reflexes || emergencyKeeperBase,
+        gk_speed: player.stats.gk_speed || player.stats.pace || emergencyKeeperBase,
+        gk_positioning: player.stats.gk_positioning || emergencyKeeperBase * 0.9,
+      },
+    };
+  });
+  const moraleMultiplier = getMoraleModifier(players);
+  const scaled = scaleLineupForMatch(designatedPlayers, formMultiplier, moraleMultiplier, homeAdvantage, team.clubClass);
+  return {
+    scaled,
+    shape: buildTeamShapeProfile(team, designatedPlayers),
+  };
+};
+
+const getPenaltyShootoutEdge = (
+  players: Player[],
+  targetCount: number,
+  homeAdvantage = 1
+) => {
+  const selected = [...players]
+    .sort((a, b) => b.overallRating - a.overallRating)
+    .slice(0, targetCount);
+  return selected.reduce((sum, player) => sum + player.overallRating, 0) * homeAdvantage;
+};
+
+export const resolvePenaltyShootoutWinner = (
+  homeTeam: Team,
+  awayTeam: Team,
+  homePlayers: Player[],
+  awayPlayers: Player[],
+  rng: RandomGenerator,
+  homeAdvantage = 1
+) => {
+  const targetCount = Math.max(1, Math.min(homePlayers.length, awayPlayers.length));
+  const homePenaltyEdge = getPenaltyShootoutEdge(homePlayers, targetCount, homeAdvantage);
+  const awayPenaltyEdge = getPenaltyShootoutEdge(awayPlayers, targetCount, 1);
+  const totalEdge = Math.max(1, homePenaltyEdge + awayPenaltyEdge);
+  return (rng.next() * totalEdge) < homePenaltyEdge ? homeTeam.id : awayTeam.id;
+};
 
 const getPossessionControlScore = (
   team: Team,
@@ -422,7 +514,7 @@ export const quickSimMatch = (
   userTeamId?: string | null,
   options?: { rng?: RandomGenerator }
 ): { players: Record<string, Player>, teams: Record<string, Team>, fixture: Fixture, events: string[] } => {
-  const rng = options?.rng ?? defaultRandomGenerator;
+  const rng = options?.rng ?? createFixtureEventRandomGenerator(fixtureId, 0);
   const random = rng.next;
   const fixture = fixtures[fixtureId];
   if (!fixture || fixture.isPlayed) return { players, teams, fixture, events: [] };
@@ -433,13 +525,44 @@ export const quickSimMatch = (
 
   const homeStarters = getTeamMatchStarters(fixture.homeTeamId, userTeamId, updatedPlayers, updatedTeams, isPlayerUnavailable, rebuildFormationMap);
   const awayStarters = getTeamMatchStarters(fixture.awayTeamId, userTeamId, updatedPlayers, updatedTeams, isPlayerUnavailable, rebuildFormationMap);
-  const homeTeam = updatedTeams[fixture.homeTeamId];
-  const awayTeam = updatedTeams[fixture.awayTeamId];
+  let homeTeam = updatedTeams[fixture.homeTeamId];
+  let awayTeam = updatedTeams[fixture.awayTeamId];
   
   const homeBench = getTeamMatchBench(fixture.homeTeamId, homeStarters, updatedPlayers, isPlayerUnavailable);
   const awayBench = getTeamMatchBench(fixture.awayTeamId, awayStarters, updatedPlayers, isPlayerUnavailable);
 
-  if (homeStarters.length === 0 || awayStarters.length === 0) return { players, teams, fixture, events: matchEvents };
+  const homeValidation = validateMatchdayXI(homeStarters, { teamId: fixture.homeTeamId });
+  const awayValidation = validateMatchdayXI(awayStarters, { teamId: fixture.awayTeamId });
+  if (!homeValidation.ok || !awayValidation.ok) {
+    const homeCanPlay = homeValidation.ok;
+    const awayCanPlay = awayValidation.ok;
+    const hScore = homeCanPlay === awayCanPlay ? 0 : homeCanPlay ? 3 : 0;
+    const aScore = homeCanPlay === awayCanPlay ? 0 : awayCanPlay ? 3 : 0;
+    const winnerTeamId = fixture.isKnockout
+      ? hScore === aScore
+        ? (random() < 0.5 ? homeTeam.id : awayTeam.id)
+        : hScore > aScore ? homeTeam.id : awayTeam.id
+      : undefined;
+    const includeTableStats = fixture.competitionType === 'league';
+    updatedTeams[homeTeam.id] = {
+      ...applyMatchResult(homeTeam, hScore, aScore, includeTableStats),
+      lastStartingXI: homeCanPlay ? homeStarters.map(player => player.id) : [],
+    };
+    updatedTeams[awayTeam.id] = {
+      ...applyMatchResult(awayTeam, aScore, hScore, includeTableStats),
+      lastStartingXI: awayCanPlay ? awayStarters.map(player => player.id) : [],
+    };
+    const updatedFixture = {
+      ...fixture,
+      homeScore: hScore,
+      awayScore: aScore,
+      isPlayed: true,
+      winnerTeamId,
+      resolution: 'forfeit' as const,
+    };
+    matchEvents.push(`Fixture resolved by forfeit: ${homeValidation.reason || 'home XI legal'}; ${awayValidation.reason || 'away XI legal'}.`);
+    return { players: updatedPlayers, teams: updatedTeams, fixture: updatedFixture, events: matchEvents };
+  }
 
   let hScore = 0;
   let aScore = 0;
@@ -447,21 +570,25 @@ export const quickSimMatch = (
   const awayGoalMinutes: number[] = [];
   const homeFormMult = getFormModifier(homeTeam.form);
   const awayFormMult = getFormModifier(awayTeam.form);
-  const homeMoraleMult = getMoraleModifier(homeStarters);
-  const awayMoraleMult = getMoraleModifier(awayStarters);
   const GLOBAL_HOME_ADVANTAGE = ENGINE_CONFIG.GLOBAL_HOME_ADVANTAGE;
   let currentHomeXI = [...homeStarters];
   let currentAwayXI = [...awayStarters];
   let availableHomeBench = [...homeBench];
   let availableAwayBench = [...awayBench];
-  let scaledHome = scaleLineupForMatch(currentHomeXI, homeFormMult, homeMoraleMult, GLOBAL_HOME_ADVANTAGE, homeTeam.clubClass);
-  let scaledAway = scaleLineupForMatch(currentAwayXI, awayFormMult, awayMoraleMult, 1, awayTeam.clubClass);
-  let homeShape = buildTeamShapeProfile(homeTeam, currentHomeXI);
-  let awayShape = buildTeamShapeProfile(awayTeam, currentAwayXI);
+  let homeGoalkeeperId = homeValidation.goalkeeperId;
+  let awayGoalkeeperId = awayValidation.goalkeeperId;
+  let homeProfile = buildCurrentMatchProfile(homeTeam, currentHomeXI, homeFormMult, GLOBAL_HOME_ADVANTAGE, homeGoalkeeperId);
+  let awayProfile = buildCurrentMatchProfile(awayTeam, currentAwayXI, awayFormMult, 1, awayGoalkeeperId);
+  let scaledHome = homeProfile.scaled;
+  let scaledAway = awayProfile.scaled;
+  let homeShape = homeProfile.shape;
+  let awayShape = awayProfile.shape;
   const homeMinutes = buildStarterBenchMinuteMap(homeStarters, homeBench);
   const awayMinutes = buildStarterBenchMinuteMap(awayStarters, awayBench);
   const homeSubEntryMinutes: Record<string, number> = {};
   const awaySubEntryMinutes: Record<string, number> = {};
+  const homeSubstitutionState = createSubstitutionState();
+  const awaySubstitutionState = createSubstitutionState();
   const substitutionCheckpoints = [56, 66, 76, 84];
   let appliedCheckpointIndex = 0;
 
@@ -469,11 +596,89 @@ export const quickSimMatch = (
   const sentOffPlayers = new Set<string>();
   const sentOffMinutes: Record<string, number> = {};
   const matchContributions: Record<string, PlayerMatchContribution> = {};
+  let forcedWinnerTeamId: string | undefined;
+  let forcedResolution: Fixture['resolution'] | undefined;
   const addContribution = (playerId: string, key: keyof PlayerMatchContribution) => {
     matchContributions[playerId] = {
       ...matchContributions[playerId],
       [key]: (matchContributions[playerId]?.[key] || 0) + 1,
     };
+  };
+  const refreshHomeProfile = () => {
+    homeGoalkeeperId = selectDesignatedGoalkeeperId(currentHomeXI, homeGoalkeeperId)
+      || selectEmergencyGoalkeeperId(currentHomeXI);
+    homeProfile = buildCurrentMatchProfile(homeTeam, currentHomeXI, homeFormMult, GLOBAL_HOME_ADVANTAGE, homeGoalkeeperId);
+    scaledHome = homeProfile.scaled;
+    homeShape = homeProfile.shape;
+  };
+  const refreshAwayProfile = () => {
+    awayGoalkeeperId = selectDesignatedGoalkeeperId(currentAwayXI, awayGoalkeeperId)
+      || selectEmergencyGoalkeeperId(currentAwayXI);
+    awayProfile = buildCurrentMatchProfile(awayTeam, currentAwayXI, awayFormMult, 1, awayGoalkeeperId);
+    scaledAway = awayProfile.scaled;
+    awayShape = awayProfile.shape;
+  };
+  const coverDismissedGoalkeeper = (side: 'home' | 'away', minute: number) => {
+    const isHome = side === 'home';
+    const xi = isHome ? currentHomeXI : currentAwayXI;
+    if (xi.some(player => player.position === 'GK')) {
+      if (isHome) refreshHomeProfile();
+      else refreshAwayProfile();
+      return;
+    }
+
+    const bench = isHome ? availableHomeBench : availableAwayBench;
+    const reserveGoalkeeper = bench.find(player => player.position === 'GK' && !sentOffPlayers.has(player.id) && !isPlayerUnavailable(player));
+    if (reserveGoalkeeper && xi.length >= 7) {
+      const outfielderOff = [...xi]
+        .filter(player => player.position !== 'GK')
+        .sort((a, b) => a.overallRating - b.overallRating)[0];
+      if (outfielderOff) {
+        const minutes = isHome ? homeMinutes : awayMinutes;
+        const entries = isHome ? homeSubEntryMinutes : awaySubEntryMinutes;
+        const offEntryMinute = entries[outfielderOff.id];
+        minutes[outfielderOff.id] = offEntryMinute !== undefined
+          ? Math.max(0, minute - offEntryMinute)
+          : Math.min(minutes[outfielderOff.id] || 90, minute);
+        if (offEntryMinute !== undefined) delete entries[outfielderOff.id];
+        entries[reserveGoalkeeper.id] = minute;
+        minutes[reserveGoalkeeper.id] = Math.max(minutes[reserveGoalkeeper.id] || 0, 90 - minute);
+
+        if (isHome) {
+          currentHomeXI = currentHomeXI.map(player => player.id === outfielderOff.id ? reserveGoalkeeper : player);
+          availableHomeBench = availableHomeBench.filter(player => player.id !== reserveGoalkeeper.id);
+          homeTeam = replaceFormationMapPlayer(homeTeam, outfielderOff.id, reserveGoalkeeper.id);
+          updatedTeams[homeTeam.id] = homeTeam;
+          homeGoalkeeperId = reserveGoalkeeper.id;
+          homeSubstitutionState.substitutesUsed = Math.min(homeSubstitutionState.maxSubstitutes, homeSubstitutionState.substitutesUsed + 1);
+          homeSubstitutionState.substitutionWindowsUsed = Math.min(homeSubstitutionState.maxWindows, homeSubstitutionState.substitutionWindowsUsed + 1);
+          refreshHomeProfile();
+        } else {
+          currentAwayXI = currentAwayXI.map(player => player.id === outfielderOff.id ? reserveGoalkeeper : player);
+          availableAwayBench = availableAwayBench.filter(player => player.id !== reserveGoalkeeper.id);
+          awayTeam = replaceFormationMapPlayer(awayTeam, outfielderOff.id, reserveGoalkeeper.id);
+          updatedTeams[awayTeam.id] = awayTeam;
+          awayGoalkeeperId = reserveGoalkeeper.id;
+          awaySubstitutionState.substitutesUsed = Math.min(awaySubstitutionState.maxSubstitutes, awaySubstitutionState.substitutesUsed + 1);
+          awaySubstitutionState.substitutionWindowsUsed = Math.min(awaySubstitutionState.maxWindows, awaySubstitutionState.substitutionWindowsUsed + 1);
+          refreshAwayProfile();
+        }
+        matchEvents.push(`${isHome ? homeTeam.name : awayTeam.name} sacrifice ${outfielderOff.name} to bring on reserve goalkeeper ${reserveGoalkeeper.name}.`);
+        return;
+      }
+    }
+
+    if (isHome) {
+      homeGoalkeeperId = selectEmergencyGoalkeeperId(currentHomeXI);
+      refreshHomeProfile();
+      const emergency = currentHomeXI.find(player => player.id === homeGoalkeeperId);
+      if (emergency) matchEvents.push(`${emergency.name} is designated as ${homeTeam.name}'s emergency goalkeeper.`);
+    } else {
+      awayGoalkeeperId = selectEmergencyGoalkeeperId(currentAwayXI);
+      refreshAwayProfile();
+      const emergency = currentAwayXI.find(player => player.id === awayGoalkeeperId);
+      if (emergency) matchEvents.push(`${emergency.name} is designated as ${awayTeam.name}'s emergency goalkeeper.`);
+    }
   };
   const sendOffPlayer = (playerId: string, minute: number) => {
     const player = updatedPlayers[playerId];
@@ -490,23 +695,25 @@ export const quickSimMatch = (
     const wasAway = scaledAway.some(p => p.id === playerId);
     currentHomeXI = currentHomeXI.filter(p => p.id !== playerId);
     currentAwayXI = currentAwayXI.filter(p => p.id !== playerId);
-    scaledHome = scaledHome.filter(p => p.id !== playerId);
-    scaledAway = scaledAway.filter(p => p.id !== playerId);
     if (wasHome) {
+      homeTeam = removeFromFormationMap(homeTeam, playerId);
+      updatedTeams[homeTeam.id] = homeTeam;
       const entryMinute = homeSubEntryMinutes[playerId];
       homeMinutes[playerId] = entryMinute !== undefined
         ? Math.max(0, minute - entryMinute)
         : Math.min(homeMinutes[playerId] || 90, minute);
       if (entryMinute !== undefined) delete homeSubEntryMinutes[playerId];
-      homeShape = buildFallbackShapeProfile(scaledHome);
+      coverDismissedGoalkeeper('home', minute);
     }
     if (wasAway) {
+      awayTeam = removeFromFormationMap(awayTeam, playerId);
+      updatedTeams[awayTeam.id] = awayTeam;
       const entryMinute = awaySubEntryMinutes[playerId];
       awayMinutes[playerId] = entryMinute !== undefined
         ? Math.max(0, minute - entryMinute)
         : Math.min(awayMinutes[playerId] || 90, minute);
       if (entryMinute !== undefined) delete awaySubEntryMinutes[playerId];
-      awayShape = buildFallbackShapeProfile(scaledAway);
+      coverDismissedGoalkeeper('away', minute);
     }
   };
 
@@ -515,30 +722,56 @@ export const quickSimMatch = (
     while (appliedCheckpointIndex < substitutionCheckpoints.length && minute >= substitutionCheckpoints[appliedCheckpointIndex]) {
       const subMinute = substitutionCheckpoints[appliedCheckpointIndex];
       applySubstitutions(currentHomeXI, availableHomeBench, sentOffPlayers, homeMinutes, homeTeam, hScore, aScore, rng, {
-        maxSubsOverride: 1,
         minuteOverride: subMinute,
         playerEntryMinutes: homeSubEntryMinutes,
+        substitutionState: homeSubstitutionState,
         onSubstitution: (offPlayer, onPlayer) => {
           currentHomeXI = currentHomeXI.map(player => (player.id === offPlayer.id ? onPlayer : player));
           availableHomeBench = availableHomeBench.filter(player => player.id !== onPlayer.id);
-          scaledHome = scaleLineupForMatch(currentHomeXI, homeFormMult, homeMoraleMult, GLOBAL_HOME_ADVANTAGE, homeTeam.clubClass);
-          homeShape = buildFallbackShapeProfile(scaledHome);
+          homeTeam = replaceFormationMapPlayer(homeTeam, offPlayer.id, onPlayer.id);
+          updatedTeams[homeTeam.id] = homeTeam;
+          if (offPlayer.id === homeGoalkeeperId || onPlayer.position === 'GK') homeGoalkeeperId = onPlayer.id;
+          refreshHomeProfile();
           matchEvents.push(`${homeTeam.name} make a change: ${offPlayer.name} off, ${onPlayer.name} on.`);
         },
       });
       applySubstitutions(currentAwayXI, availableAwayBench, sentOffPlayers, awayMinutes, awayTeam, aScore, hScore, rng, {
-        maxSubsOverride: 1,
         minuteOverride: subMinute,
         playerEntryMinutes: awaySubEntryMinutes,
+        substitutionState: awaySubstitutionState,
         onSubstitution: (offPlayer, onPlayer) => {
           currentAwayXI = currentAwayXI.map(player => (player.id === offPlayer.id ? onPlayer : player));
           availableAwayBench = availableAwayBench.filter(player => player.id !== onPlayer.id);
-          scaledAway = scaleLineupForMatch(currentAwayXI, awayFormMult, awayMoraleMult, 1, awayTeam.clubClass);
-          awayShape = buildFallbackShapeProfile(scaledAway);
+          awayTeam = replaceFormationMapPlayer(awayTeam, offPlayer.id, onPlayer.id);
+          updatedTeams[awayTeam.id] = awayTeam;
+          if (offPlayer.id === awayGoalkeeperId || onPlayer.position === 'GK') awayGoalkeeperId = onPlayer.id;
+          refreshAwayProfile();
           matchEvents.push(`${awayTeam.name} make a change: ${offPlayer.name} off, ${onPlayer.name} on.`);
         },
       });
       appliedCheckpointIndex += 1;
+    }
+    const homeLiveValidation = validateMatchdayXI(currentHomeXI, {
+      teamId: homeTeam.id,
+      designatedGoalkeeperId: homeGoalkeeperId,
+      allowEmergencyGoalkeeper: true,
+    });
+    const awayLiveValidation = validateMatchdayXI(currentAwayXI, {
+      teamId: awayTeam.id,
+      designatedGoalkeeperId: awayGoalkeeperId,
+      allowEmergencyGoalkeeper: true,
+    });
+    if (!homeLiveValidation.ok || !awayLiveValidation.ok) {
+      forcedResolution = 'forfeit';
+      if (homeLiveValidation.ok && !awayLiveValidation.ok) {
+        forcedWinnerTeamId = homeTeam.id;
+        hScore = Math.max(hScore, aScore + 1, 3);
+      } else if (awayLiveValidation.ok && !homeLiveValidation.ok) {
+        forcedWinnerTeamId = awayTeam.id;
+        aScore = Math.max(aScore, hScore + 1, 3);
+      }
+      matchEvents.push(`Match abandoned: ${homeLiveValidation.reason || 'home XI legal'}; ${awayLiveValidation.reason || 'away XI legal'}.`);
+      break;
     }
     const isHomeAttacking = selectPossessionAttacker(
       homeTeam,
@@ -648,12 +881,19 @@ export const quickSimMatch = (
 
   let winnerTeamId: string | undefined;
   let resolution: Fixture['resolution'] | undefined;
-  if (fixture.isKnockout) {
+  if (forcedResolution) {
+    winnerTeamId = forcedWinnerTeamId;
+    resolution = forcedResolution;
+  } else if (fixture.isKnockout) {
     if (hScore === aScore) {
-      const homePenaltyEdge = currentHomeXI.reduce((sum, player) => sum + player.overallRating, 0) + (GLOBAL_HOME_ADVANTAGE * 50);
-      const awayPenaltyEdge = currentAwayXI.reduce((sum, player) => sum + player.overallRating, 0);
-      const totalEdge = Math.max(1, homePenaltyEdge + awayPenaltyEdge);
-      winnerTeamId = (random() * totalEdge) < homePenaltyEdge ? homeTeam.id : awayTeam.id;
+      winnerTeamId = resolvePenaltyShootoutWinner(
+        homeTeam,
+        awayTeam,
+        currentHomeXI.filter(player => !sentOffPlayers.has(player.id)),
+        currentAwayXI.filter(player => !sentOffPlayers.has(player.id)),
+        rng,
+        GLOBAL_HOME_ADVANTAGE
+      );
       resolution = 'penalties';
       matchEvents.push(`${updatedTeams[winnerTeamId].name} keep their nerve and advance on penalties.`);
     } else {

@@ -18,6 +18,22 @@ export const createSeededRandomGenerator = (seed: number): RandomGenerator => {
   };
 };
 
+export const hashStringToSeed = (input: string): number => {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return hash >>> 0;
+};
+
+export const createFixtureEventRandomGenerator = (
+  fixtureId: string,
+  eventIndex: number,
+  baseSeed = 1
+): RandomGenerator => createSeededRandomGenerator((baseSeed ^ hashStringToSeed(`${fixtureId}:${eventIndex}`)) >>> 0);
+
 export const resolveRandom = (rng?: RandomGenerator): (() => number) => {
   return typeof rng?.next === 'function' ? () => rng.next() : Math.random;
 };

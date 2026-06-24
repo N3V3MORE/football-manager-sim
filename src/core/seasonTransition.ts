@@ -7,7 +7,7 @@ import {
 } from './leagueUtils';
 import { getRenewalOffer } from './contractUtils';
 import { buildSquadPlan } from './squadPlanningEngine';
-import { rebuildFormationMap, removePlayerFromTeamSelections } from './formationMapUtils';
+import { rebuildFormationMap } from './formationMapUtils';
 import { getSlotsForFormation } from '../constants/formations';
 import { buildSeasonCompetitionBundle, getSeasonEuropeQualifiedTeamIds } from './competitionEngine';
 import {
@@ -20,10 +20,13 @@ import {
 import { appointReplacementManager, refreshManagerForNewSeason } from './managerUtils';
 import { buildQuickSimLineup } from './lineupEngine';
 import { getBudgetForClass } from '../utils/calendar';
-import { isClubTeam } from './freeAgentPool';
+import { isPlayableClub } from './freeAgentPool';
 import { replenishUnderfilledSquads } from './youthIntake';
 import { getSquadPolicy } from './squadPolicy';
 import { RandomGenerator, resolveRandom } from './random';
+import { movePlayerToTeam } from './playerMovement';
+
+const OFF_SEASON_INJURY_RECOVERY_WEEKS = 8;
 
 const resetTeamStats = (team: Team): Team => ({
   ...team,
@@ -39,7 +42,7 @@ const resetTeamStats = (team: Team): Team => ({
 });
 
 const getDivisionTeams = (teams: Record<string, Team>, division: LeagueDivision) => (
-  sortTeamsByTable(Object.values(teams).filter(team => isClubTeam(team) && team.division === division))
+  sortTeamsByTable(Object.values(teams).filter(team => isPlayableClub(team) && team.division === division))
 );
 
 const formatTeamList = (teams: Team[]) => teams.map(team => team.name).join(', ');
@@ -78,9 +81,11 @@ const getActiveCompetitionIdsForTeam = (
 
 const resetPlayerSeasonStats = (player: Player): Player => ({
   ...player,
-  matchesSuspended: 0,
-  injuryWeeks: 0,
-  injuryType: undefined,
+  matchesSuspended: player.matchesSuspended,
+  suspensionAppliedWeek: undefined,
+  injuryWeeks: Math.max(0, (player.injuryWeeks || 0) - OFF_SEASON_INJURY_RECOVERY_WEEKS),
+  injuryAppliedWeek: undefined,
+  injuryType: (player.injuryWeeks || 0) > OFF_SEASON_INJURY_RECOVERY_WEEKS ? player.injuryType : undefined,
   minutesPlayed: 0,
   goals: 0,
   assists: 0,
@@ -99,7 +104,7 @@ const findContractDestinationTeamId = (
   const currentDivision = teams[player.teamId]?.division;
 
   const candidateTeams = Object.values(teams)
-    .filter(team => isClubTeam(team) && team.id !== player.teamId && team.id !== userTeamId)
+    .filter(team => isPlayableClub(team) && team.id !== player.teamId && team.id !== userTeamId)
     .map(team => {
       const squad = Object.values(players).filter(p => p.teamId === team.id);
       const squadSize = squad.length;
@@ -129,7 +134,8 @@ const findContractDestinationTeamId = (
         wageScore,
         budget: team.budget,
       };
-    });
+    })
+    .filter(candidate => candidate.capacityScore > 0);
 
   if (candidateTeams.length === 0) return null;
 
@@ -203,13 +209,13 @@ export const advanceSeason = (
 } => {
   const random = resolveRandom(rng);
   const seasonNews: string[] = [];
-  const contractAdjustedPlayers = { ...players };
-  const contractAdjustedTeams = { ...teams };
+  let contractAdjustedPlayers = { ...players };
+  let contractAdjustedTeams = { ...teams };
 
   Object.values(players).forEach(player => {
     if (player.contractLeft > 0) return;
     const currentTeam = contractAdjustedTeams[player.teamId];
-    if (!isClubTeam(currentTeam)) return;
+    if (!isPlayableClub(currentTeam)) return;
 
     if (player.teamId === userTeamId) {
       const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId, contractAdjustedPlayers);
@@ -220,15 +226,12 @@ export const advanceSeason = (
         };
         return;
       }
-      contractAdjustedPlayers[player.id] = {
-        ...player,
-        teamId: destinationTeamId,
-        isStarting: false,
-        isSub: false,
+      const moved = movePlayerToTeam(contractAdjustedPlayers, contractAdjustedTeams, player.id, destinationTeamId, {
         morale: Math.max(60, player.morale),
         contractLeft: 2,
-      };
-      contractAdjustedTeams[currentTeam.id] = removePlayerFromTeamSelections(currentTeam, player.id);
+      });
+      contractAdjustedPlayers = moved.players;
+      contractAdjustedTeams = moved.teams;
       seasonNews.push(`${player.name} leaves ${currentTeam.name} after running down his contract.`);
       return;
     }
@@ -260,14 +263,11 @@ export const advanceSeason = (
       return;
     }
 
-    contractAdjustedPlayers[player.id] = {
-      ...player,
-      teamId: destinationTeamId,
-      isStarting: false,
-      isSub: false,
+    const moved = movePlayerToTeam(contractAdjustedPlayers, contractAdjustedTeams, player.id, destinationTeamId, {
       contractLeft: 2,
-    };
-    contractAdjustedTeams[currentTeam.id] = removePlayerFromTeamSelections(currentTeam, player.id);
+    });
+    contractAdjustedPlayers = moved.players;
+    contractAdjustedTeams = moved.teams;
   });
 
   const nextPlayers = Object.fromEntries(
@@ -280,7 +280,7 @@ export const advanceSeason = (
     DIVISION_ORDER.map(division => [division, getDivisionTeams(contractAdjustedTeams, division)])
   ) as Record<LeagueDivision, Team[]>;
   const nextDivisionByTeamId: Record<string, Division> = Object.fromEntries(
-    Object.values(contractAdjustedTeams).filter(isClubTeam).map(team => [team.id, team.division])
+    Object.values(contractAdjustedTeams).filter(isPlayableClub).map(team => [team.id, team.division])
   ) as Record<string, Division>;
 
   DIVISION_ORDER.forEach((division, index) => {
@@ -322,7 +322,7 @@ export const advanceSeason = (
 
   const reviewedTeams = Object.fromEntries(
     Object.entries(contractAdjustedTeams).map(([teamId, team]) => {
-      if (!isClubTeam(team)) return [teamId, team];
+      if (!isPlayableClub(team)) return [teamId, team];
       const nextDivision = nextDivisionByTeamId[teamId] || team.division;
       const nextClubClass = nextClubClassByTeamId[teamId] || team.clubClass || 'C';
       const nextBoardProfile = buildBoardProfile(nextClubClass, nextDivision, Boolean(team.isExternal));
@@ -405,7 +405,7 @@ export const advanceSeason = (
   let lineupSeededPlayers = replenishedPlayers;
   const lineupSeededTeams = Object.fromEntries(
     Object.entries(reviewedTeams).map(([teamId, team]) => {
-      if (!isClubTeam(team)) return [teamId, team];
+      if (!isPlayableClub(team)) return [teamId, team];
       const seeded = reseedTeamLineupForNewSeason(team, lineupSeededPlayers);
       lineupSeededPlayers = seeded.players;
       return [teamId, seeded.team];

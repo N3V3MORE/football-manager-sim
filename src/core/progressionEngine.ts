@@ -5,7 +5,7 @@ import { getSeasonWeekLimit } from './leagueUtils';
 import { RandomGenerator, resolveRandom } from './random';
 import { computeMarketValue } from '../utils/calendar';
 import { isPlayerUnavailable } from './playerStatusUtils';
-import { FREE_AGENT_TEAM_ID, isClubTeam } from './freeAgentPool';
+import { FREE_AGENT_TEAM_ID, isPlayableClub } from './freeAgentPool';
 
 export { computeWeeklyTransfers } from './transferEngine';
 
@@ -18,27 +18,79 @@ const calculateImpactCoefficient = (overallRating: number) => {
   return 0.9 + ((overallRating - 70) * 0.01);
 };
 
-const applyRatingDeltaToMatchStats = (player: Player, ratingDelta: number): Player['stats'] => {
+const applyRatingDeltaToMatchStats = (player: Player, ratingDelta: number, rng: () => number): Player['stats'] => {
   if (ratingDelta === 0) return player.stats;
 
   const keys = player.position === 'GK'
     ? ['gk_diving', 'gk_handling', 'gk_kicking', 'gk_reflexes', 'gk_speed', 'gk_positioning'] as const
     : ['pace', 'shooting', 'passing', 'dribbling', 'defending', 'physical'] as const;
   const nextStats = { ...player.stats };
-
-  keys.forEach(key => {
-    const value = nextStats[key];
-    if (typeof value === 'number') nextStats[key] = clampRating(value + ratingDelta);
+  const steps = Math.abs(ratingDelta);
+  const direction = ratingDelta > 0 ? 1 : -1;
+  const weightedKeys = keys.flatMap(key => {
+    if (player.position === 'GK') {
+      return key === 'gk_reflexes' || key === 'gk_positioning' ? [key, key] : [key];
+    }
+    if (player.position === 'DEF') return key === 'defending' || key === 'physical' ? [key, key] : [key];
+    if (player.position === 'MID') return key === 'passing' || key === 'dribbling' ? [key, key] : [key];
+    return key === 'shooting' || key === 'pace' ? [key, key] : [key];
   });
 
+  for (let step = 0; step < steps; step += 1) {
+    const key = weightedKeys[Math.floor(rng() * weightedKeys.length)] || keys[0];
+    const value = nextStats[key];
+    if (typeof value === 'number') nextStats[key] = clampRating(value + direction);
+  }
+
   return nextStats;
+};
+
+const getAverageRecentRating = (player: Player) => {
+  const ratings = player.matchRatingHistory || [];
+  if (ratings.length === 0) return 6.5;
+  return ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+};
+
+const getSeasonProgressionDelta = (
+  player: Player,
+  team: Team | undefined,
+  rng: () => number
+) => {
+  const teamMinutes = Math.max(1, (team?.played || 0) * 90);
+  const minutesShare = Math.min(1, (player.minutesPlayed || 0) / teamMinutes);
+  const recentRating = getAverageRecentRating(player);
+  const performanceBoost = Math.max(-0.16, Math.min(0.18, (recentRating - 6.6) * 0.08));
+  const minutesBoost = Math.max(-0.12, Math.min(0.16, (minutesShare - 0.35) * 0.28));
+  const eliteDrag = player.overallRating >= 86 ? 0.26 : player.overallRating >= 80 ? 0.14 : 0;
+
+  if (player.age <= 24) {
+    const baseChance = player.age <= 20 ? 0.62 : 0.42;
+    const chance = Math.max(0.08, Math.min(0.78, baseChance + performanceBoost + minutesBoost - eliteDrag));
+    if (rng() > chance) return 0;
+    const secondPointChance = Math.max(0.02, Math.min(0.22, 0.12 + performanceBoost + minutesBoost - eliteDrag));
+    return 1 + (rng() < secondPointChance ? 1 : 0);
+  }
+
+  if (player.age <= 31) {
+    const improveChance = Math.max(0.02, Math.min(0.22, 0.06 + performanceBoost + minutesBoost * 0.5 - eliteDrag));
+    const declineChance = Math.max(0.02, Math.min(0.18, 0.05 - performanceBoost - minutesBoost * 0.3));
+    const roll = rng();
+    if (roll < improveChance) return 1;
+    if (roll > 1 - declineChance) return -1;
+    return 0;
+  }
+
+  const ageDecline = player.age >= 35 ? 0.42 : player.age >= 33 ? 0.28 : 0.16;
+  const declineChance = Math.max(0.04, Math.min(0.72, ageDecline - performanceBoost - minutesBoost * 0.2));
+  if (rng() > declineChance) return 0;
+  return rng() < Math.max(0.04, (player.age - 34) * 0.04) ? -2 : -1;
 };
 
 const trimActiveSubstitutes = (
   players: Record<string, Player>,
   teams: Record<string, Team>
 ) => {
-  Object.values(teams).filter(isClubTeam).forEach(team => {
+  Object.values(teams).filter(isPlayableClub).forEach(team => {
     const teamId = team.id;
     Object.values(players)
       .filter(player => player.teamId === teamId && player.isStarting && player.isSub)
@@ -86,7 +138,8 @@ export const computeWeeklyProgression = (
   fixtures: Record<string, Fixture>,
   oldNews: string[],
   userTeamId: string | null = null,
-  rng?: RandomGenerator
+  rng?: RandomGenerator,
+  seasonWeekLimitOverride?: number
 ): {
   players: Record<string, Player>;
   teams: Record<string, Team>;
@@ -95,8 +148,8 @@ export const computeWeeklyProgression = (
   generatedNews: string[];
 } => {
   const random = resolveRandom(rng);
-  const playedFixtures = Object.values(fixtures).filter(f => f.week === currentWeek);
-  const seasonWeekLimit = getSeasonWeekLimit(fixtures);
+  const playedFixtures = Object.values(fixtures).filter(f => f.week === currentWeek && f.isPlayed);
+  const seasonWeekLimit = seasonWeekLimitOverride ?? getSeasonWeekLimit(fixtures);
   const newNews: string[] = [];
   
   const userTeam = userTeamId ? teams[userTeamId] : null;
@@ -147,7 +200,7 @@ export const computeWeeklyProgression = (
   trimActiveSubstitutes(updatedPlayers, teams);
 
   const updatedTeams = { ...teams };
-  Object.values(updatedTeams).filter(isClubTeam).forEach(team => {
+  Object.values(updatedTeams).filter(isPlayableClub).forEach(team => {
     const teamPlayers = Object.values(updatedPlayers).filter(player => player.teamId === team.id);
     const weeklyWageTotalThousand = teamPlayers.reduce((sum, player) => sum + (player.wage || 0), 0);
     const wageCostM = weeklyWageTotalThousand / 1000;
@@ -156,10 +209,10 @@ export const computeWeeklyProgression = (
     const operatingBudget = team.operatingBudget !== undefined ? team.operatingBudget : team.budget;
     let newOperatingBudget = operatingBudget - wageCostM;
 
-    const homeFixture = playedFixtures.find(fixture => fixture.homeTeamId === team.id);
-    if (homeFixture) {
-      newOperatingBudget += 1.0 + (team.points * 0.05);
-    }
+    const homeFixtureRevenue = playedFixtures
+      .filter(fixture => fixture.homeTeamId === team.id)
+      .reduce((sum, fixture) => sum + (fixture.competitionType === 'league' ? 1.0 : 0.75), 0);
+    newOperatingBudget += homeFixtureRevenue;
 
     // Transfer budget (team.budget) stays stable; only operating cash fluctuates weekly.
     updatedTeams[team.id] = {
@@ -195,12 +248,8 @@ export const computeWeeklyProgression = (
 
   if (currentWeek === seasonWeekLimit) {
     Object.values(updatedPlayers).forEach(player => {
-      let overallRating = player.overallRating;
-      if (player.age <= 24) {
-        overallRating += Math.floor(random() * 3) + 1;
-      } else if (player.age >= 32) {
-        overallRating -= Math.floor(random() * 2);
-      }
+      const team = updatedTeams[player.teamId];
+      let overallRating = player.overallRating + getSeasonProgressionDelta(player, team, random);
       overallRating = Math.max(1, Math.min(99, overallRating));
 
       const nextAge = player.age + 1;
@@ -211,7 +260,7 @@ export const computeWeeklyProgression = (
         overallRating,
         age: nextAge,
         contractLeft: Math.max(0, player.contractLeft - 1),
-        stats: applyRatingDeltaToMatchStats(player, ratingDelta),
+        stats: applyRatingDeltaToMatchStats(player, ratingDelta, random),
         marketValue: computeMarketValue(overallRating, nextAge),
         impactCoefficient: calculateImpactCoefficient(overallRating),
       };

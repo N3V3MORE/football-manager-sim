@@ -13,8 +13,10 @@ import {
   generateJobOfferCandidates,
 } from '../core/careerEngine';
 import { LiveMatchState, pruneInvalidLiveMatches, removeLiveMatchFixture } from './liveMatchHelpers';
-import { FREE_AGENT_TEAM_ID, ensureFreeAgentTeam, isClubTeam } from '../core/freeAgentPool';
+import { FREE_AGENT_TEAM_ID, ensureFreeAgentTeam, isPlayableClub } from '../core/freeAgentPool';
 import { getSquadPolicy } from '../core/squadPolicy';
+import { createFixtureEventRandomGenerator } from '../core/random';
+import { buildMovedPlayer } from '../core/playerMovement';
 import {
   generateAssistantWeekMessages,
   generateBoardInboxMessages,
@@ -30,10 +32,27 @@ export type WeeklyLifecycleState = GameState & {
   liveMatches: Record<string, LiveMatchState>;
 };
 
+const FIXTURE_CHRONOLOGY: Record<string, number> = {
+  europe: 0,
+  'carabao-cup': 1,
+  'fa-cup': 2,
+  'premier-league': 3,
+  championship: 3,
+  'league-one': 3,
+  'league-two': 3,
+};
+
+const compareFixturesChronologically = (left: { week: number; competitionId: string; id: string }, right: { week: number; competitionId: string; id: string }) => {
+  if (left.week !== right.week) return left.week - right.week;
+  const competitionDelta = (FIXTURE_CHRONOLOGY[left.competitionId] ?? 99) - (FIXTURE_CHRONOLOGY[right.competitionId] ?? 99);
+  if (competitionDelta !== 0) return competitionDelta;
+  return left.id.localeCompare(right.id, undefined, { numeric: true });
+};
+
 const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TState): TState => {
   const weekFixtures = Object.values(state.fixtures).filter(
-    fixture => fixture.week === state.currentWeek && !fixture.isPlayed
-  );
+    fixture => fixture.week <= state.currentWeek && !fixture.isPlayed
+  ).sort(compareFixturesChronologically);
   if (weekFixtures.length === 0) return state;
 
   let updatedPlayers = state.players;
@@ -46,12 +65,14 @@ const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TSt
   weekFixtures.forEach(fixtureToPlay => {
     if (updatedLiveMatches[fixtureToPlay.id]) return;
     const previousPlayers = updatedPlayers;
+    const rng = createFixtureEventRandomGenerator(fixtureToPlay.id, 0, state.rngState ?? 1);
     const { players, teams, fixture } = quickSimMatch(
       fixtureToPlay.id,
       updatedPlayers,
       updatedTeams,
       updatedFixtures,
-      state.userTeamId
+      state.userTeamId,
+      { rng }
     );
     updatedPlayers = players;
     updatedTeams = teams;
@@ -78,6 +99,13 @@ const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TSt
   );
   updatedFixtures = competitionProgression.fixtures;
   updatedCompetitions = competitionProgression.competitions;
+
+  const unresolvedDueFixtures = Object.values(updatedFixtures).filter(
+    fixture => fixture.week <= state.currentWeek && !fixture.isPlayed && !updatedLiveMatches[fixture.id]
+  );
+  if (unresolvedDueFixtures.length > 0) {
+    throw new Error(`Cannot advance week with unresolved due fixtures: ${unresolvedDueFixtures.map(fixture => fixture.id).join(', ')}.`);
+  }
 
   if (competitionProgression.generatedNews.length > 0) {
     inboxMessages = mergeInboxMessages(
@@ -338,10 +366,11 @@ const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
 const enforceAiRosterSizes = (
   players: Record<string, Player>,
   teams: Record<string, Team>,
-  userTeamId: string | null
+  userTeamId: string | null,
+  protectedPlayerIds = new Set<string>()
 ): Record<string, Player> => {
   let updatedPlayers = { ...players };
-  const aiTeams = Object.values(teams).filter(t => isClubTeam(t) && t.id !== userTeamId);
+  const aiTeams = Object.values(teams).filter(t => isPlayableClub(t) && t.id !== userTeamId);
 
   aiTeams.forEach(team => {
     const squad = Object.values(updatedPlayers).filter(p => p.teamId === team.id);
@@ -351,19 +380,12 @@ const enforceAiRosterSizes = (
     const excess = squad.length - policy.maximumSquadSize;
     // Prioritise releasing: non-starting, non-sub, non-listed, lowest rating first
     const releaseCandidates = [...squad]
-      .filter(p => !p.isStarting && !p.isSub && !p.isTransferListed)
+      .filter(p => !p.isStarting && !p.isSub && !p.isTransferListed && !protectedPlayerIds.has(p.id))
       .sort((a, b) => a.overallRating - b.overallRating);
 
     const toRelease = releaseCandidates.slice(0, excess);
     toRelease.forEach(p => {
-      updatedPlayers[p.id] = {
-        ...p,
-        teamId: FREE_AGENT_TEAM_ID,
-        isStarting: false,
-        isSub: false,
-        isTransferListed: false,
-        askingPrice: 0,
-      };
+      updatedPlayers[p.id] = buildMovedPlayer(p, FREE_AGENT_TEAM_ID);
     });
   });
 
@@ -437,7 +459,9 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
     nextState.teams,
     nextState.fixtures,
     nextState.news,
-    nextState.userTeamId
+    nextState.userTeamId,
+    undefined,
+    getSeasonWeekLimit(nextState.fixtures, nextState.competitions)
   );
 
   nextState = {
@@ -463,7 +487,10 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
     transfersAppliedWeek: nextState.currentWeek,
   };
   // Gentle AI roster-size enforcement after transfers
-  const rosterEnforcedPlayers = enforceAiRosterSizes(nextState.players, nextState.teams, nextState.userTeamId);
+  const currentWeekAcquisitions = new Set(transferState.decisions
+    .filter(decision => decision.action === 'bought')
+    .map(decision => decision.playerId));
+  const rosterEnforcedPlayers = enforceAiRosterSizes(nextState.players, nextState.teams, nextState.userTeamId, currentWeekAcquisitions);
   const needsFreeAgentTeam = Object.values(rosterEnforcedPlayers).some(player => player.teamId === FREE_AGENT_TEAM_ID);
   nextState = {
     ...nextState,

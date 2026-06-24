@@ -8,6 +8,8 @@ export const isFreeAgentTeam = (team?: Pick<Team, 'id'> | null): boolean => Bool
 
 export const isClubTeam = (team?: Pick<Team, 'id'> | null): boolean => Boolean(team && !isFreeAgentTeam(team));
 
+export const isPlayableClub = isClubTeam;
+
 const createFreeAgentManager = (): Manager => ({
   id: 'free-agent-manager',
   teamId: FREE_AGENT_TEAM_ID,

@@ -2,6 +2,7 @@ import { getSlotsForFormation, Slot } from '../constants/formations';
 import { Player, Team } from '../models/types';
 import { isPlayerUnavailable } from './playerStatusUtils';
 import { getSlotFitScore } from './formationMapUtils';
+import { validateMatchdayXI } from './matchdayValidation';
 
 export const autoAssignLineup = (teamId: string, players: Record<string, Player>, formation: string) => {
   const teamPlayers = Object.values(players)
@@ -26,7 +27,7 @@ export const autoAssignLineup = (teamId: string, players: Record<string, Player>
       } else {
         candidate = teamPlayers.find(p => p.subPosition === slot.label && !assignedIds.has(p.id) && !isPlayerUnavailable(p));
         if (!candidate) candidate = teamPlayers.find(p => p.position === slot.pos && !assignedIds.has(p.id) && !isPlayerUnavailable(p));
-        if (!candidate) candidate = teamPlayers.find(p => !assignedIds.has(p.id) && !isPlayerUnavailable(p));
+        if (!candidate) candidate = teamPlayers.find(p => p.position !== 'GK' && !assignedIds.has(p.id) && !isPlayerUnavailable(p));
       }
 
       if (candidate) {
@@ -106,9 +107,17 @@ export const buildQuickSimLineup = (
     assigned.add(chosen.id);
   });
 
+  if (assigned.size < 11 && !teamPlayers.some(player => assigned.has(player.id) && player.position === 'GK')) {
+    const goalkeeper = teamPlayers.find(player => player.position === 'GK' && !assigned.has(player.id));
+    if (goalkeeper) {
+      updates[goalkeeper.id] = { isStarting: true, isSub: false };
+      assigned.add(goalkeeper.id);
+    }
+  }
+
   if (assigned.size < 11) {
     teamPlayers
-      .filter(player => !assigned.has(player.id))
+      .filter(player => !assigned.has(player.id) && player.position !== 'GK')
       .slice(0, 11 - assigned.size)
       .forEach(player => {
         updates[player.id] = { isStarting: true, isSub: false };
@@ -261,7 +270,7 @@ export const getTeamMatchStarters = (
       // If still short (e.g. tiny squad), fill remaining with any eligible players.
       if (starters.length < 11) {
         const remainingFill = fillPool
-          .filter(player => !updatedPlayers[player.id]?.isStarting)
+          .filter(player => !updatedPlayers[player.id]?.isStarting && player.position !== 'GK')
           .sort((a, b) => (b.overallRating + b.energy * 0.1) - (a.overallRating + a.energy * 0.1))
           .slice(0, 11 - starters.length);
         remainingFill.forEach(player => {
@@ -269,6 +278,21 @@ export const getTeamMatchStarters = (
         });
       }
       starters = Object.values(updatedPlayers).filter(player => player.teamId === teamId && player.isStarting && !isPlayerUnavailable(player));
+    }
+    const validation = validateMatchdayXI(starters, { teamId });
+    if (!validation.ok || !validation.goalkeeperId) {
+      const eligibleGoalkeeper = eligibleTeamPlayers
+        .filter(player => player.position === 'GK' && !starters.some(starter => starter.id === player.id))
+        .sort((a, b) => b.overallRating - a.overallRating)[0];
+      if (eligibleGoalkeeper) {
+        const outfieldStarters = starters
+          .filter(player => player.position !== 'GK')
+          .sort((a, b) => a.overallRating - b.overallRating);
+        const demote = starters.length >= 11 ? outfieldStarters[0] : undefined;
+        if (demote) updatedPlayers[demote.id] = { ...updatedPlayers[demote.id], isStarting: false, isSub: false };
+        updatedPlayers[eligibleGoalkeeper.id] = { ...updatedPlayers[eligibleGoalkeeper.id], isStarting: true, isSub: false };
+        starters = Object.values(updatedPlayers).filter(player => player.teamId === teamId && player.isStarting && !isPlayerUnavailable(player));
+      }
     }
     const returnedStarterIds = new Set<string>();
     return starters.filter(player => {

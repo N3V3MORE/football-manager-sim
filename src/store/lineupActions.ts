@@ -8,6 +8,25 @@ type LineupActionResult = LineupActionState | Partial<Pick<GameState, 'players' 
 
 const MAX_ACTIVE_SUBS = 7;
 
+const getFormationSlot = (team: LineupActionState['teams'][string] | undefined, slotKey?: string) => {
+  if (!team || !slotKey) return null;
+  const [rowIndex, colIndex] = slotKey.split('-').map(Number);
+  if (!Number.isInteger(rowIndex) || !Number.isInteger(colIndex)) return null;
+  return getSlotsForFormation(team.activeFormation)[rowIndex]?.[colIndex] || null;
+};
+
+const hasOtherStartingGoalkeeper = (
+  players: Record<string, Player>,
+  teamId: string,
+  excludingPlayerId: string
+) => Object.values(players).some(player => (
+  player.teamId === teamId &&
+  player.id !== excludingPlayerId &&
+  player.isStarting &&
+  player.position === 'GK' &&
+  !isPlayerUnavailable(player)
+));
+
 const activeBenchCount = (
   players: Record<string, Player>,
   teamId: string,
@@ -40,6 +59,21 @@ export const applyLineupSuggestionToTeam = (
   const startingSet = new Set(startingIds
     .filter(playerId => eligibleIds.has(playerId))
     .slice(0, 11));
+  if (!Array.from(startingSet).some(playerId => allPlayers[playerId]?.position === 'GK')) {
+    const goalkeeper = teamPlayers
+      .filter(player => eligibleIds.has(player.id) && player.position === 'GK')
+      .sort((a, b) => b.overallRating - a.overallRating)[0];
+    if (goalkeeper) {
+      if (startingSet.size >= 11) {
+        const outfielderToRemove = Array.from(startingSet)
+          .map(playerId => allPlayers[playerId])
+          .filter((player): player is Player => Boolean(player) && player.position !== 'GK')
+          .sort((a, b) => a.overallRating - b.overallRating)[0];
+        if (outfielderToRemove) startingSet.delete(outfielderToRemove.id);
+      }
+      startingSet.add(goalkeeper.id);
+    }
+  }
   const subSet = new Set(subIds
     .filter(playerId => eligibleIds.has(playerId) && !startingSet.has(playerId))
     .slice(0, 7));
@@ -176,6 +210,9 @@ export const toggleStartingState = (
   };
 
   if (player.isStarting) {
+    if (player.position === 'GK' && !hasOtherStartingGoalkeeper(state.players, player.teamId, player.id)) {
+      return state;
+    }
     removeFromMap(playerId);
     const shouldMoveToBench = canAddActiveSub(state.players, player.teamId, new Set([playerId]));
     return {
@@ -240,6 +277,14 @@ export const swapPlayerState = (
   const removePlayer = removeId ? state.players[removeId] : null;
   if (removeId && !removePlayer) return state;
   if (removePlayer && removePlayer.teamId !== state.userTeamId) return state;
+
+  const targetTeam = state.userTeamId ? state.teams[state.userTeamId] : undefined;
+  const targetSlot = getFormationSlot(targetTeam, slotKey);
+  if (targetSlot) {
+    if (targetSlot.pos === 'GK' && addPlayer.position !== 'GK') return state;
+    if (targetSlot.pos !== 'GK' && addPlayer.position === 'GK') return state;
+  }
+  if (removePlayer?.position === 'GK' && addPlayer.position !== 'GK') return state;
 
   if (addPlayer.isStarting && removePlayer?.isStarting && slotKey && state.userTeamId) {
     const team = state.teams[state.userTeamId];

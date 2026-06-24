@@ -24,6 +24,20 @@ export type LiveMatchState = {
   awayMinuteMap?: Record<string, number>;
   homeSubEntryMinutes?: Record<string, number>;
   awaySubEntryMinutes?: Record<string, number>;
+  homeGoalkeeperId?: string;
+  awayGoalkeeperId?: string;
+  homeSubstitutionState?: {
+    substitutesUsed: number;
+    substitutionWindowsUsed: number;
+    maxSubstitutes?: number;
+    maxWindows?: number;
+  };
+  awaySubstitutionState?: {
+    substitutesUsed: number;
+    substitutionWindowsUsed: number;
+    maxSubstitutes?: number;
+    maxWindows?: number;
+  };
   appliedSubstitutionCheckpoints?: number[];
   processedMinutes?: number[];
 };
@@ -124,7 +138,7 @@ export const isRecoverableLiveMatch = (
   context: LiveMatchRecoveryContext
 ) => {
   const fixture = context.fixtures[fixtureId];
-  if (!fixture || fixture.isPlayed || fixture.week !== context.currentWeek) return false;
+  if (!fixture || fixture.isPlayed || fixture.week > context.currentWeek) return false;
   if (!context.teams[fixture.homeTeamId] || !context.teams[fixture.awayTeamId]) return false;
 
   return Boolean(liveState) &&

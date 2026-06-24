@@ -1,4 +1,5 @@
 import { GameState, InboxMessage, Player } from '../models/types';
+import { getRenewalOffer } from '../core/contractUtils';
 
 export type StoreActionResult = {
   success: boolean;
@@ -53,6 +54,24 @@ export const renewPlayerContractState = (
     return {
       patch: state,
       result: { success: false, message: 'Invalid contract terms.' },
+    };
+  }
+
+  const renewalOffer = getRenewalOffer(player);
+  const minimumAcceptableWage = Math.max(1, Math.round(renewalOffer.wage * 0.9));
+  if (wage < minimumAcceptableWage || years < Math.max(1, renewalOffer.years - 1)) {
+    return {
+      patch: state,
+      result: { success: false, message: `${player.name} rejected terms below his expected renewal package.` },
+    };
+  }
+
+  const operatingBudget = userTeam.operatingBudget !== undefined ? userTeam.operatingBudget : userTeam.budget;
+  const annualWageCost = (wage * 52) / 1000;
+  if (!Number.isFinite(operatingBudget) || operatingBudget < annualWageCost) {
+    return {
+      patch: state,
+      result: { success: false, message: 'The club cannot responsibly fund that wage commitment.' },
     };
   }
 

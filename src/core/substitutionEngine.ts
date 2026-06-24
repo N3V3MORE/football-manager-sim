@@ -9,6 +9,12 @@ type SubstitutionOptions = {
   minuteOverride?: number;
   onSubstitution?: (offPlayer: Player, onPlayer: Player, minute: number) => void;
   playerEntryMinutes?: Record<string, number>;
+  substitutionState?: {
+    substitutesUsed: number;
+    substitutionWindowsUsed: number;
+    maxSubstitutes?: number;
+    maxWindows?: number;
+  };
 };
 
 const substitutionEntryMinuteCache = new WeakMap<Record<string, number>, Record<string, number>>();
@@ -32,6 +38,14 @@ export const applySubstitutions = (
     substitutionEntryMinuteCache.set(playerMinutes, playerEntryMinutes);
   }
   if (bench.length === 0) return;
+  const substitutionState = options?.substitutionState;
+  const matchSubLimit = substitutionState?.maxSubstitutes ?? 5;
+  const matchWindowLimit = substitutionState?.maxWindows ?? 3;
+  if (substitutionState && (
+    substitutionState.substitutesUsed >= matchSubLimit ||
+    substitutionState.substitutionWindowsUsed >= matchWindowLimit
+  )) return;
+
   const scoreDiff = goalsFor - goalsAgainst;
   const isChasing = scoreDiff < 0;
   const isProtectingLead = scoreDiff > 0;
@@ -41,9 +55,28 @@ export const applySubstitutions = (
   else if (team.tactics.mentality === 'Attacking') maxSubs = 3 + Math.floor(random() * ENGINE_CONFIG.SUBS_ATTACKING_BONUS_RANGE);
   else if (team.tactics.mentality === 'Defensive') maxSubs = 2 + Math.floor(random() * ENGINE_CONFIG.SUBS_DEFENSIVE_BONUS_RANGE);
   if (options?.maxSubsOverride !== undefined) maxSubs = options.maxSubsOverride;
-  maxSubs = Math.min(5, bench.length, maxSubs);
+  if (substitutionState) {
+    const minute = options.minuteOverride ?? 60;
+    const tiredPlayers = starters.filter(player => {
+      const minutes = playerMinutes[player.id] ?? minute;
+      const energyPressure = player.energy < 35 || (minute >= 70 && player.energy < 55);
+      return !sentOffPlayers.has(player.id) && minutes > 0 && energyPressure;
+    });
+    const baseChance = isChasing ? 0.78 : isProtectingLead ? 0.62 : 0.48;
+    const minutePressure = minute >= 76 ? 0.16 : minute >= 66 ? 0.08 : 0;
+    const fatiguePressure = Math.min(0.24, tiredPlayers.length * 0.06);
+    const mentalityPressure = team.tactics.mentality === 'Attacking' ? 0.05 : team.tactics.mentality === 'Defensive' ? -0.03 : 0;
+    const actChance = Math.max(0.12, Math.min(0.92, baseChance + minutePressure + fatiguePressure + mentalityPressure));
+    if (tiredPlayers.length === 0 && random() > actChance) return;
+  }
+
+  const remainingMatchSubs = substitutionState ? Math.max(0, matchSubLimit - substitutionState.substitutesUsed) : 5;
+  const remainingTacticalSubs = substitutionState ? Math.max(0, maxSubs - substitutionState.substitutesUsed) : maxSubs;
+  maxSubs = Math.min(remainingMatchSubs, remainingTacticalSubs, bench.length, maxSubs);
+  if (maxSubs <= 0) return;
   const usedBench = new Set<string>();
   const usedOff = new Set<string>();
+  let substitutionsMade = 0;
 
   const attackingRoles: RoleTag[] = ['ST', 'WINGER', 'AM'];
   const defensiveRoles: RoleTag[] = ['CB', 'FB', 'WB', 'DM'];
@@ -84,7 +117,7 @@ export const applySubstitutions = (
     // GK safety: if the off-player is a goalkeeper, the on-player must also be a goalkeeper.
     const effectiveOnPool = offPlayer.position === 'GK'
       ? onPool.filter(player => player.position === 'GK')
-      : onPool;
+      : onPool.filter(player => player.position !== 'GK');
     if (effectiveOnPool.length === 0) break;
     // Prefer positional compatibility over broad role preferences.
     // When a bench player shares the departing player's position, subPosition,
@@ -117,6 +150,12 @@ export const applySubstitutions = (
     playerMinutes[onPlayer.id] = Math.max(playerMinutes[onPlayer.id] || 0, 90 - subMinute);
     usedOff.add(offPlayer.id);
     usedBench.add(onPlayer.id);
+    substitutionsMade += 1;
     options?.onSubstitution?.(offPlayer, onPlayer, subMinute);
+  }
+
+  if (substitutionState && substitutionsMade > 0) {
+    substitutionState.substitutesUsed += substitutionsMade;
+    substitutionState.substitutionWindowsUsed += 1;
   }
 };

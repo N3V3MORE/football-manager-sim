@@ -1,9 +1,10 @@
 import { GameState, Player } from '../models/types';
-import { removePlayerFromTeamSelections } from '../core/formationMapUtils';
 import { computeWeeklyTransfers } from '../core/progressionEngine';
 import { StoreActionResult } from './contractActions';
 import { isTransferWindowOpen } from '../utils/calendar';
 import { isWageOfferAccepted } from '../core/transferFinance';
+import { movePlayerToTeam } from '../core/playerMovement';
+import { getSquadPolicy } from '../core/squadPolicy';
 
 type TransferActionState = Pick<GameState, 'currentWeek' | 'players' | 'teams' | 'userTeamId'>;
 type TransferActionPatch = Partial<Pick<GameState, 'players' | 'teams'>> | TransferActionState;
@@ -83,6 +84,14 @@ export const buyPlayerState = (
     };
   }
 
+  const userSquadSize = Object.values(state.players).filter(candidate => candidate.teamId === userTeam.id).length;
+  if (userSquadSize >= getSquadPolicy(userTeam).maximumSquadSize) {
+    return {
+      patch: state,
+      result: { success: false, message: 'Your squad is already at the registration capacity.' },
+    };
+  }
+
   if (fee < player.askingPrice * 0.85) {
     return {
       patch: state,
@@ -97,34 +106,20 @@ export const buyPlayerState = (
     };
   }
 
-  const sellingTeam = state.teams[player.teamId];
-  const updatedUserTeam = {
-    ...userTeam,
-    budget: userTeam.budget - fee,
-    transferSpend: userTeam.transferSpend + fee,
-  };
-  const updatedSellingTeam = sellingTeam
-    ? removePlayerFromTeamSelections({ ...sellingTeam, budget: sellingTeam.budget + fee }, player.id)
-    : undefined;
-  const updatedPlayer = {
-    ...player,
-    teamId: userTeam.id,
-    wage: wageOffered > 0 ? wageOffered : player.wage,
-    isStarting: false,
-    isSub: false,
-    isTransferListed: false,
-    askingPrice: 0,
-    contractLeft: Math.max(player.contractLeft, 3),
-  };
+  const moved = movePlayerToTeam(
+    state.players,
+    state.teams,
+    playerId,
+    userTeam.id,
+    { wage: wageOffered > 0 ? wageOffered : player.wage, contractLeft: Math.max(player.contractLeft, 3) },
+    { budget: (state.teams[player.teamId]?.budget || 0) + fee },
+    { budget: userTeam.budget - fee, transferSpend: userTeam.transferSpend + fee }
+  );
 
   return {
     patch: {
-      teams: {
-        ...state.teams,
-        [userTeam.id]: updatedUserTeam,
-        ...(updatedSellingTeam && sellingTeam ? { [sellingTeam.id]: updatedSellingTeam } : {}),
-      },
-      players: { ...state.players, [playerId]: updatedPlayer },
+      teams: moved.teams,
+      players: moved.players,
     },
     result: { success: true, message: `Successfully purchased ${player.name} for GBP ${fee}m.` },
   };
