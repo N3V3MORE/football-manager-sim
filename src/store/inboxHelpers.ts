@@ -16,6 +16,7 @@ import {
   TeamTactics,
 } from '../models/types';
 import { getCompetitionRoundLabel, getCompetitionShortName } from '../core/competitionEngine';
+import { getNextDueFixture } from '../core/fixtureLifecycle';
 
 export const MAX_INBOX_MESSAGES = 60;
 
@@ -114,19 +115,6 @@ const getOpponentForFixture = (
 ) => {
   const opponentId = fixture.homeTeamId === userTeamId ? fixture.awayTeamId : fixture.homeTeamId;
   return teams[opponentId] || null;
-};
-
-const getUserFixtureForWeek = (
-  fixtures: Record<string, Fixture>,
-  currentWeek: number,
-  userTeamId: string | null
-) => {
-  if (!userTeamId) return null;
-  return Object.values(fixtures).find(
-    fixture => !fixture.isPlayed &&
-      fixture.week === currentWeek &&
-      (fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId)
-  ) || null;
 };
 
 const getSystemMessageCategory = (news: string): InboxMessageCategory => {
@@ -485,7 +473,7 @@ export const generateAssistantWeekMessages = ({
     ...generateContractMessages(currentWeek, team, players, squadPlan.contractDecisions, previousPlayers),
   ];
 
-  const fixture = getUserFixtureForWeek(fixtures, currentWeek, userTeamId);
+  const fixture = getNextDueFixture(fixtures, userTeamId, currentWeek);
   if (!fixture) return messages;
 
   const opponent = getOpponentForFixture(fixture, userTeamId, teams);
@@ -682,6 +670,7 @@ export const generatePostMatchReportMessage = ({
   previousPlayers,
 }: PostMatchReportInput) => {
   if (!userTeamId) return null;
+  if (fixture.resolution === 'void') return null;
   if (fixture.homeTeamId !== userTeamId && fixture.awayTeamId !== userTeamId) return null;
 
   const team = teams[userTeamId];

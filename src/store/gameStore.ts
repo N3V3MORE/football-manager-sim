@@ -55,15 +55,15 @@ import {
   unlistPlayerState,
 } from './transferActions';
 import { buildManagedTeamObjectives } from './managedTeamObjectives';
-import { DEFAULT_GAME_STATE, PERSIST_STORAGE_KEY, ensureReferentialIntegrity, hashStringToSeed, safeStorage, sanitizePersistedState } from './persistence';
-import { createSeededRandomGenerator } from '../core/random';
+import { DEFAULT_GAME_STATE, PERSIST_STORAGE_KEY, ensureReferentialIntegrity, safeStorage, sanitizePersistedState } from './persistence';
+import { createFixtureEventRandomGenerator, createSeededRandomGenerator } from '../core/random';
 import { advanceWeekState } from './weekLifecycle';
 import { finishLiveMatchState, processLiveMatchMinuteState } from './liveMatchActions';
 
 interface GameStore extends GameState {
   liveMatches: Record<string, LiveMatchState>;
   transfersAppliedWeek: number;
-  initializeGame: (userTeamId: string) => void;
+  initializeGame: (userTeamId: string, seed?: number) => void;
   advanceWeek: () => void;
   playMatch: (fixtureId: string) => void;
   markInboxMessageRead: (messageId: string) => void;
@@ -99,9 +99,12 @@ export const useGameStore = create<GameStore>()(
       boardReviewAppliedWeek: 0,
       transfersAppliedWeek: 0,
 
-      initializeGame: (userTeamId) => {
+      initializeGame: (userTeamId, seed) => {
         const requestedTeamId = userTeamId === 'temp' ? 'T1' : userTeamId;
-        const data = initGameData(requestedTeamId);
+        const rngState = Number.isFinite(seed) && seed && seed > 0
+          ? Math.floor(seed)
+          : Math.floor(Math.random() * 2147483647) + 1;
+        const data = initGameData(requestedTeamId, createSeededRandomGenerator(rngState));
         const actualTeamId = data.teams[requestedTeamId] ? requestedTeamId : Object.keys(data.teams)[0];
         
         const players = Object.fromEntries(
@@ -153,7 +156,7 @@ export const useGameStore = create<GameStore>()(
           liveMatches: {},
           boardReviewAppliedWeek: 0,
           transfersAppliedWeek: 0,
-          rngState: Math.floor(Math.random() * 2147483647) + 1,
+          rngState,
         });
       },
 
@@ -188,10 +191,9 @@ export const useGameStore = create<GameStore>()(
       playMatch: (fixtureId: string) => {
         set((state) => {
           const previousPlayers = state.players;
-          // Deterministic replay: combine the persisted seed with the fixture id
-          // so the same fixture always produces the same outcome after reload.
-          const matchSeed = (state.rngState ?? 1) ^ hashStringToSeed(fixtureId);
-          const rng = createSeededRandomGenerator(matchSeed >>> 0);
+          const seedFixture = state.fixtures[fixtureId];
+          const season = seedFixture ? state.competitions[seedFixture.competitionId]?.season || 1 : 1;
+          const rng = createFixtureEventRandomGenerator(fixtureId, 0, state.rngState ?? 1, season, 'quick');
           const { players, teams, fixture } = quickSimMatch(fixtureId, state.players, state.teams, state.fixtures, state.userTeamId, { rng });
           const nextFixtures = { ...state.fixtures, [fixtureId]: fixture };
           const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, teams);

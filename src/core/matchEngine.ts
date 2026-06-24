@@ -12,7 +12,7 @@ import { isPlayerUnavailable } from './playerStatusUtils';
 import { createFixtureEventRandomGenerator, RandomGenerator, resolveRandom } from './random';
 import { applyMatchResult } from './teamUtils';
 import { selectEmergencyGoalkeeperId, selectDesignatedGoalkeeperId, validateMatchdayXI } from './matchdayValidation';
-import { applyFixtureSuspensionService, getAdministrativeFixtureOutcome } from './fixtureLifecycle';
+import { applyFixtureSuspensionService, buildVoidFixture, getAdministrativeFixtureOutcome } from './fixtureLifecycle';
 import {
   addPlayerStat,
   avgStat,
@@ -538,6 +538,7 @@ export const quickSimMatch = (
   const rng = options?.rng ?? createFixtureEventRandomGenerator(fixtureId, 0);
   const fixture = fixtures[fixtureId];
   if (!fixture || fixture.isPlayed) return { players, teams, fixture, events: [] };
+  if (fixture.resolution === 'void') return { players, teams, fixture, events: [] };
 
   const updatedPlayers = { ...players };
   const updatedTeams = { ...teams };
@@ -556,6 +557,11 @@ export const quickSimMatch = (
   if (!homeValidation.ok || !awayValidation.ok) {
     const homeCanPlay = homeValidation.ok;
     const awayCanPlay = awayValidation.ok;
+    if (!homeCanPlay && !awayCanPlay) {
+      const voidFixture = buildVoidFixture(fixture);
+      matchEvents.push(`Fixture cannot be played: ${homeValidation.reason || 'home XI legal'}; ${awayValidation.reason || 'away XI legal'}.`);
+      return { players, teams, fixture: voidFixture, events: matchEvents };
+    }
     const outcome = getAdministrativeFixtureOutcome(fixture, homeCanPlay, awayCanPlay);
     updatedTeams[homeTeam.id] = {
       ...(outcome.resolution === 'void'
@@ -784,6 +790,11 @@ export const quickSimMatch = (
       allowEmergencyGoalkeeper: true,
     });
     if (!homeLiveValidation.ok || !awayLiveValidation.ok) {
+      if (!homeLiveValidation.ok && !awayLiveValidation.ok) {
+        const voidFixture = buildVoidFixture(fixture);
+        matchEvents.push(`Match voided: ${homeLiveValidation.reason || 'home XI legal'}; ${awayLiveValidation.reason || 'away XI legal'}.`);
+        return { players, teams, fixture: voidFixture, events: matchEvents };
+      }
       const outcome = getAdministrativeFixtureOutcome(fixture, homeLiveValidation.ok, awayLiveValidation.ok);
       forcedResolution = outcome.resolution;
       forcedWinnerTeamId = outcome.winnerTeamId;

@@ -9,7 +9,7 @@ import { getTeamTheme } from '@/src/constants/teamColors';
 import { getSeasonWeekLimit, sortTeamsByTable } from '@/src/core/leagueUtils';
 import { getCompetitionPanelForTeam, getCompetitionShortName } from '@/src/core/competitionEngine';
 import { formatFixtureShortDate, formatShortDate } from '@/src/utils/calendar';
-import { compareFixturesChronologically } from '@/src/core/fixtureLifecycle';
+import { compareFixturesChronologically, getNextDueFixture } from '@/src/core/fixtureLifecycle';
 import { Fixture, Player, Team } from '@/src/models/types';
 import { HubHeader } from '@/components/hub/hub-header';
 import { MiniTableCard } from '@/components/hub/mini-table-card';
@@ -70,19 +70,9 @@ export default function HubScreen() {
   const myTheme = myTeam ? getTeamTheme(myTeam.name) : null;
 
   const fixtureList = useMemo(() => Object.values(fixtures), [fixtures]);
-  const weekFixtures = useMemo(
-    () => fixtureList.filter(fixture => fixture.week === currentWeek),
-    [fixtureList, currentWeek]
-  );
-
   const myNextMatch = useMemo(
-    () => weekFixtures
-      .filter(fixture =>
-        !fixture.isPlayed &&
-        (fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId)
-      )
-      .sort(compareFixturesChronologically)[0],
-    [weekFixtures, userTeamId]
+    () => getNextDueFixture(fixtures, userTeamId, currentWeek),
+    [currentWeek, fixtures, userTeamId]
   );
 
   const homeTeam = myNextMatch ? teams[myNextMatch.homeTeamId] ?? null : null;

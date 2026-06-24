@@ -31,8 +31,10 @@ export const hashStringToSeed = (input: string): number => {
 export const createFixtureEventRandomGenerator = (
   fixtureId: string,
   eventIndex: number,
-  baseSeed = 1
-): RandomGenerator => createSeededRandomGenerator((baseSeed ^ hashStringToSeed(`${fixtureId}:${eventIndex}`)) >>> 0);
+  baseSeed = 1,
+  season = 1,
+  phase = 'match'
+): RandomGenerator => createSeededRandomGenerator(hashStringToSeed(`${baseSeed}:${season}:${fixtureId}:${phase}:${eventIndex}`));
 
 export const resolveRandom = (rng?: RandomGenerator): (() => number) => {
   return typeof rng?.next === 'function' ? () => rng.next() : Math.random;

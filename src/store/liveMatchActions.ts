@@ -18,7 +18,7 @@ import { isPlayerUnavailable } from '../core/playerStatusUtils';
 import { resolveCompetitionProgression } from '../core/competitionEngine';
 import { removePlayerFromTeamSelections } from '../core/formationMapUtils';
 import { selectDesignatedGoalkeeperId, selectEmergencyGoalkeeperId, validateMatchdayXI } from '../core/matchdayValidation';
-import { applyFixtureSuspensionService, getAdministrativeFixtureOutcome } from '../core/fixtureLifecycle';
+import { applyFixtureSuspensionService, buildVoidFixture, getAdministrativeFixtureOutcome } from '../core/fixtureLifecycle';
 import {
   LiveMatchState,
   drainLiveMatchEnergy,
@@ -89,7 +89,12 @@ export const processLiveMatchMinuteState = (
   let eventMsg: string | null = null;
   const fixture = state.fixtures[fixtureId];
   if (!fixture || fixture.isPlayed) return { patch: state, event: eventMsg };
-  const activeRng = rng ?? createFixtureEventRandomGenerator(fixtureId, getPossessionIndexForMinute(minute) ?? minute, state.rngState ?? 1);
+  if (fixture.resolution === 'void') return { patch: state, event: eventMsg };
+  if (!Number.isInteger(minute) || minute < 1 || minute > 90) {
+    throw new Error(`Live match minute must be an integer from 1 to 90; got ${minute}.`);
+  }
+  const fixtureSeason = state.competitions[fixture.competitionId]?.season || 1;
+  const activeRng = rng ?? createFixtureEventRandomGenerator(fixtureId, getPossessionIndexForMinute(minute) ?? minute, state.rngState ?? 1, fixtureSeason, 'live-minute');
 
   const storedLiveState = state.liveMatches?.[fixtureId];
   const processedMinutes = new Set(storedLiveState?.processedMinutes || []);
@@ -133,6 +138,17 @@ export const processLiveMatchMinuteState = (
   const homeValidation = validateMatchdayXI(homeStarters, { teamId: homeTeam.id });
   const awayValidation = validateMatchdayXI(awayStarters, { teamId: awayTeam.id });
   if (!homeValidation.ok || !awayValidation.ok) {
+    if (!homeValidation.ok && !awayValidation.ok) {
+      const voidFixture = buildVoidFixture(fixture);
+      eventMsg = `Fixture cannot be played: ${homeValidation.reason || 'home XI legal'}; ${awayValidation.reason || 'away XI legal'}.`;
+      return {
+        patch: {
+          fixtures: { ...state.fixtures, [fixtureId]: voidFixture },
+          liveMatches: removeLiveMatchFixture(state.liveMatches || {}, fixtureId),
+        },
+        event: eventMsg,
+      };
+    }
     const outcome = getAdministrativeFixtureOutcome(fixture, homeValidation.ok, awayValidation.ok);
     updatedTeams[homeTeam.id] = {
       ...(outcome.resolution === 'void'
@@ -419,6 +435,16 @@ export const processLiveMatchMinuteState = (
   if (!homeContinuation.ok || !awayContinuation.ok) {
     const homeCanContinue = homeContinuation.ok;
     const awayCanContinue = awayContinuation.ok;
+    if (!homeCanContinue && !awayCanContinue) {
+      const voidFixture = buildVoidFixture(fixture);
+      return {
+        patch: {
+          fixtures: { ...state.fixtures, [fixtureId]: voidFixture },
+          liveMatches: removeLiveMatchFixture(state.liveMatches || {}, fixtureId),
+        },
+        event: eventMsg || `Match voided: ${homeContinuation.reason || 'home XI legal'}; ${awayContinuation.reason || 'away XI legal'}.`,
+      };
+    }
     const outcome = getAdministrativeFixtureOutcome(fixture, homeCanContinue, awayCanContinue);
     if (outcome.resolution === 'void') {
       updatedFixture.homeScore = outcome.homeScore;
@@ -544,10 +570,14 @@ export const finishLiveMatchState = (
   fixtureId: string,
   rng?: RandomGenerator
 ): LiveMatchActionPatch => {
-  state = completeLiveMatchMinutes(state, fixtureId, rng);
-  const fixture = state.fixtures[fixtureId];
+  let fixture = state.fixtures[fixtureId];
   if (!fixture || fixture.isPlayed) return state;
-  const finalRng = rng ?? createFixtureEventRandomGenerator(fixtureId, 91, state.rngState ?? 1);
+  if (fixture.resolution === 'void') return state;
+  state = completeLiveMatchMinutes(state, fixtureId, rng);
+  fixture = state.fixtures[fixtureId];
+  if (!fixture || fixture.isPlayed) return state;
+  if (fixture.resolution === 'void') return state;
+  const finalRng = rng ?? createFixtureEventRandomGenerator(fixtureId, 91, state.rngState ?? 1, state.competitions[fixture.competitionId]?.season || 1, 'live-finish');
   const previousPlayers = state.players;
 
   const homeTeam = state.teams[fixture.homeTeamId];

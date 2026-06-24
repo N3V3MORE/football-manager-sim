@@ -132,6 +132,16 @@ const liveMatchIdsBelongToTeam = (
   ids.every(id => typeof id === 'string' && players[id]?.teamId === teamId)
 );
 
+const hasContiguousProcessedMinutes = (processedMinutes: unknown) => {
+  if (processedMinutes === undefined) return true;
+  if (!Array.isArray(processedMinutes)) return false;
+  const sorted = [...new Set(processedMinutes)]
+    .filter((minute): minute is number => Number.isInteger(minute) && minute >= 1 && minute <= 90)
+    .sort((left, right) => left - right);
+  if (sorted.length !== processedMinutes.length) return false;
+  return sorted.every((minute, index) => minute === index + 1);
+};
+
 export const isRecoverableLiveMatch = (
   fixtureId: string,
   liveState: Partial<LiveMatchState> | undefined,
@@ -143,6 +153,7 @@ export const isRecoverableLiveMatch = (
 
   return Boolean(liveState) &&
     typeof liveState === 'object' &&
+    hasContiguousProcessedMinutes(liveState.processedMinutes) &&
     liveMatchIdsBelongToTeam(liveState.homeStarterIds, fixture.homeTeamId, context.players) &&
     liveMatchIdsBelongToTeam(liveState.awayStarterIds, fixture.awayTeamId, context.players);
 };

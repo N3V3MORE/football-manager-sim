@@ -18,27 +18,11 @@ export const SEASON_FINAL_ORDINAL = 309; // Leaves roughly eight off-season week
 
 const getSeasonStart = (season = 1) => new Date(2024 + Math.max(0, season - 1), 7, 10);
 
-const interpolateOrdinal = (
-  week: number,
-  startWeek: number,
-  startOrdinal: number,
-  endWeek: number,
-  endOrdinal: number
-) => {
-  if (endWeek <= startWeek) return startOrdinal;
-  const ratio = (week - startWeek) / (endWeek - startWeek);
-  return Math.round(startOrdinal + (endOrdinal - startOrdinal) * ratio);
-};
+export const dateOrdinalToWeek = (dateOrdinal: number): number => Math.floor(Math.max(0, dateOrdinal) / 7) + 1;
 
 export const weekToDateOrdinal = (week: number): number => {
   const normalizedWeek = Math.max(1, week);
-  if (normalizedWeek <= 19) {
-    return interpolateOrdinal(normalizedWeek, 1, 0, 19, WINTER_WINDOW_OPEN_ORDINAL);
-  }
-  if (normalizedWeek <= 38) {
-    return interpolateOrdinal(normalizedWeek, 19, WINTER_WINDOW_OPEN_ORDINAL, 38, LEAGUE_END_ORDINAL);
-  }
-  return interpolateOrdinal(normalizedWeek, 38, LEAGUE_END_ORDINAL, 51, SEASON_FINAL_ORDINAL);
+  return (normalizedWeek - 1) * 7;
 };
 
 export const dateOrdinalToDate = (dateOrdinal: number, season = 1): Date => {
@@ -112,11 +96,11 @@ export const formatMonthYear = (week: number, season = 1): string => {
 // Winter:  1 Jan → 3 Feb 2025  ≈ weeks 19–24
 
 /** Approximately which week the Summer window closes */
-export const SUMMER_WINDOW_CLOSE_WEEK = 4;
+export const SUMMER_WINDOW_CLOSE_WEEK = dateOrdinalToWeek(20);
 
 /** Approximately which week the Winter window opens and closes */
-export const WINTER_WINDOW_OPEN_WEEK = 19;
-export const WINTER_WINDOW_CLOSE_WEEK = 24;
+export const WINTER_WINDOW_OPEN_WEEK = dateOrdinalToWeek(WINTER_WINDOW_OPEN_ORDINAL);
+export const WINTER_WINDOW_CLOSE_WEEK = dateOrdinalToWeek(177);
 
 export type WindowStatus =
   | 'summer_open'

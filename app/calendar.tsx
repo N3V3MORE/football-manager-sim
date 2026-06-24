@@ -9,7 +9,7 @@ import { formatFixtureShortDate, formatSeasonLabel, getWindowStatus } from '@/sr
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { PageHeader } from '@/components/ui/page-header';
 import { Fixture } from '@/src/models/types';
-import { compareFixturesChronologically } from '@/src/core/fixtureLifecycle';
+import { getTeamFixturesChronologically } from '@/src/core/fixtureLifecycle';
 
 type WindowBanner = {
   text: string;
@@ -44,9 +44,7 @@ export default function CalendarScreen() {
   const myFixtures = useMemo<Fixture[]>(
     () => {
       if (!userTeamId) return [];
-      return Object.values(allFixtures)
-        .filter(fixture => fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId)
-        .sort(compareFixturesChronologically);
+      return getTeamFixturesChronologically(allFixtures, userTeamId);
     },
     [allFixtures, userTeamId]
   );

@@ -18,13 +18,16 @@ import {
 } from './leagueUtils';
 import { RandomGenerator, resolveRandom } from './random';
 import { isPlayableClub } from './freeAgentPool';
-import { LEAGUE_END_ORDINAL, weekToDateOrdinal } from '../utils/calendar';
+import { dateOrdinalToWeek } from '../utils/calendar';
 
-const CARABAO_WEEKS = [3, 8, 13, 18, 24, 31, 39];
-const FA_CUP_WEEKS = [7, 14, 21, 28, 35, 42, 50];
-const EUROPE_WEEKS = [9, 23, 37, 51];
+const PREMIER_LEAGUE_DATE_ORDINALS = Array.from({ length: 42 }, (_, index) => index * 7)
+  .filter(dateOrdinal => ![21, 84, 126, 189].includes(dateOrdinal));
+const EFL_LEAGUE_DATE_ORDINALS = [...Array.from({ length: 42 }, (_, index) => index * 7), 31, 94, 164, 234]
+  .sort((left, right) => left - right);
+const CARABAO_DATE_ORDINALS = [17, 45, 73, 115, 143, 178, 199];
+const FA_CUP_DATE_ORDINALS = [150, 171, 185, 206, 227, 276, 294];
+const EUROPE_DATE_ORDINALS = [192, 220, 255, 306];
 export const MAX_SCHEDULED_SEASON_WEEK = 52;
-export const LEAGUE_WEEKS = Array.from({ length: 46 }, (_, index) => index + 1);
 
 const CONTINENTAL_CLUB_NAMES = [
   'Aurelia Madrid',
@@ -128,12 +131,11 @@ const CLUB_CLASS_STRENGTH: Record<string, number> = {
 
 const createRoundState = (
   key: CompetitionRoundKey,
-  week: number,
-  dateOrdinal = weekToDateOrdinal(week)
+  dateOrdinal: number
 ): CompetitionRoundState => ({
   key,
   label: ROUND_LABELS[key],
-  week,
+  week: dateOrdinalToWeek(dateOrdinal),
   dateOrdinal,
   entrantTeamIds: [],
   fixtureIds: [],
@@ -252,7 +254,8 @@ const buildLeagueCompetitionState = (
   division: LeagueDivision,
   teamIds: string[],
   fixtureIds: string[],
-  season: number
+  season: number,
+  firstDateOrdinal: number
 ): CompetitionState => ({
   id: LEAGUE_COMPETITION_BY_DIVISION[division],
   name: COMPETITION_NAMES[LEAGUE_COMPETITION_BY_DIVISION[division]],
@@ -264,7 +267,8 @@ const buildLeagueCompetitionState = (
   rounds: [{
     key: 'league',
     label: ROUND_LABELS.league,
-    week: LEAGUE_WEEKS[0] || 1,
+    week: dateOrdinalToWeek(firstDateOrdinal),
+    dateOrdinal: firstDateOrdinal,
     entrantTeamIds: teamIds,
     fixtureIds,
     byeTeamIds: [],
@@ -280,7 +284,6 @@ const buildKnockoutCompetition = (
   competitionType: CompetitionType,
   season: number,
   entrantTeamIds: string[],
-  weekSlots: number[],
   dateOrdinalSlots: number[],
   roundKeys: CompetitionRoundKey[],
   teams: Record<string, Team>,
@@ -291,11 +294,7 @@ const buildKnockoutCompetition = (
   fixtures: Record<string, Fixture>;
   nextCounter: number;
 } => {
-  const rounds = roundKeys.map((key, index) => createRoundState(
-    key,
-    weekSlots[index] || weekSlots[weekSlots.length - 1],
-    dateOrdinalSlots[index] ?? weekToDateOrdinal(weekSlots[index] || weekSlots[weekSlots.length - 1])
-  ));
+  const rounds = roundKeys.map((key, index) => createRoundState(key, dateOrdinalSlots[index] ?? dateOrdinalSlots[dateOrdinalSlots.length - 1]));
   const scheduledRound = scheduleKnockoutRound(
     competitionId,
     competitionType,
@@ -385,21 +384,17 @@ export const buildSeasonCompetitionBundle = (
   const fixtures: Record<string, Fixture> = {};
   const competitions: Record<string, CompetitionState> = {};
   let fixtureCounter = 1;
-  const buildLeagueDateOrdinals = (roundCount: number) => Array.from({ length: roundCount }, (_, index) => (
-    Math.round((index / Math.max(1, roundCount - 1)) * LEAGUE_END_ORDINAL)
-  ));
 
   DIVISION_ORDER.forEach(division => {
     const divisionTeamIds = sortTeamsByDivisionAndName(
       Object.values(teams).filter(team => isPlayableClub(team) && team.division === division)
     ).map(team => team.id);
-    const leagueWeeks = LEAGUE_WEEKS.slice(0, division === 'Premier League' ? 38 : 46);
+    const leagueDateOrdinals = division === 'Premier League' ? PREMIER_LEAGUE_DATE_ORDINALS : EFL_LEAGUE_DATE_ORDINALS;
     const generated = buildRoundRobinFixtures(
       divisionTeamIds,
       division,
       fixtureCounter,
-      leagueWeeks,
-      buildLeagueDateOrdinals(leagueWeeks.length)
+      leagueDateOrdinals
     );
     fixtureCounter = generated.nextCounter;
     Object.assign(fixtures, generated.fixtures);
@@ -407,7 +402,8 @@ export const buildSeasonCompetitionBundle = (
       division,
       divisionTeamIds,
       Object.keys(generated.fixtures),
-      season
+      season,
+      leagueDateOrdinals[0] ?? 0
     );
   });
 
@@ -420,8 +416,7 @@ export const buildSeasonCompetitionBundle = (
     'domestic_cup',
     season,
     englishClubIds,
-    CARABAO_WEEKS,
-    CARABAO_WEEKS.map(week => weekToDateOrdinal(week) - 2),
+    CARABAO_DATE_ORDINALS,
     DOMESTIC_CUP_ROUNDS,
     teams,
     fixtureCounter,
@@ -436,8 +431,7 @@ export const buildSeasonCompetitionBundle = (
     'domestic_cup',
     season,
     englishClubIds,
-    FA_CUP_WEEKS,
-    FA_CUP_WEEKS.map(week => weekToDateOrdinal(week) - 1),
+    FA_CUP_DATE_ORDINALS,
     DOMESTIC_CUP_ROUNDS,
     teams,
     fixtureCounter,
@@ -459,8 +453,7 @@ export const buildSeasonCompetitionBundle = (
     'continental',
     season,
     europeEntrants,
-    EUROPE_WEEKS,
-    EUROPE_WEEKS.map(week => weekToDateOrdinal(week) - 3),
+    EUROPE_DATE_ORDINALS,
     EUROPE_ROUNDS,
     teams,
     fixtureCounter,

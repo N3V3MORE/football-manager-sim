@@ -41,6 +41,24 @@ const resetTeamStats = (team: Team): Team => ({
   transferSpend: 0,
 });
 
+const getFiniteNonNegative = (value: number | undefined, fallback = 0) => (
+  Number.isFinite(value) ? Math.max(0, value!) : fallback
+);
+
+const getNextSeasonFinance = (team: Team, nextClubClass: string) => {
+  const allocation = getBudgetForClass(nextClubClass);
+  const retainedTransferBudget = Math.min(getFiniteNonNegative(team.budget), allocation);
+  const retainedOperatingBudget = Math.min(
+    getFiniteNonNegative(team.operatingBudget, getFiniteNonNegative(team.budget)),
+    allocation
+  );
+
+  return {
+    budget: allocation + retainedTransferBudget,
+    operatingBudget: allocation + retainedOperatingBudget,
+  };
+};
+
 const getDivisionTeams = (teams: Record<string, Team>, division: LeagueDivision) => (
   sortTeamsByTable(Object.values(teams).filter(team => isPlayableClub(team) && team.division === division))
 );
@@ -330,14 +348,14 @@ export const advanceSeason = (
 
       // Skip review for teams that already had a season-end review applied (e.g. user team via weekly lifecycle)
       if (skipReviewSet.has(teamId)) {
+        const nextFinance = getNextSeasonFinance(team, nextClubClass);
         const nextTeam: Team = {
           ...team,
           division: nextDivision,
           clubClass: nextClubClass,
           boardProfile: nextBoardProfile,
           boardApproval: team.boardApproval,
-          budget: getBudgetForClass(nextClubClass),
-          operatingBudget: getBudgetForClass(nextClubClass),
+          ...nextFinance,
           manager: refreshManagerForNewSeason(team.manager, nextBoardProfile, nextDivision),
         };
         return [teamId, resetTeamStats(nextTeam)];
@@ -366,14 +384,14 @@ export const advanceSeason = (
         }
       );
 
+      const nextFinance = getNextSeasonFinance(team, nextClubClass);
       let nextTeam: Team = {
         ...team,
         division: nextDivision,
         clubClass: nextClubClass,
         boardProfile: nextBoardProfile,
         boardApproval: review.nextApproval,
-        budget: getBudgetForClass(nextClubClass),
-        operatingBudget: getBudgetForClass(nextClubClass),
+        ...nextFinance,
         manager: refreshManagerForNewSeason(review.nextManager, nextBoardProfile, nextDivision),
       };
 

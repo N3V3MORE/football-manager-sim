@@ -376,41 +376,48 @@ const checkStaleLiveMatchRecovery = () => {
   const data = initGameData('Arsenal');
   const userTeam = Object.values(data.teams).find(team => team.name === 'Arsenal');
   assert(userTeam, 'Expected Arsenal for stale live match recovery');
-  const currentFixture = Object.values(data.fixtures).find(item => (
+  const currentWeekFixtures = Object.values(data.fixtures).filter(item => (
     item.week === 1 &&
     !item.isPlayed &&
     item.homeTeamId !== userTeam!.id &&
     item.awayTeamId !== userTeam!.id
   ));
+  const [currentFixture, gappedMinuteFixture] = currentWeekFixtures;
   const futureFixture = Object.values(data.fixtures).find(item => item.week > 1 && !item.isPlayed);
   const playedFixture = Object.values(data.fixtures).find(item => (
     item.id !== currentFixture?.id &&
+    item.id !== gappedMinuteFixture?.id &&
     item.week === 1
   ));
-  assert(currentFixture && futureFixture && playedFixture, 'Expected fixtures for stale live match recovery');
+  assert(currentFixture && gappedMinuteFixture && futureFixture && playedFixture, 'Expected fixtures for stale live match recovery');
 
-  const homeStarterIds = Object.values(data.players)
-    .filter(player => player.teamId === currentFixture!.homeTeamId)
-    .slice(0, 11)
-    .map(player => player.id);
-  const awayStarterIds = Object.values(data.players)
-    .filter(player => player.teamId === currentFixture!.awayTeamId)
-    .slice(0, 11)
-    .map(player => player.id);
+  const buildLiveMatch = (fixture: typeof currentFixture, processedMinutes?: number[]) => {
+    const homeStarterIds = Object.values(data.players)
+      .filter(player => player.teamId === fixture!.homeTeamId)
+      .slice(0, 11)
+      .map(player => player.id);
+    const awayStarterIds = Object.values(data.players)
+      .filter(player => player.teamId === fixture!.awayTeamId)
+      .slice(0, 11)
+      .map(player => player.id);
+    assert(homeStarterIds.length === 11 && awayStarterIds.length === 11, 'Expected full XIs for stale recovery');
+    return {
+      initialized: true,
+      yellowCardPlayerIds: [],
+      sentOffPlayerIds: [],
+      homeStarterIds,
+      awayStarterIds,
+      ...(processedMinutes ? { processedMinutes } : {}),
+    };
+  };
+
+  const liveMatch = buildLiveMatch(currentFixture, [1, 2]);
+  const gappedMinuteLiveMatch = buildLiveMatch(gappedMinuteFixture, [1, 3]);
   const wrongHomeStarterIds = Object.values(data.players)
     .filter(player => player.teamId !== currentFixture!.homeTeamId)
     .slice(0, 11)
     .map(player => player.id);
-  assert(homeStarterIds.length === 11 && awayStarterIds.length === 11, 'Expected full XIs for stale recovery');
   assert(wrongHomeStarterIds.length === 11, 'Expected wrong-team XI for stale recovery');
-
-  const liveMatch = {
-    initialized: true,
-    yellowCardPlayerIds: [],
-    sentOffPlayerIds: [],
-    homeStarterIds,
-    awayStarterIds,
-  };
   const persisted = sanitizePersistedState({
     currentWeek: 1,
     userTeamId: userTeam!.id,
@@ -426,6 +433,7 @@ const checkStaleLiveMatchRecovery = () => {
     boardObjectives: [],
     liveMatches: {
       [currentFixture!.id]: liveMatch,
+      [gappedMinuteFixture!.id]: gappedMinuteLiveMatch,
       missing_fixture: liveMatch,
       [futureFixture!.id]: liveMatch,
       [playedFixture!.id]: liveMatch,
@@ -438,6 +446,7 @@ const checkStaleLiveMatchRecovery = () => {
 
   const persistedLiveMatches = persisted.liveMatches || {};
   assert(persistedLiveMatches[currentFixture!.id], 'Valid current live match should survive rehydration');
+  assert(!persistedLiveMatches[gappedMinuteFixture!.id], 'Non-contiguous processed live minutes should be cleared on rehydration');
   assert(!persistedLiveMatches.missing_fixture, 'Missing-fixture live match should be cleared on rehydration');
   assert(!persistedLiveMatches[futureFixture!.id], 'Wrong-week live match should be cleared on rehydration');
   assert(!persistedLiveMatches[playedFixture!.id], 'Played-fixture live match should be cleared on rehydration');
@@ -472,10 +481,12 @@ const checkStaleLiveMatchRecovery = () => {
         ...liveMatch,
         homeStarterIds: wrongHomeStarterIds,
       },
+      [gappedMinuteFixture!.id]: gappedMinuteLiveMatch,
     },
   });
   assert(advanced.currentWeek > 1, 'Invalid stale live match should not block week advance');
   assert(!advanced.liveMatches[currentFixture!.id], 'Invalid stale live match should be cleared during week advance');
+  assert(!advanced.liveMatches[gappedMinuteFixture!.id], 'Gapped live match should be cleared during week advance');
 
   useGameStore.setState({
     currentWeek: 1,
@@ -492,11 +503,12 @@ const checkStaleLiveMatchRecovery = () => {
     boardObjectives: [],
     liveMatches: {
       [currentFixture!.id]: liveMatch,
+      [gappedMinuteFixture!.id]: gappedMinuteLiveMatch,
       missing_fixture: liveMatch,
     },
   });
   const recoveredCount = useGameStore.getState().clearStuckLiveMatches();
-  assert(recoveredCount === 2, 'Recovery action should finish valid blockers and clear invalid live matches');
+  assert(recoveredCount === 3, 'Recovery action should finish valid blockers and clear invalid live matches');
   assert(!useGameStore.getState().liveMatches[currentFixture!.id], 'Recovery action should clear finished live match');
   assert(useGameStore.getState().fixtures[currentFixture!.id].isPlayed, 'Recovery action should finish valid active fixture');
 };

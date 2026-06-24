@@ -149,7 +149,7 @@ export const computeWeeklyProgression = (
   generatedNews: string[];
 } => {
   const random = resolveRandom(rng);
-  const playedFixtures = Object.values(fixtures).filter(f => f.week === currentWeek && f.isPlayed);
+  const playedFixtures = Object.values(fixtures).filter(f => f.week === currentWeek && f.isPlayed && f.resolution !== 'void');
   const seasonWeekLimit = seasonWeekLimitOverride ?? getSeasonWeekLimit(fixtures);
   const newNews: string[] = [];
   
@@ -240,7 +240,7 @@ export const computeWeeklyProgression = (
 
   if (currentWeek === seasonWeekLimit) {
     const playedMatchesByTeam = Object.values(fixtures).reduce<Record<string, number>>((counts, fixture) => {
-      if (!fixture.isPlayed) return counts;
+      if (!fixture.isPlayed || fixture.resolution === 'void') return counts;
       counts[fixture.homeTeamId] = (counts[fixture.homeTeamId] || 0) + 1;
       counts[fixture.awayTeamId] = (counts[fixture.awayTeamId] || 0) + 1;
       return counts;

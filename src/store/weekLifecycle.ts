@@ -49,7 +49,13 @@ const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TSt
   weekFixtures.forEach(fixtureToPlay => {
     if (updatedLiveMatches[fixtureToPlay.id]) return;
     const previousPlayers = updatedPlayers;
-    const rng = createFixtureEventRandomGenerator(fixtureToPlay.id, 0, state.rngState ?? 1);
+    const rng = createFixtureEventRandomGenerator(
+      fixtureToPlay.id,
+      0,
+      state.rngState ?? 1,
+      state.competitions[fixtureToPlay.competitionId]?.season || 1,
+      'weekly-quick'
+    );
     const { players, teams, fixture } = quickSimMatch(
       fixtureToPlay.id,
       updatedPlayers,
