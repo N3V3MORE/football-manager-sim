@@ -56,7 +56,7 @@ export const rebuildFormationSlotPlayers = (
     row.forEach((slot, colIdx) => {
       const playerId = formationMap[`${rowIdx}-${colIdx}`];
       const mappedStarter = playerId ? starters.find(player => player.id === playerId) || null : null;
-      if (mappedStarter && isPlayerSlotFit(mappedStarter, slot)) {
+      if (mappedStarter && !assignedStarterIds.has(mappedStarter.id) && isPlayerSlotFit(mappedStarter, slot)) {
         slotPlayers[rowIdx][colIdx] = mappedStarter;
         assignedStarterIds.add(mappedStarter.id);
       }

@@ -105,17 +105,6 @@ const clampNumber = (value: unknown, min: number, max: number, fallback: number)
 const clampInt = (value: unknown, min: number, max: number, fallback: number): number =>
   Math.round(clampNumber(value, min, max, fallback));
 
-/** Simple string→number hash for deriving per-fixture RNG seeds. */
-export const hashStringToSeed = (input: string): number => {
-  let hash = 0;
-  for (let i = 0; i < input.length; i += 1) {
-    const char = input.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0; // Convert to 32-bit int
-  }
-  return hash >>> 0;
-};
-
 /** Ensure every player.teamId points to a valid team by creating a durable
  *  free-agent team when needed. Returns the (possibly augmented) teams record. */
 export const ensureReferentialIntegrity = (
