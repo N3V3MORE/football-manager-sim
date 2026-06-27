@@ -13,6 +13,7 @@ import { createFixtureEventRandomGenerator, RandomGenerator, resolveRandom } fro
 import { applyMatchResult } from './teamUtils';
 import { selectEmergencyGoalkeeperId, selectDesignatedGoalkeeperId, validateMatchdayXI } from './matchdayValidation';
 import { applyFixtureSuspensionService, buildVoidFixture, getAdministrativeFixtureOutcome } from './fixtureLifecycle';
+import { resolveAdministrativeFixture } from './matchFinalization';
 import {
   addPlayerStat,
   avgStat,
@@ -555,36 +556,23 @@ export const quickSimMatch = (
   const homeValidation = validateMatchdayXI(homeStarters, { teamId: fixture.homeTeamId });
   const awayValidation = validateMatchdayXI(awayStarters, { teamId: fixture.awayTeamId });
   if (!homeValidation.ok || !awayValidation.ok) {
-    const homeCanPlay = homeValidation.ok;
-    const awayCanPlay = awayValidation.ok;
-    if (!homeCanPlay && !awayCanPlay) {
-      const voidFixture = buildVoidFixture(fixture);
-      matchEvents.push(`Fixture cannot be played: ${homeValidation.reason || 'home XI legal'}; ${awayValidation.reason || 'away XI legal'}.`);
-      return { players, teams, fixture: voidFixture, events: matchEvents };
-    }
-    const outcome = getAdministrativeFixtureOutcome(fixture, homeCanPlay, awayCanPlay);
-    updatedTeams[homeTeam.id] = {
-      ...(outcome.resolution === 'void'
-        ? homeTeam
-        : applyMatchResult(homeTeam, outcome.homeScore, outcome.awayScore, outcome.includeTableStats)),
-      lastStartingXI: homeCanPlay ? homeStarters.map(player => player.id) : [],
+    const finalized = resolveAdministrativeFixture(
+      fixture,
+      homeValidation.ok,
+      awayValidation.ok,
+      updatedTeams,
+      updatedPlayers,
+      homeStarters.map(player => player.id),
+      awayStarters.map(player => player.id)
+    );
+    const eventPrefix = finalized.isVoid ? 'Fixture cannot be played' : 'Fixture resolved by forfeit';
+    matchEvents.push(`${eventPrefix}: ${homeValidation.reason || 'home XI legal'}; ${awayValidation.reason || 'away XI legal'}.`);
+    return {
+      players: finalized.players,
+      teams: finalized.teams,
+      fixture: finalized.fixture,
+      events: matchEvents,
     };
-    updatedTeams[awayTeam.id] = {
-      ...(outcome.resolution === 'void'
-        ? awayTeam
-        : applyMatchResult(awayTeam, outcome.awayScore, outcome.homeScore, outcome.includeTableStats)),
-      lastStartingXI: awayCanPlay ? awayStarters.map(player => player.id) : [],
-    };
-    const updatedFixture = {
-      ...fixture,
-      homeScore: outcome.homeScore,
-      awayScore: outcome.awayScore,
-      isPlayed: true,
-      winnerTeamId: outcome.winnerTeamId,
-      resolution: outcome.resolution,
-    };
-    matchEvents.push(`Fixture resolved by forfeit: ${homeValidation.reason || 'home XI legal'}; ${awayValidation.reason || 'away XI legal'}.`);
-    return { players: applyFixtureSuspensionService(updatedPlayers, updatedFixture), teams: updatedTeams, fixture: updatedFixture, events: matchEvents };
   }
 
   let hScore = 0;
