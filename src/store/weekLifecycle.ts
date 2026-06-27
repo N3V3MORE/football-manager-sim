@@ -122,10 +122,13 @@ const sanitizeFormationMaps = <TState extends WeeklyLifecycleState>(state: TStat
   let changed = false;
   const teams = Object.fromEntries(Object.entries(state.teams).map(([teamId, team]) => {
     if (!team.formationMap) return [teamId, team];
+    const usedPlayerIds = new Set<string>();
     const formationMap = Object.fromEntries(
       Object.entries(team.formationMap).filter(([, playerId]) => {
         const player = state.players[playerId];
-        return player?.teamId === team.id && player.isStarting;
+        if (player?.teamId !== team.id || !player.isStarting || usedPlayerIds.has(playerId)) return false;
+        usedPlayerIds.add(playerId);
+        return true;
       })
     );
     if (Object.keys(formationMap).length !== Object.keys(team.formationMap).length) {
