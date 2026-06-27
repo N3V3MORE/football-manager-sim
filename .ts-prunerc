@@ -1,0 +1,4 @@
+{
+  "ignore": "used in module|\\\\app\\\\|\\\\components\\\\|\\\\constants\\\\|\\\\hooks\\\\|\\\\scripts\\\\|\\\\tests\\\\|\\\\src\\\\config\\\\|\\\\src\\\\data\\\\|\\\\src\\\\dev\\\\|gameStore\\.ts$|initGame\\.ts$|random\\.ts$|inboxActions\\.ts$|managedTeamObjectives\\.ts$|persistence\\.ts$|careerEngine\\.ts$|boardEngine\\.ts$|seasonTransition\\.ts$|progressionEngine\\.ts$|leagueUtils\\.ts$|freeAgentPool\\.ts$|playerMovement\\.ts$|injuryEngine\\.ts$|types\\.ts$|models\\\\index|matchFinalization\\.ts$|contractUtils\\.ts$|transferFinance\\.ts$|boardObjectiveHelpers\\.ts$|teamColors\\.ts$|leaguePyramids\\.ts$|calendar\\.ts$|getContractAdviceLabel|getNextFixtureForTeam|buildVoidFixture|getLeagueCountryIndex|getDivisionMaxWeeks|defaultRandomGenerator|MIN_WAGE_ACCEPTANCE_RATIO|isWageOfferAccepted|SEASON_START|SEASON_FINAL_ORDINAL|formatMatchDate|formatMonthYear|buildSeasonMessage",
+  "error": true
+}

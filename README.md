@@ -40,16 +40,18 @@ npm run test:regression    # Deterministic engine regression checks
 npm run check:save         # Audits persisted save shape and formation-map recovery
 npm run check:agent        # Agent-driven init, live match, quick sim, and weekly advance
 npm run check:season       # Full-season agent playthrough
+npm run check:season5      # Five-season agent playthrough
+npm run check:deadcode     # Fails on unused exports outside configured entrypoints
 npm run test:news          # News-generation output test
 npm run ci                 # Full CI: typecheck + lint + test:ci + test:regression + check:save + check:agent
-npm run gate:release       # Release gate: ci + full-season agent playthrough
+npm run gate:release       # Release gate: ci + five-season playthrough + dead-code + Expo checks
 ```
 
 ### Analysis and tracking
 
 - `turbo` defaults to 500 seasons. Override with `TURBO_SEASONS=50`.
 - `track:season` defaults to 1 season. Override with `SEASON_TRACKER_SEASONS=10`.
-- `gate:release` runs `ci` and then `check:season`.
+- `gate:release` runs `ci`, `check:season5`, `check:deadcode`, `expo-doctor`, and `expo export`.
 - Pull requests and `v*` tag pushes run `npm ci`, `npm run ci`, and `npm run gate:release` in GitHub Actions.
 
 ## Versioning

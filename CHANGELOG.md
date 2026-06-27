@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- No unreleased changes.
+What changed:
+- Added a five-season agent regression gate and dead-code check to the release path.
+- Tightened the release gate to run Expo Doctor and export before publishing.
+- Removed an unused match-substitution facade so the engine-facing module stays smaller.
 
 ## v4.3.0 - Stable freeze
 
