@@ -3,9 +3,10 @@ import { router } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
 import { useMemo, useState } from 'react';
 import { Player } from '@/src/models/types';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatsLeaderboardCard, StatsLeaderboardRow } from '@/components/stats/stats-leaderboard-card';
+import { Screen } from '@/components/ui';
 import { PageHeader } from '@/components/ui/page-header';
+import { color, space } from '@/src/design/tokens';
 
 type PlayerStatKey = 'goals' | 'assists' | 'cleanSheets' | 'yellowCards' | 'redCards';
 type PaneConfig = {
@@ -81,12 +82,12 @@ export default function StatsScreen() {
     { title: 'Golden Boot', stat: 'goals', rows: toLeaderboardRows(topScorers, teams, 'goals') },
     { title: 'Playmaker of the Season', stat: 'assists', rows: toLeaderboardRows(topAssisters, teams, 'assists') },
     { title: 'Golden Glove', stat: 'cleanSheets', rows: toLeaderboardRows(topCleanSheets, teams, 'cleanSheets') },
-    { title: 'Yellow Cards', stat: 'yellowCards', rows: toLeaderboardRows(topYellowCards, teams, 'yellowCards'), valueColor: '#F59E0B' },
-    { title: 'Red Cards', stat: 'redCards', rows: toLeaderboardRows(topRedCards, teams, 'redCards'), valueColor: '#ef4444' },
+    { title: 'Yellow Cards', stat: 'yellowCards', rows: toLeaderboardRows(topYellowCards, teams, 'yellowCards'), valueColor: color.warning.base },
+    { title: 'Red Cards', stat: 'redCards', rows: toLeaderboardRows(topRedCards, teams, 'redCards'), valueColor: color.danger.base },
   ]), [teams, topAssisters, topCleanSheets, topRedCards, topScorers, topYellowCards]);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <Screen scroll={false}>
       <PageHeader title="All-Competition Stats" backLabel="< Hub" onBack={() => router.replace('/')} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -107,14 +108,10 @@ export default function StatsScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-  },
-  scroll: { paddingHorizontal: 16, paddingBottom: 16 },
+  scroll: { paddingHorizontal: space.lg, paddingBottom: space.lg },
 });

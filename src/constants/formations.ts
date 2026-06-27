@@ -81,6 +81,8 @@ export const BASE_FORMATION_SLOTS: Record<string, Slot[][]> = {
   ],
 };
 
+export const SUPPORTED_FORMATIONS = Object.keys(BASE_FORMATION_SLOTS);
+
 export const getSlotsForFormation = (formation: string): Slot[][] => (
   BASE_FORMATION_SLOTS[formation] || BASE_FORMATION_SLOTS['4-3-3']
 );

@@ -16,7 +16,7 @@
     "qa": "tsx -r ./scripts/mock-env.js scripts/autonomous_qa.ts",
     "turbo": "tsx -r ./scripts/mock-env.js scripts/turbo_sim.ts",
     "test": "npm run -s test:ci && npm run -s test:regression && npm run -s check:save && npm run -s test:phase10",
-    "test:regression": "tsx -r ./scripts/mock-env.js scripts/regression_checks.ts",
+    "test:regression": "tsx -r ./scripts/mock-env.js tests/regression/run.ts",
     "test:phase10": "tsx -r ./scripts/mock-env.js scripts/test_phase10_gaps.ts",
     "check:save": "tsx -r ./scripts/mock-env.js scripts/save_integrity_check.ts",
     "check:agent": "tsx -r ./scripts/mock-env.js scripts/agent_game_check.ts",

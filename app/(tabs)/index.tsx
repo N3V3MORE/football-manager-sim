@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '@/src/store/gameStore';
 import { useRouter } from 'expo-router';
 import { BoardRoomCard } from '@/components/hub/board-room-card';
@@ -18,6 +17,8 @@ import { SeasonStatsCard } from '@/components/hub/season-stats-card';
 import { LatestNewsCard } from '@/components/hub/latest-news-card';
 import { CompetitionPanelsCard } from '@/components/hub/competition-panels-card';
 import { UpcomingFixturesCard, UpcomingFixtureCardRow } from '@/components/hub/upcoming-fixtures-card';
+import { Screen } from '@/components/ui';
+import { color } from '@/src/design/tokens';
 import { Ionicons } from '@expo/vector-icons';
 
 type UpcomingFixtureRow = {
@@ -90,8 +91,8 @@ export default function HubScreen() {
   const handleQuickSim = useCallback(() => {
     if (!myNextMatch) return;
     playMatch(myNextMatch.id);
-    advanceWeek();
-  }, [advanceWeek, myNextMatch, playMatch]);
+    router.push({ pathname: '/match', params: { fixtureId: myNextMatch.id } });
+  }, [myNextMatch, playMatch, router]);
 
   const miniTableData = useMemo(() => {
     const sortedTeams = sortTeamsByTable(Object.values(teams).filter(team => team.division === myDivision));
@@ -181,7 +182,7 @@ export default function HubScreen() {
 
   if (!myTeam || !myTheme) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <Screen scroll={false}>
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>Between Jobs</Text>
           <Text style={styles.emptyCopy}>
@@ -195,14 +196,16 @@ export default function HubScreen() {
             style={styles.emptyInboxButton}
             onPress={() => router.push('/inbox')}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Open inbox"
           >
-            <Ionicons name="mail" size={18} color="#0f172a" />
+            <Ionicons name="mail" size={18} color={color.bg.screen} />
             <Text style={styles.emptyInboxText}>
               Open Inbox{unreadInboxCount > 0 ? ` (${unreadInboxCount})` : ''}
             </Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
@@ -216,7 +219,7 @@ export default function HubScreen() {
   ] as CompetitionPanelItem[];
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <Screen scroll={false}>
       <View style={{ flex: 1 }}>
         <ScrollView showsVerticalScrollIndicator={false}>
           <HubHeader
@@ -267,21 +270,22 @@ export default function HubScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.floatingInbox}
           onPress={() => router.push('/inbox')}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Open inbox${unreadInboxCount > 0 ? `, ${unreadInboxCount} unread` : ''}`}
         >
-          <Ionicons name="mail" size={22} color="#facc15" />
+          <Ionicons name="mail" size={22} color={color.warning.fg} />
           {unreadInboxCount > 0 && <View style={styles.unreadDot} />}
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0f1e' },
   emptyState: {
     flex: 1,
     padding: 20,
@@ -289,12 +293,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyTitle: {
-    color: '#f8fafc',
+    color: color.text.primary,
     fontSize: 28,
     fontWeight: '900',
   },
   emptyCopy: {
-    color: '#94a3b8',
+    color: color.text.muted,
     fontSize: 14,
     lineHeight: 22,
   },
@@ -303,12 +307,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#facc15',
+    backgroundColor: color.warning.fg,
     paddingVertical: 14,
     borderRadius: 0,
   },
   emptyInboxText: {
-    color: '#0f172a',
+    color: color.bg.screen,
     fontSize: 13,
     fontWeight: '900',
   },
@@ -318,9 +322,9 @@ const styles = StyleSheet.create({
     right: 20,
     width: 44,
     height: 44,
-    backgroundColor: '#111827',
+    backgroundColor: color.bg.card,
     borderWidth: 1,
-    borderColor: '#1e293b',
+    borderColor: color.border.subtle,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 5,
@@ -335,6 +339,6 @@ const styles = StyleSheet.create({
     right: 10,
     width: 8,
     height: 8,
-    backgroundColor: '#ef4444',
+    backgroundColor: color.danger.base,
   },
 });

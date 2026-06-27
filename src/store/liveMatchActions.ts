@@ -1,24 +1,26 @@
 import { ENGINE_CONFIG } from '../config/engineConfig';
-import { Fixture, GameState, Player } from '../models/types';
+import { Fixture, Formation, GameState, Player, Team } from '../models/types';
 import {
   buildCurrentMatchProfile,
-  getFormModifier,
   resolvePenaltyShootoutWinner,
   selectPossessionAttacker,
   simulatePossession,
-} from '../core/matchEngine';
-import { addPlayerStat } from '../core/matchUtils';
+} from '../core/matchRuntime';
+import { addPlayerStat, getFormModifier } from '../core/matchUtils';
 import { createFixtureEventRandomGenerator, RandomGenerator } from '../core/random';
 import { applySubstitutions } from '../core/substitutionEngine';
+import { SUBSTITUTION_CHECKPOINTS } from '../core/matchSubstitutions';
 import { buildStarterBenchMinuteMap, buildStarterMinuteMap } from '../core/minuteMapUtils';
 import { applySharedPostMatchAccounting, PlayerMatchContribution } from '../core/postMatchAccounting';
 import { applyMatchInjuries } from '../core/injuryEngine';
 import { getTeamMatchBench } from '../core/lineupEngine';
 import { isPlayerUnavailable } from '../core/playerStatusUtils';
 import { resolveCompetitionProgression } from '../core/competitionEngine';
-import { removePlayerFromTeamSelections } from '../core/formationMapUtils';
+import { rebuildFormationMap, removePlayerFromTeamSelections } from '../core/formationMapUtils';
 import { selectDesignatedGoalkeeperId, selectEmergencyGoalkeeperId, validateMatchdayXI } from '../core/matchdayValidation';
 import { applyFixtureSuspensionService, buildVoidFixture, getAdministrativeFixtureOutcome } from '../core/fixtureLifecycle';
+import { getSlotsForFormation, SUPPORTED_FORMATIONS } from '../constants/formations';
+import { buildMatchSummary } from '../core/matchSummary';
 import {
   LiveMatchState,
   drainLiveMatchEnergy,
@@ -41,13 +43,18 @@ type LiveMatchActionState = GameState & {
 
 type LiveMatchActionPatch = LiveMatchActionState | Partial<LiveMatchActionState>;
 
-const LIVE_SUBSTITUTION_CHECKPOINTS = [56, 66, 76, 84];
-
 type LiveSubstitutionState = {
   substitutesUsed: number;
   substitutionWindowsUsed: number;
   maxSubstitutes?: number;
   maxWindows?: number;
+};
+
+type LiveMatchActionResult = { success: boolean; message: string };
+
+type LiveReplacement = {
+  offPlayerId: string;
+  onPlayerId: string;
 };
 
 const createLiveSubstitutionState = (): LiveSubstitutionState => ({
@@ -57,29 +64,260 @@ const createLiveSubstitutionState = (): LiveSubstitutionState => ({
   maxWindows: 3,
 });
 
-const canUseLiveSubstitutionWindow = (state: LiveSubstitutionState) => (
-  state.substitutesUsed < (state.maxSubstitutes || 5) && state.substitutionWindowsUsed < (state.maxWindows || 3)
+const canUseLiveSubstitutionWindow = (
+  state: LiveSubstitutionState,
+  replacementCount = 1,
+  spendWindow = true
+) => (
+  state.substitutesUsed + replacementCount <= (state.maxSubstitutes || 5) &&
+  (!spendWindow || state.substitutionWindowsUsed < (state.maxWindows || 3))
 );
 
-const recordLiveSubstitution = (state: LiveSubstitutionState) => {
-  state.substitutesUsed += 1;
-  state.substitutionWindowsUsed += 1;
+const recordLiveSubstitution = (
+  state: LiveSubstitutionState,
+  replacementCount = 1,
+  spendWindow = true
+) => {
+  state.substitutesUsed += replacementCount;
+  if (spendWindow) state.substitutionWindowsUsed += 1;
 };
 
-const replaceFormationMapPlayer = (team: LiveMatchActionState['teams'][string], offPlayerId: string, onPlayerId: string) => {
-  const formationMap = team.formationMap || {};
+const replaceLiveFormationMapPlayer = (
+  formationMap: Record<string, string>,
+  offPlayerId: string,
+  onPlayerId: string
+) => {
   let changed = false;
   const nextMap = Object.fromEntries(Object.entries(formationMap).map(([slotKey, playerId]) => {
     if (playerId !== offPlayerId) return [slotKey, playerId];
     changed = true;
     return [slotKey, onPlayerId];
   }));
-  return changed ? { ...team, formationMap: nextMap } : team;
+  return changed ? nextMap : formationMap;
+};
+
+const removePlayerFromLiveFormationMap = (
+  formationMap: Record<string, string>,
+  playerId: string
+) => Object.fromEntries(Object.entries(formationMap).filter(([, mappedId]) => mappedId !== playerId));
+
+const buildLiveFormationMap = (
+  team: Team,
+  formation: Formation,
+  starters: Player[],
+  existingMap?: Record<string, string>
+) => rebuildFormationMap(getSlotsForFormation(formation), starters, existingMap || team.formationMap || {});
+
+const buildLiveTeamOverlay = (
+  team: Team,
+  activeFormation?: Formation,
+  formationMap?: Record<string, string>
+): Team => ({
+  ...team,
+  activeFormation: activeFormation || team.activeFormation,
+  formationMap: formationMap || team.formationMap,
+});
+
+const getLatestProcessedMinute = (liveMatchState: LiveMatchState) => {
+  const processed = liveMatchState.processedMinutes || [];
+  return processed.length > 0 ? Math.max(...processed) : 0;
 };
 
 const refreshPlayersById = (players: Record<string, Player>, current: Player[]) => (
   current.map(player => players[player.id]).filter((player): player is Player => Boolean(player))
 );
+
+const failLiveAction = (message: string): { patch: Partial<LiveMatchActionState>; result: LiveMatchActionResult } => ({
+  patch: {},
+  result: { success: false, message },
+});
+
+const getManagedLiveSide = (
+  state: LiveMatchActionState,
+  fixture: Fixture,
+  liveMatchState: LiveMatchState
+) => {
+  const teamId = state.userTeamId;
+  if (!teamId || (fixture.homeTeamId !== teamId && fixture.awayTeamId !== teamId)) return null;
+  const isHome = fixture.homeTeamId === teamId;
+  return {
+    teamId,
+    isHome,
+    currentIds: isHome ? (liveMatchState.currentHomePlayerIds || liveMatchState.homeStarterIds) : (liveMatchState.currentAwayPlayerIds || liveMatchState.awayStarterIds),
+    starterIds: isHome ? liveMatchState.homeStarterIds : liveMatchState.awayStarterIds,
+    benchIds: isHome ? (liveMatchState.homeBenchIds || []) : (liveMatchState.awayBenchIds || []),
+    minuteMap: isHome ? { ...(liveMatchState.homeMinuteMap || {}) } : { ...(liveMatchState.awayMinuteMap || {}) },
+    subEntryMinutes: isHome ? { ...(liveMatchState.homeSubEntryMinutes || {}) } : { ...(liveMatchState.awaySubEntryMinutes || {}) },
+    goalkeeperId: isHome ? liveMatchState.homeGoalkeeperId : liveMatchState.awayGoalkeeperId,
+    substitutionState: isHome
+      ? { ...(liveMatchState.homeSubstitutionState || createLiveSubstitutionState()) }
+      : { ...(liveMatchState.awaySubstitutionState || createLiveSubstitutionState()) },
+    activeFormation: isHome ? (liveMatchState.homeActiveFormation || state.teams[teamId]?.activeFormation) : (liveMatchState.awayActiveFormation || state.teams[teamId]?.activeFormation),
+    formationMap: isHome
+      ? { ...(liveMatchState.homeFormationMap || {}) }
+      : { ...(liveMatchState.awayFormationMap || {}) },
+  };
+};
+
+export const makeLiveSubstitutionsState = (
+  state: LiveMatchActionState,
+  fixtureId: string,
+  replacements: LiveReplacement[]
+): { patch: Partial<LiveMatchActionState>; result: LiveMatchActionResult } => {
+  const fixture = state.fixtures[fixtureId];
+  if (!fixture || fixture.isPlayed) return failLiveAction('No active live fixture found.');
+  const liveMatchState = state.liveMatches?.[fixtureId];
+  if (!liveMatchState?.initialized) return failLiveAction('Start the match before making substitutions.');
+  if (!Array.isArray(replacements) || replacements.length === 0) return failLiveAction('Choose at least one substitution.');
+
+  const side = getManagedLiveSide(state, fixture, liveMatchState);
+  if (!side) return failLiveAction('You can only make substitutions for your own team.');
+  const team = state.teams[side.teamId];
+  if (!team) return failLiveAction('Your team could not be found.');
+
+  const latestMinute = getLatestProcessedMinute(liveMatchState);
+  if (latestMinute <= 0 || latestMinute >= 90) return failLiveAction('Substitutions are only available during an active match.');
+  const isHalfTime = latestMinute === 45;
+  const spendWindow = !isHalfTime;
+  if (!canUseLiveSubstitutionWindow(side.substitutionState, replacements.length, spendWindow)) {
+    return failLiveAction(spendWindow ? 'No substitution windows remaining.' : 'No substitutions remaining.');
+  }
+
+  const sentOffPlayers = new Set(liveMatchState.sentOffPlayerIds || []);
+  const currentIds = [...side.currentIds];
+  const benchIds = new Set(side.benchIds);
+  const starterIds = new Set(side.starterIds);
+  const offIds = new Set<string>();
+  const onIds = new Set<string>();
+
+  for (const replacement of replacements) {
+    if (!replacement?.offPlayerId || !replacement?.onPlayerId) return failLiveAction('Every substitution needs an off-player and on-player.');
+    if (replacement.offPlayerId === replacement.onPlayerId) return failLiveAction('A player cannot replace himself.');
+    if (offIds.has(replacement.offPlayerId) || onIds.has(replacement.onPlayerId)) return failLiveAction('Duplicate players in a substitution batch.');
+    offIds.add(replacement.offPlayerId);
+    onIds.add(replacement.onPlayerId);
+
+    const offPlayer = state.players[replacement.offPlayerId];
+    const onPlayer = state.players[replacement.onPlayerId];
+    if (!offPlayer || !onPlayer || offPlayer.teamId !== side.teamId || onPlayer.teamId !== side.teamId) {
+      return failLiveAction('Substitutions must use players from your own team.');
+    }
+    if (!currentIds.includes(offPlayer.id)) return failLiveAction(`${offPlayer.name} is not currently on the pitch.`);
+    if (!benchIds.has(onPlayer.id)) return failLiveAction(`${onPlayer.name} is not on the match bench.`);
+    if (currentIds.includes(onPlayer.id) || onIds.has(offPlayer.id)) return failLiveAction('A player already on the pitch cannot come on.');
+    if (sentOffPlayers.has(offPlayer.id) || sentOffPlayers.has(onPlayer.id)) return failLiveAction('Sent-off players cannot be used in substitutions.');
+    if (isPlayerUnavailable(onPlayer)) return failLiveAction(`${onPlayer.name} is unavailable.`);
+    if ((side.minuteMap[onPlayer.id] || 0) > 0 || starterIds.has(onPlayer.id)) {
+      return failLiveAction(`${onPlayer.name} cannot re-enter the match.`);
+    }
+    if (offPlayer.position === 'GK' && onPlayer.position !== 'GK') {
+      return failLiveAction('A goalkeeper can only be replaced by another goalkeeper.');
+    }
+  }
+
+  let nextCurrentIds = currentIds.map(playerId => {
+    const replacement = replacements.find(item => item.offPlayerId === playerId);
+    return replacement ? replacement.onPlayerId : playerId;
+  });
+  nextCurrentIds = nextCurrentIds.filter((playerId, index, ids) => ids.indexOf(playerId) === index);
+  const nextPlayers = getPlayersByIds(state.players, nextCurrentIds);
+  const validation = validateMatchdayXI(nextPlayers, { teamId: side.teamId });
+  if (!validation.ok) return failLiveAction(validation.reason || 'The resulting XI is not legal.');
+
+  let nextFormationMap = { ...side.formationMap };
+  const nextSubEntryMinutes = { ...side.subEntryMinutes };
+  const nextMinuteMap = { ...side.minuteMap };
+  replacements.forEach(replacement => {
+    const entryMinute = nextSubEntryMinutes[replacement.offPlayerId];
+    nextMinuteMap[replacement.offPlayerId] = entryMinute !== undefined
+      ? Math.max(0, latestMinute - entryMinute)
+      : Math.min(nextMinuteMap[replacement.offPlayerId] || 90, latestMinute);
+    if (entryMinute !== undefined) delete nextSubEntryMinutes[replacement.offPlayerId];
+    nextSubEntryMinutes[replacement.onPlayerId] = latestMinute;
+    nextMinuteMap[replacement.onPlayerId] = Math.max(nextMinuteMap[replacement.onPlayerId] || 0, 90 - latestMinute);
+    nextFormationMap = replaceLiveFormationMapPlayer(nextFormationMap, replacement.offPlayerId, replacement.onPlayerId);
+  });
+
+  const nextSubstitutionState = { ...side.substitutionState };
+  recordLiveSubstitution(nextSubstitutionState, replacements.length, spendWindow);
+  const nextGoalkeeperId = selectDesignatedGoalkeeperId(nextPlayers, side.goalkeeperId) || validation.goalkeeperId;
+  const nextLiveMatchState: LiveMatchState = side.isHome
+    ? {
+        ...liveMatchState,
+        currentHomePlayerIds: nextCurrentIds,
+        homeMinuteMap: nextMinuteMap,
+        homeSubEntryMinutes: nextSubEntryMinutes,
+        homeGoalkeeperId: nextGoalkeeperId,
+        homeSubstitutionState: nextSubstitutionState,
+        homeFormationMap: nextFormationMap,
+      }
+    : {
+        ...liveMatchState,
+        currentAwayPlayerIds: nextCurrentIds,
+        awayMinuteMap: nextMinuteMap,
+        awaySubEntryMinutes: nextSubEntryMinutes,
+        awayGoalkeeperId: nextGoalkeeperId,
+        awaySubstitutionState: nextSubstitutionState,
+        awayFormationMap: nextFormationMap,
+      };
+
+  return {
+    patch: {
+      liveMatches: {
+        ...(state.liveMatches || {}),
+        [fixtureId]: nextLiveMatchState,
+      },
+    },
+    result: {
+      success: true,
+      message: `${replacements.length} substitution${replacements.length === 1 ? '' : 's'} made.`,
+    },
+  };
+};
+
+export const setLiveMatchFormationState = (
+  state: LiveMatchActionState,
+  fixtureId: string,
+  teamId: string,
+  formation: Formation
+): { patch: Partial<LiveMatchActionState>; result: LiveMatchActionResult } => {
+  const fixture = state.fixtures[fixtureId];
+  if (!fixture || fixture.isPlayed) return failLiveAction('No active live fixture found.');
+  const liveMatchState = state.liveMatches?.[fixtureId];
+  if (!liveMatchState?.initialized) return failLiveAction('Start the match before changing shape.');
+  if (teamId !== state.userTeamId) return failLiveAction('You can only change shape for your own team.');
+  if (fixture.homeTeamId !== teamId && fixture.awayTeamId !== teamId) return failLiveAction('That team is not in this fixture.');
+  if (!SUPPORTED_FORMATIONS.includes(formation)) return failLiveAction('Unsupported formation.');
+
+  const isHome = fixture.homeTeamId === teamId;
+  const team = state.teams[teamId];
+  const currentIds = isHome
+    ? (liveMatchState.currentHomePlayerIds || liveMatchState.homeStarterIds)
+    : (liveMatchState.currentAwayPlayerIds || liveMatchState.awayStarterIds);
+  const currentPlayers = getPlayersByIds(state.players, currentIds);
+  const validation = validateMatchdayXI(currentPlayers, {
+    teamId,
+    designatedGoalkeeperId: isHome ? liveMatchState.homeGoalkeeperId : liveMatchState.awayGoalkeeperId,
+    allowEmergencyGoalkeeper: true,
+  });
+  if (!team || !validation.ok) return failLiveAction(validation.reason || 'The current XI cannot be reshaped.');
+
+  const currentMap = isHome ? liveMatchState.homeFormationMap : liveMatchState.awayFormationMap;
+  const formationMap = buildLiveFormationMap(team, formation, currentPlayers, currentMap);
+  const nextLiveMatchState: LiveMatchState = isHome
+    ? { ...liveMatchState, homeActiveFormation: formation, homeFormationMap: formationMap }
+    : { ...liveMatchState, awayActiveFormation: formation, awayFormationMap: formationMap };
+
+  return {
+    patch: {
+      liveMatches: {
+        ...(state.liveMatches || {}),
+        [fixtureId]: nextLiveMatchState,
+      },
+    },
+    result: { success: true, message: `Shape changed to ${formation}.` },
+  };
+};
 
 export const processLiveMatchMinuteState = (
   state: LiveMatchActionState,
@@ -217,34 +455,48 @@ export const processLiveMatchMinuteState = (
     ? { ...storedLiveState.awaySubstitutionState }
     : createLiveSubstitutionState();
   const appliedSubstitutionCheckpoints = new Set(storedLiveState?.appliedSubstitutionCheckpoints || []);
+  let homeActiveFormation = storedLiveState?.homeActiveFormation || homeTeam.activeFormation;
+  let awayActiveFormation = storedLiveState?.awayActiveFormation || awayTeam.activeFormation;
+  let homeFormationMap = storedLiveState?.homeFormationMap
+    ? { ...storedLiveState.homeFormationMap }
+    : buildLiveFormationMap(homeTeam, homeActiveFormation, homeStarters, homeTeam.formationMap);
+  let awayFormationMap = storedLiveState?.awayFormationMap
+    ? { ...storedLiveState.awayFormationMap }
+    : buildLiveFormationMap(awayTeam, awayActiveFormation, awayStarters, awayTeam.formationMap);
+  let homeShots = storedLiveState?.homeShots || 0;
+  let awayShots = storedLiveState?.awayShots || 0;
+  let homeShotsOnTarget = storedLiveState?.homeShotsOnTarget || 0;
+  let awayShotsOnTarget = storedLiveState?.awayShotsOnTarget || 0;
 
-  LIVE_SUBSTITUTION_CHECKPOINTS
+  SUBSTITUTION_CHECKPOINTS
     .filter(checkpoint => checkpoint <= minute && !appliedSubstitutionCheckpoints.has(checkpoint))
     .forEach(checkpoint => {
-      applySubstitutions(homeStarters, availableHomeBench, sentOffPlayers, homeMinuteMap, homeTeam, updatedFixture.homeScore!, updatedFixture.awayScore!, activeRng, {
-        minuteOverride: checkpoint,
-        playerEntryMinutes: homeSubEntryMinutes,
-        substitutionState: homeSubstitutionState,
-        onSubstitution: (offPlayer, onPlayer) => {
-          homeStarters = homeStarters.map(player => (player.id === offPlayer.id ? onPlayer : player));
-          availableHomeBench = availableHomeBench.filter(player => player.id !== onPlayer.id);
-          homeTeam = replaceFormationMapPlayer(homeTeam, offPlayer.id, onPlayer.id);
-          updatedTeams[homeTeam.id] = homeTeam;
-          if (offPlayer.id === homeGoalkeeperId || onPlayer.position === 'GK') homeGoalkeeperId = onPlayer.id;
-        },
-      });
-      applySubstitutions(awayStarters, availableAwayBench, sentOffPlayers, awayMinuteMap, awayTeam, updatedFixture.awayScore!, updatedFixture.homeScore!, activeRng, {
-        minuteOverride: checkpoint,
-        playerEntryMinutes: awaySubEntryMinutes,
-        substitutionState: awaySubstitutionState,
-        onSubstitution: (offPlayer, onPlayer) => {
-          awayStarters = awayStarters.map(player => (player.id === offPlayer.id ? onPlayer : player));
-          availableAwayBench = availableAwayBench.filter(player => player.id !== onPlayer.id);
-          awayTeam = replaceFormationMapPlayer(awayTeam, offPlayer.id, onPlayer.id);
-          updatedTeams[awayTeam.id] = awayTeam;
-          if (offPlayer.id === awayGoalkeeperId || onPlayer.position === 'GK') awayGoalkeeperId = onPlayer.id;
-        },
-      });
+      if (state.userTeamId !== homeTeam.id) {
+        applySubstitutions(homeStarters, availableHomeBench, sentOffPlayers, homeMinuteMap, homeTeam, updatedFixture.homeScore!, updatedFixture.awayScore!, activeRng, {
+          minuteOverride: checkpoint,
+          playerEntryMinutes: homeSubEntryMinutes,
+          substitutionState: homeSubstitutionState,
+          onSubstitution: (offPlayer, onPlayer) => {
+            homeStarters = homeStarters.map(player => (player.id === offPlayer.id ? onPlayer : player));
+            availableHomeBench = availableHomeBench.filter(player => player.id !== onPlayer.id);
+            homeFormationMap = replaceLiveFormationMapPlayer(homeFormationMap, offPlayer.id, onPlayer.id);
+            if (offPlayer.id === homeGoalkeeperId || onPlayer.position === 'GK') homeGoalkeeperId = onPlayer.id;
+          },
+        });
+      }
+      if (state.userTeamId !== awayTeam.id) {
+        applySubstitutions(awayStarters, availableAwayBench, sentOffPlayers, awayMinuteMap, awayTeam, updatedFixture.awayScore!, updatedFixture.homeScore!, activeRng, {
+          minuteOverride: checkpoint,
+          playerEntryMinutes: awaySubEntryMinutes,
+          substitutionState: awaySubstitutionState,
+          onSubstitution: (offPlayer, onPlayer) => {
+            awayStarters = awayStarters.map(player => (player.id === offPlayer.id ? onPlayer : player));
+            availableAwayBench = availableAwayBench.filter(player => player.id !== onPlayer.id);
+            awayFormationMap = replaceLiveFormationMapPlayer(awayFormationMap, offPlayer.id, onPlayer.id);
+            if (offPlayer.id === awayGoalkeeperId || onPlayer.position === 'GK') awayGoalkeeperId = onPlayer.id;
+          },
+        });
+      }
       appliedSubstitutionCheckpoints.add(checkpoint);
     });
 
@@ -259,8 +511,10 @@ export const processLiveMatchMinuteState = (
     const awayFormMult = getFormModifier(awayTeam.form);
     homeGoalkeeperId = selectDesignatedGoalkeeperId(homeStarters, homeGoalkeeperId) || selectEmergencyGoalkeeperId(homeStarters);
     awayGoalkeeperId = selectDesignatedGoalkeeperId(awayStarters, awayGoalkeeperId) || selectEmergencyGoalkeeperId(awayStarters);
-    const homeProfile = buildCurrentMatchProfile(homeTeam, homeStarters, homeFormMult, ENGINE_CONFIG.GLOBAL_HOME_ADVANTAGE, homeGoalkeeperId);
-    const awayProfile = buildCurrentMatchProfile(awayTeam, awayStarters, awayFormMult, 1, awayGoalkeeperId);
+    const liveHomeTeam = buildLiveTeamOverlay(homeTeam, homeActiveFormation, homeFormationMap);
+    const liveAwayTeam = buildLiveTeamOverlay(awayTeam, awayActiveFormation, awayFormationMap);
+    const homeProfile = buildCurrentMatchProfile(liveHomeTeam, homeStarters, homeFormMult, ENGINE_CONFIG.GLOBAL_HOME_ADVANTAGE, homeGoalkeeperId);
+    const awayProfile = buildCurrentMatchProfile(liveAwayTeam, awayStarters, awayFormMult, 1, awayGoalkeeperId);
     const scaledHome = homeProfile.scaled;
     const scaledAway = awayProfile.scaled;
     const homeShape = homeProfile.shape;
@@ -274,8 +528,8 @@ export const processLiveMatchMinuteState = (
       awayShape,
       activeRng
     );
-    const attacker = isHomeAttacking ? homeTeam : awayTeam;
-    const defender = isHomeAttacking ? awayTeam : homeTeam;
+    const attacker = isHomeAttacking ? liveHomeTeam : liveAwayTeam;
+    const defender = isHomeAttacking ? liveAwayTeam : liveHomeTeam;
     const attPlayers = isHomeAttacking ? scaledHome : scaledAway;
     const defPlayers = isHomeAttacking ? scaledAway : scaledHome;
     const attShape = isHomeAttacking ? homeShape : awayShape;
@@ -312,15 +566,13 @@ export const processLiveMatchMinuteState = (
         if (isHome) {
           homeStarters = homeStarters.map(player => player.id === outfielderOff.id ? reserveGoalkeeper : player);
           availableHomeBench = availableHomeBench.filter(player => player.id !== reserveGoalkeeper.id);
-          homeTeam = replaceFormationMapPlayer(homeTeam, outfielderOff.id, reserveGoalkeeper.id);
-          updatedTeams[homeTeam.id] = homeTeam;
+          homeFormationMap = replaceLiveFormationMapPlayer(homeFormationMap, outfielderOff.id, reserveGoalkeeper.id);
           homeGoalkeeperId = reserveGoalkeeper.id;
           recordLiveSubstitution(homeSubstitutionState);
         } else {
           awayStarters = awayStarters.map(player => player.id === outfielderOff.id ? reserveGoalkeeper : player);
           availableAwayBench = availableAwayBench.filter(player => player.id !== reserveGoalkeeper.id);
-          awayTeam = replaceFormationMapPlayer(awayTeam, outfielderOff.id, reserveGoalkeeper.id);
-          updatedTeams[awayTeam.id] = awayTeam;
+          awayFormationMap = replaceLiveFormationMapPlayer(awayFormationMap, outfielderOff.id, reserveGoalkeeper.id);
           awayGoalkeeperId = reserveGoalkeeper.id;
           recordLiveSubstitution(awaySubstitutionState);
         }
@@ -340,7 +592,7 @@ export const processLiveMatchMinuteState = (
         ...player,
         redCards: player.redCards + 1,
         matchesSuspended: 3,
-        suspensionAppliedWeek: fixture.week,
+        // `suspensionAppliedWeek` is deprecated; same-match skip is driven by `suspensionAppliedFixtureId`.
         suspensionAppliedFixtureId: fixture.id,
       };
       addContribution(playerId, 'redCards');
@@ -354,8 +606,7 @@ export const processLiveMatchMinuteState = (
           : Math.min(homeMinuteMap[playerId] || 90, minute);
         delete homeSubEntryMinutes[playerId];
         homeStarters = homeStarters.filter(starter => starter.id !== playerId);
-        homeTeam = removePlayerFromTeamSelections(homeTeam, playerId);
-        updatedTeams[homeTeam.id] = homeTeam;
+        homeFormationMap = removePlayerFromLiveFormationMap(homeFormationMap, playerId);
         coverDismissedGoalkeeper('home');
       }
       if (awayMinuteMap[playerId] !== undefined) {
@@ -365,8 +616,7 @@ export const processLiveMatchMinuteState = (
           : Math.min(awayMinuteMap[playerId] || 90, minute);
         delete awaySubEntryMinutes[playerId];
         awayStarters = awayStarters.filter(starter => starter.id !== playerId);
-        awayTeam = removePlayerFromTeamSelections(awayTeam, playerId);
-        updatedTeams[awayTeam.id] = awayTeam;
+        awayFormationMap = removePlayerFromLiveFormationMap(awayFormationMap, playerId);
         coverDismissedGoalkeeper('away');
       }
       eventMsg = eventMsg || message;
@@ -385,6 +635,16 @@ export const processLiveMatchMinuteState = (
       matchYellowCards
     );
     eventMsg = res.event;
+
+    if (res.shot) {
+      if (isHomeAttacking) {
+        homeShots += 1;
+        if (res.shot.onTarget) homeShotsOnTarget += 1;
+      } else {
+        awayShots += 1;
+        if (res.shot.onTarget) awayShotsOnTarget += 1;
+      }
+    }
 
     if (res.goal) {
       if (isHomeAttacking) {
@@ -496,15 +756,22 @@ export const processLiveMatchMinuteState = (
     initialized: true,
     yellowCardPlayerIds: Array.from(matchYellowCards),
     sentOffPlayerIds: Array.from(sentOffPlayers),
-    firstAttackIsHome: storedLiveState?.firstAttackIsHome,
     sentOffMinutes,
     homeGoalMinutes,
     awayGoalMinutes,
     matchContributions,
+    homeShots,
+    awayShots,
+    homeShotsOnTarget,
+    awayShotsOnTarget,
     homeStarterIds,
     awayStarterIds,
     currentHomePlayerIds: homeStarters.map(player => player.id),
     currentAwayPlayerIds: awayStarters.map(player => player.id),
+    homeActiveFormation,
+    awayActiveFormation,
+    homeFormationMap,
+    awayFormationMap,
     homeBenchIds: storedLiveState?.homeBenchIds || homeBench.map(player => player.id),
     awayBenchIds: storedLiveState?.awayBenchIds || awayBench.map(player => player.id),
     homeMinuteMap,
@@ -612,10 +879,10 @@ export const finishLiveMatchState = (
     ? { ...liveMatchState.awayMinuteMap }
     : buildStarterMinuteMap(awayTeamStarters, sentOffMinutes);
 
-  if (!liveMatchState?.homeMinuteMap) {
+  if (!liveMatchState?.homeMinuteMap && state.userTeamId !== homeTeam.id) {
     applySubstitutions(homeTeamStarters, homeBench, sentOffPlayers, homeMinuteMap, homeTeam, hScore, aScore, finalRng);
   }
-  if (!liveMatchState?.awayMinuteMap) {
+  if (!liveMatchState?.awayMinuteMap && state.userTeamId !== awayTeam.id) {
     applySubstitutions(awayTeamStarters, awayBench, sentOffPlayers, awayMinuteMap, awayTeam, aScore, hScore, finalRng);
   }
 
@@ -687,6 +954,26 @@ export const finishLiveMatchState = (
     winnerTeamId,
     resolution,
   };
+  const matchSummary = state.userTeamId && (fixture.homeTeamId === state.userTeamId || fixture.awayTeamId === state.userTeamId)
+    ? buildMatchSummary({
+        fixture: updatedFixture,
+        homeTeam,
+        awayTeam,
+        players: updatedPlayers,
+        homeParticipants,
+        awayParticipants,
+        homeStarterIds: new Set(homeTeamStarters.map(player => player.id)),
+        awayStarterIds: new Set(awayTeamStarters.map(player => player.id)),
+        homeMinuteMap,
+        awayMinuteMap,
+        matchContributions: liveMatchState?.matchContributions,
+        homeShots: liveMatchState?.homeShots || 0,
+        awayShots: liveMatchState?.awayShots || 0,
+        homeShotsOnTarget: liveMatchState?.homeShotsOnTarget || 0,
+        awayShotsOnTarget: liveMatchState?.awayShotsOnTarget || 0,
+      })
+    : undefined;
+  const fixtureWithSummary = matchSummary ? { ...updatedFixture, matchSummary } : updatedFixture;
   const includeTableStats = fixture.competitionType === 'league';
   const updatedTeams = {
     ...state.teams,
@@ -706,15 +993,15 @@ export const finishLiveMatchState = (
       updatedTeams[injuredTeam.id] = removePlayerFromTeamSelections(injuredTeam, event.playerId);
     }
   });
-  const suspensionServedPlayers = applyFixtureSuspensionService(updatedPlayers, updatedFixture);
-  const nextFixtures = { ...state.fixtures, [fixtureId]: updatedFixture };
+  const suspensionServedPlayers = applyFixtureSuspensionService(updatedPlayers, fixtureWithSummary);
+  const nextFixtures = { ...state.fixtures, [fixtureId]: fixtureWithSummary };
   const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, updatedTeams);
   const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);
   const postMatchReport = generatePostMatchReportMessage({
     currentWeek: state.currentWeek,
-    season: getInboxSeason(state.competitions, updatedFixture),
+    season: getInboxSeason(state.competitions, fixtureWithSummary),
     userTeamId: state.userTeamId,
-    fixture: updatedFixture,
+    fixture: fixtureWithSummary,
     teams: updatedTeams,
     players: suspensionServedPlayers,
     previousPlayers,
@@ -736,7 +1023,7 @@ export const finishLiveMatchState = (
         ...generateSystemInboxMessages(
           state.currentWeek,
           competitionProgression.generatedNews,
-          getInboxSeason(competitionProgression.competitions, updatedFixture)
+          getInboxSeason(competitionProgression.competitions, fixtureWithSummary)
         ),
       ]
     ),

@@ -1,13 +1,27 @@
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
 import { useState, useEffect, useRef } from 'react';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { getPositionColor } from '@/src/constants/positionColors';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { TeamTactics } from '@/src/models/types';
+import { Formation, MatchPlayerSummaryRow, TeamTactics } from '@/src/models/types';
 import { TacticSection } from '@/components/squad/tactic-section';
+import { FormationSelectionModal } from '@/components/squad/formation-selection-modal';
+import { Screen, ModalSheet, Button } from '@/components/ui';
+import { color } from '@/src/design/tokens';
+import { useConfirmStore } from '@/src/store/confirmStore';
+import { SUPPORTED_FORMATIONS } from '@/src/constants/formations';
+import * as Haptics from 'expo-haptics';
+
+// B4: extend haptics beyond the tab bar. A light tick on primary match actions
+// and a medium impact at full-time give the live sim some physical feedback.
+// No-op on platforms without a haptic engine.
+const tap = (style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) => {
+  if (process.env.EXPO_OS === 'ios' || process.env.EXPO_OS === 'android') {
+    Haptics.impactAsync(style).catch(() => {});
+  }
+};
 
 export default function MatchScreen() {
   const router = useRouter();
@@ -21,6 +35,8 @@ export default function MatchScreen() {
   const setTactics = useGameStore(state => state.setTactics);
   const processMatchMinute = useGameStore(state => state.processMatchMinute);
   const finishLiveMatch = useGameStore(state => state.finishLiveMatch);
+  const makeLiveSubstitutions = useGameStore(state => state.makeLiveSubstitutions);
+  const setLiveMatchFormation = useGameStore(state => state.setLiveMatchFormation);
   const advanceWeek = useGameStore(state => state.advanceWeek);
 
   const fixture = fixtures[fixtureId];
@@ -44,6 +60,11 @@ export default function MatchScreen() {
   const [matchFinished, setMatchFinished] = useState(false);
   const [logs, setLogs] = useState<string[]>(['Match is ready to start!']);
   const [showTactics, setShowTactics] = useState(false);
+  const [showLiveFormationPicker, setShowLiveFormationPicker] = useState(false);
+  const [selectedOffPlayerId, setSelectedOffPlayerId] = useState<string | null>(null);
+  const [selectedOnPlayerId, setSelectedOnPlayerId] = useState<string | null>(null);
+  const [pendingReplacements, setPendingReplacements] = useState<{ offPlayerId: string; onPlayerId: string }[]>([]);
+  const showConfirm = useConfirmStore(s => s.showConfirm);
 
   const minuteRef = useRef(0);
   const appliedRestoreKeyRef = useRef<string | null>(null);
@@ -109,6 +130,7 @@ export default function MatchScreen() {
           if (!mounted) return;
           setMatchFinished(true);
           setIsPlaying(false);
+          tap(Haptics.ImpactFeedbackStyle.Medium);
           finishLiveMatch(fixtureId);
         }
       }, 167);
@@ -117,6 +139,7 @@ export default function MatchScreen() {
   }, [isPlaying, isHalfTime, matchFinished, fixtureId, processMatchMinute, finishLiveMatch]);
 
   const handleContinue = () => {
+    tap();
     advanceWeek(); // advance to next week
     router.replace('/(tabs)');
   };
@@ -136,10 +159,25 @@ export default function MatchScreen() {
     if (homeTheme.primary === awayThemeRaw.primary) {
       awayPrimary = awayThemeRaw.secondary;
     }
+    const matchSummary = fixture.matchSummary;
+    const manOfTheMatch = matchSummary?.playerRows.find(row => row.playerId === matchSummary.manOfTheMatchPlayerId);
+    const homeSummaryRows = matchSummary?.playerRows.filter(row => row.teamId === fixture.homeTeamId) || [];
+    const awaySummaryRows = matchSummary?.playerRows.filter(row => row.teamId === fixture.awayTeamId) || [];
+    const renderRatingRows = (rows: MatchPlayerSummaryRow[]) => (
+      rows
+        .sort((left, right) => right.minutes - left.minutes || right.rating - left.rating)
+        .map(row => (
+          <View key={row.playerId} style={styles.ratingRow}>
+            <Text style={styles.ratingName} numberOfLines={1}>{row.name}</Text>
+            <Text style={styles.ratingMeta}>{row.minutes}'</Text>
+            <Text style={styles.ratingMeta}>{row.rating.toFixed(1)}</Text>
+          </View>
+        ))
+    );
     return (
-      <SafeAreaView style={styles.container}>
+      <Screen scroll={false}>
         <View style={styles.topNav}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.exitBtn}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.exitBtn} accessibilityRole="button" accessibilityLabel="Exit match">
             <Text style={styles.exitText}>[ EXIT ]</Text>
           </TouchableOpacity>
         </View>
@@ -160,17 +198,50 @@ export default function MatchScreen() {
             </View>
           </View>
           {fixture.resolution === 'penalties' && (
-            <Text style={{ color: '#facc15', fontSize: 14, fontWeight: '900', textAlign: 'center', marginTop: 12 }}>
+            <Text style={styles.penaltiesNote}>
               Won on penalties
             </Text>
           )}
+          {matchSummary && (
+            <View style={styles.summaryPanel}>
+              <Text style={styles.summaryTitle}>Match Stats</Text>
+              <View style={styles.statRow}>
+                <Text style={styles.statValue}>{matchSummary.homeTeamStats.shots}</Text>
+                <Text style={styles.statLabel}>Shots</Text>
+                <Text style={styles.statValue}>{matchSummary.awayTeamStats.shots}</Text>
+              </View>
+              <View style={styles.statRow}>
+                <Text style={styles.statValue}>{matchSummary.homeTeamStats.shotsOnTarget}</Text>
+                <Text style={styles.statLabel}>Shots on Target</Text>
+                <Text style={styles.statValue}>{matchSummary.awayTeamStats.shotsOnTarget}</Text>
+              </View>
+              {manOfTheMatch && (
+                <View style={styles.motmBox}>
+                  <Text style={styles.summaryTitle}>Man of the Match</Text>
+                  <Text style={styles.motmName}>{manOfTheMatch.name}</Text>
+                  <Text style={styles.motmMeta}>{manOfTheMatch.rating.toFixed(1)} rating</Text>
+                </View>
+              )}
+              <Text style={styles.summaryTitle}>Player Ratings</Text>
+              <View style={styles.ratingsGrid}>
+                <View style={styles.ratingsCol}>
+                  <Text style={[styles.lineupHeader, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
+                  {renderRatingRows(homeSummaryRows)}
+                </View>
+                <View style={styles.ratingsCol}>
+                  <Text style={[styles.lineupHeader, { color: awayPrimary, textAlign: 'right' }]}>{awayTeam.name}</Text>
+                  {renderRatingRows(awaySummaryRows)}
+                </View>
+              </View>
+            </View>
+          )}
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.btnContinue} onPress={handleContinue}>
+            <TouchableOpacity style={styles.btnContinue} onPress={handleContinue} accessibilityRole="button" accessibilityLabel="Continue to next week">
               <Text style={styles.btnText}>Continue to Next Week</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
@@ -184,16 +255,23 @@ export default function MatchScreen() {
 
   const stadium = homeTheme.stadium;
 
+  const getPlayersByIds = (ids?: string[]) => (
+    (ids || []).map(id => players[id]).filter(Boolean)
+  );
   const homePlayers = sortPlayersByPositionGroup(
-    Object.values(players).filter(p => p.teamId === fixture.homeTeamId && p.isStarting)
+    liveMatchState?.currentHomePlayerIds
+      ? getPlayersByIds(liveMatchState.currentHomePlayerIds)
+      : Object.values(players).filter(p => p.teamId === fixture.homeTeamId && p.isStarting)
   );
   const awayPlayers = sortPlayersByPositionGroup(
-    Object.values(players).filter(p => p.teamId === fixture.awayTeamId && p.isStarting)
+    liveMatchState?.currentAwayPlayerIds
+      ? getPlayersByIds(liveMatchState.currentAwayPlayerIds)
+      : Object.values(players).filter(p => p.teamId === fixture.awayTeamId && p.isStarting)
   );
 
-  const handleStart = () => setIsPlaying(true);
-  const handlePause = () => { setIsPlaying(false); setShowTactics(true); };
-  const handleResumeHT = () => { setIsHalfTime(false); setIsPlaying(true); };
+  const handleStart = () => { tap(); setIsPlaying(true); };
+  const handlePause = () => { tap(); setIsPlaying(false); setShowTactics(true); };
+  const handleResumeHT = () => { tap(); setIsHalfTime(false); setIsPlaying(true); };
   const canResumeFromTactics = !isHalfTime && !matchFinished && minute > 0 && minute < 90;
   const handleResumeFromTactics = () => {
     setShowTactics(false);
@@ -203,11 +281,22 @@ export default function MatchScreen() {
   };
 
   const handleExit = () => {
+    // B4: confirm before silently quick-simming the remaining minutes. Previously
+    // tapping EXIT mid-match finalized the result with no warning.
     if (!matchFinished && minute > 0 && minute < 90) {
-      for (let m = minute + 1; m <= 90; m++) {
-        processMatchMinute(fixtureId, m);
-      }
-      finishLiveMatch(fixtureId);
+      showConfirm({
+        title: 'Exit Match?',
+        message: 'The remaining minutes will be quick-simulated and the result finalized.',
+        confirmText: 'Sim & Exit',
+        onConfirm: () => {
+          for (let m = minute + 1; m <= 90; m++) {
+            processMatchMinute(fixtureId, m);
+          }
+          finishLiveMatch(fixtureId);
+          router.back();
+        },
+      });
+      return;
     }
     router.back();
   };
@@ -276,10 +365,66 @@ export default function MatchScreen() {
     setTactics(userTeamId, { [key]: value } as Partial<TeamTactics>);
   };
 
+  const userIsHome = userTeamId ? fixture.homeTeamId === userTeamId : false;
+  const userCurrentIds = liveMatchState
+    ? (userIsHome ? liveMatchState.currentHomePlayerIds : liveMatchState.currentAwayPlayerIds)
+    : undefined;
+  const userBenchIds = liveMatchState
+    ? (userIsHome ? liveMatchState.homeBenchIds : liveMatchState.awayBenchIds)
+    : undefined;
+  const userSubState = liveMatchState
+    ? (userIsHome ? liveMatchState.homeSubstitutionState : liveMatchState.awaySubstitutionState)
+    : undefined;
+  const liveFormation = liveMatchState
+    ? (userIsHome ? liveMatchState.homeActiveFormation : liveMatchState.awayActiveFormation)
+    : undefined;
+  const activeSubOffIds = new Set(pendingReplacements.map(replacement => replacement.offPlayerId));
+  const activeSubOnIds = new Set(pendingReplacements.map(replacement => replacement.onPlayerId));
+  const manageableCurrentPlayers = sortPlayersByPositionGroup(
+    getPlayersByIds(userCurrentIds).filter(player => !activeSubOffIds.has(player.id))
+  );
+  const manageableBenchPlayers = sortPlayersByPositionGroup(
+    getPlayersByIds(userBenchIds).filter(player => (
+      !userCurrentIds?.includes(player.id) &&
+      !activeSubOnIds.has(player.id)
+    ))
+  );
+  const usedSubs = userSubState?.substitutesUsed || 0;
+  const usedWindows = userSubState?.substitutionWindowsUsed || 0;
+  const maxSubs = userSubState?.maxSubstitutes || 5;
+  const maxWindows = userSubState?.maxWindows || 3;
+  const remainingSubs = Math.max(0, maxSubs - usedSubs - pendingReplacements.length);
+  const isManagingHalfTime = liveProcessedMax === 45;
+  const remainingWindows = Math.max(0, maxWindows - usedWindows);
+  const canQueueSubstitution = remainingSubs > 0 && (isManagingHalfTime || remainingWindows > 0);
+  const canManageLiveTeam = Boolean(userTeamId && liveMatchState?.initialized && userCurrentIds?.length);
+  const handleQueueSubstitution = () => {
+    if (!selectedOffPlayerId || !selectedOnPlayerId || !canQueueSubstitution) return;
+    setPendingReplacements(current => [...current, { offPlayerId: selectedOffPlayerId, onPlayerId: selectedOnPlayerId }]);
+    setSelectedOffPlayerId(null);
+    setSelectedOnPlayerId(null);
+  };
+  const handleApplySubstitutions = () => {
+    if (pendingReplacements.length === 0) return;
+    const result = makeLiveSubstitutions(fixtureId, pendingReplacements);
+    setLogs(current => [result.message, ...current].slice(0, 8));
+    if (result.success) {
+      setPendingReplacements([]);
+      setSelectedOffPlayerId(null);
+      setSelectedOnPlayerId(null);
+    }
+  };
+  const handleLiveFormationSelect = (formation: Formation) => {
+    if (!userTeamId) return;
+    const result = setLiveMatchFormation(fixtureId, userTeamId, formation);
+    setLogs(current => [result.message, ...current].slice(0, 8));
+    setShowLiveFormationPicker(false);
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen scroll={false}>
       <View style={styles.topNav}>
-          <TouchableOpacity onPress={handleExit} style={styles.exitBtn}>
+          <TouchableOpacity onPress={handleExit} style={styles.exitBtn} accessibilityRole="button" accessibilityLabel="Exit match">
               <Text style={styles.exitText}>[ EXIT ]</Text>
           </TouchableOpacity>
       </View>
@@ -288,7 +433,7 @@ export default function MatchScreen() {
         <Text style={styles.headerTitle}>Match Simulation</Text>
         <Text style={styles.stadiumText}>{stadium}</Text>
         <Text style={styles.minuteClock}>{minute}&apos;</Text>
-        
+
         <View style={styles.scoreboard}>
           <View style={styles.teamBox}>
             <Text style={[styles.teamName, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
@@ -342,79 +487,151 @@ export default function MatchScreen() {
 
         <View style={styles.buttonContainer}>
           {!isPlaying && !isHalfTime && !matchFinished && minute === 0 && (
-            <TouchableOpacity style={styles.btnSimulate} onPress={handleStart}>
+            <TouchableOpacity style={styles.btnSimulate} onPress={handleStart} accessibilityRole="button" accessibilityLabel="Kick off">
               <Text style={styles.btnText}>Kick Off</Text>
             </TouchableOpacity>
           )}
           {isPlaying && (
-            <TouchableOpacity style={styles.btnPause} onPress={handlePause}>
+            <TouchableOpacity style={styles.btnPause} onPress={handlePause} accessibilityRole="button" accessibilityLabel="Pause and edit tactics">
               <Text style={styles.btnText}>Pause & Tactics</Text>
             </TouchableOpacity>
           )}
           {!isPlaying && !isHalfTime && !matchFinished && minute > 0 && (
-            <TouchableOpacity style={styles.btnSimulate} onPress={handleStart}>
+            <TouchableOpacity style={styles.btnSimulate} onPress={handleStart} accessibilityRole="button" accessibilityLabel="Resume match">
               <Text style={styles.btnText}>Resume</Text>
             </TouchableOpacity>
           )}
           {isHalfTime && (
-            <TouchableOpacity style={styles.btnSimulate} onPress={handleResumeHT}>
-              <Text style={styles.btnText}>Start Second Half</Text>
-            </TouchableOpacity>
+            <View style={styles.halfTimeActions}>
+              <TouchableOpacity style={styles.btnPause} onPress={() => setShowTactics(true)} accessibilityRole="button" accessibilityLabel="Open team management">
+                <Text style={styles.btnText}>Team Management</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnSimulate} onPress={handleResumeHT} accessibilityRole="button" accessibilityLabel="Start second half">
+                <Text style={styles.btnText}>Start Second Half</Text>
+              </TouchableOpacity>
+            </View>
           )}
           {matchFinished && (
-            <TouchableOpacity style={styles.btnContinue} onPress={handleContinue}>
+            <TouchableOpacity style={styles.btnContinue} onPress={handleContinue} accessibilityRole="button" accessibilityLabel="Continue to next week">
               <Text style={styles.btnText}>Continue to Next Week</Text>
             </TouchableOpacity>
           )}
         </View>
       </ScrollView>
 
-      {/* Tactical Overlay Modal */}
-      <Modal
+      <ModalSheet
         visible={showTactics}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowTactics(false)}
+        onClose={() => setShowTactics(false)}
+        title="Pause & Tactics"
+        variant="sheet"
+        footer={
+          <Button
+            title={canResumeFromTactics ? 'Resume Match' : 'Back to Match'}
+            variant="primary"
+            onPress={handleResumeFromTactics}
+            fullWidth
+          />
+        }
       >
-        <View style={styles.tacticsModalOverlay}>
-          <View style={styles.tacticsModalContainer}>
-            <View style={styles.tacticsModalHeader}>
-              <Text style={styles.tacticsModalTitle}>Pause &amp; Tactics</Text>
-              <TouchableOpacity onPress={() => setShowTactics(false)} style={styles.tacticsModalCloseBtn}>
-                <Text style={styles.tacticsModalCloseText}>Close</Text>
+        {canManageLiveTeam && (
+          <View style={styles.liveControlPanel}>
+            <View style={styles.liveControlHeader}>
+              <View>
+                <Text style={styles.liveControlTitle}>Live Team</Text>
+                <Text style={styles.liveControlMeta}>
+                  Subs {Math.max(0, maxSubs - usedSubs)} / {maxSubs} · Windows {remainingWindows} / {maxWindows}{isManagingHalfTime ? ' · Half-time window free' : ''}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.shapeButton}
+                onPress={() => setShowLiveFormationPicker(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Change live formation"
+              >
+                <Text style={styles.shapeButtonText}>{liveFormation || myTeam?.activeFormation || 'Shape'}</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.tacticsModalScroll} showsVerticalScrollIndicator={false}>
-              {myTactics && TACTIC_SECTIONS.map((section) => (
-                <TacticSection
-                  key={section.key}
-                  title={section.title}
-                  selectedOption={myTactics[section.key]}
-                  options={section.options}
-                  descriptions={section.descriptions}
-                  onSelect={(option) => handleTacticChange(section.key, option)}
-                />
+
+            <View style={styles.subPickerGrid}>
+              <View style={styles.subPickerCol}>
+                <Text style={styles.subPickerTitle}>Off</Text>
+                {manageableCurrentPlayers.map(player => (
+                  <TouchableOpacity
+                    key={player.id}
+                    style={[styles.subPlayerRow, selectedOffPlayerId === player.id && styles.subPlayerSelected]}
+                    onPress={() => setSelectedOffPlayerId(player.id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: selectedOffPlayerId === player.id }}
+                  >
+                    <Text style={styles.subPlayerName} numberOfLines={1}>{player.name}</Text>
+                    <Text style={styles.subPlayerMeta}>{player.subPosition || player.position}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.subPickerCol}>
+                <Text style={styles.subPickerTitle}>On</Text>
+                {manageableBenchPlayers.map(player => (
+                  <TouchableOpacity
+                    key={player.id}
+                    style={[styles.subPlayerRow, selectedOnPlayerId === player.id && styles.subPlayerSelected]}
+                    onPress={() => setSelectedOnPlayerId(player.id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: selectedOnPlayerId === player.id }}
+                  >
+                    <Text style={styles.subPlayerName} numberOfLines={1}>{player.name}</Text>
+                    <Text style={styles.subPlayerMeta}>{player.subPosition || player.position}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            <View style={styles.pendingSubsBox}>
+              {pendingReplacements.length === 0 ? (
+                <Text style={styles.pendingSubText}>No pending substitutions</Text>
+              ) : pendingReplacements.map((replacement, index) => (
+                <Text key={`${replacement.offPlayerId}-${replacement.onPlayerId}`} style={styles.pendingSubText}>
+                  {index + 1}. {players[replacement.offPlayerId]?.name} {'->'} {players[replacement.onPlayerId]?.name}
+                </Text>
               ))}
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.tacticsModalResumeBtn}
-              onPress={handleResumeFromTactics}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.tacticsModalResumeText}>{canResumeFromTactics ? 'Resume Match' : 'Back to Match'}</Text>
-            </TouchableOpacity>
+            </View>
+            <View style={styles.subActionRow}>
+              <Button
+                title="Queue Sub"
+                variant="secondary"
+                onPress={handleQueueSubstitution}
+                disabled={!selectedOffPlayerId || !selectedOnPlayerId || !canQueueSubstitution}
+              />
+              <Button
+                title="Apply Subs"
+                variant="primary"
+                onPress={handleApplySubstitutions}
+                disabled={pendingReplacements.length === 0}
+              />
+            </View>
           </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+        )}
+        {myTactics && TACTIC_SECTIONS.map((section) => (
+          <TacticSection
+            key={section.key}
+            title={section.title}
+            selectedOption={myTactics[section.key]}
+            options={section.options}
+            descriptions={section.descriptions}
+            onSelect={(option) => handleTacticChange(section.key, option)}
+          />
+        ))}
+      </ModalSheet>
+      <FormationSelectionModal
+        visible={showLiveFormationPicker}
+        formations={SUPPORTED_FORMATIONS as Formation[]}
+        selectedFormation={liveFormation || myTeam?.activeFormation || '4-3-3'}
+        onClose={() => setShowLiveFormationPicker(false)}
+        onSelect={handleLiveFormationSelect}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-  },
   topNav: {
       paddingHorizontal: 20,
       paddingTop: 10,
@@ -424,7 +641,7 @@ const styles = StyleSheet.create({
       padding: 8,
   },
   exitText: {
-      color: '#ef4444',
+      color: color.danger.base,
       fontWeight: 'bold',
       fontSize: 16,
   },
@@ -433,14 +650,14 @@ const styles = StyleSheet.create({
       paddingTop: 10,
   },
   headerTitle: {
-    color: '#fff',
+    color: color.text.primary,
     fontSize: 24,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 4,
   },
   stadiumText: {
-      color: '#64748b',
+      color: color.text.faint,
       fontSize: 14,
       textAlign: 'center',
       fontWeight: '600',
@@ -448,7 +665,7 @@ const styles = StyleSheet.create({
       letterSpacing: 1,
   },
   minuteClock: {
-      color: '#ef4444',
+      color: color.danger.base,
       fontSize: 32,
       fontWeight: '900',
       textAlign: 'center',
@@ -458,11 +675,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1e293b',
+    backgroundColor: color.bg.card,
     padding: 20,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
   },
   teamBox: {
     flex: 1,
@@ -475,7 +692,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   score: {
-    color: '#f8fafc',
+    color: color.text.primary,
     fontSize: 42,
     fontWeight: '900',
   },
@@ -483,26 +700,116 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   vsText: {
-    color: '#64748b',
+    color: color.text.faint,
     fontSize: 16,
     fontWeight: '900',
   },
+  penaltiesNote: {
+    color: color.warning.fg,
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  summaryPanel: {
+    marginTop: 20,
+    backgroundColor: color.bg.card,
+    borderWidth: 1,
+    borderColor: color.border.default,
+    padding: 14,
+  },
+  summaryTitle: {
+    color: color.text.primary,
+    fontSize: 14,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  statRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: color.border.subtle,
+  },
+  statValue: {
+    flex: 1,
+    color: color.text.primary,
+    fontSize: 16,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  statLabel: {
+    flex: 2,
+    color: color.text.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  motmBox: {
+    marginTop: 14,
+    marginBottom: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: color.border.subtle,
+  },
+  motmName: {
+    color: color.warning.fg,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  motmMeta: {
+    color: color.text.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  ratingsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  ratingsCol: {
+    flex: 1,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: color.border.subtle,
+  },
+  ratingName: {
+    flex: 1,
+    color: color.text.secondary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  ratingMeta: {
+    color: color.text.primary,
+    fontSize: 11,
+    fontWeight: '900',
+    minWidth: 32,
+    textAlign: 'right',
+  },
   logBox: {
     marginTop: 24,
-    backgroundColor: '#1e293b',
+    backgroundColor: color.bg.card,
     padding: 16,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
     minHeight: 120,
   },
   logText: {
-    color: '#94a3b8',
+    color: color.text.muted,
     fontSize: 12,
     marginBottom: 4,
   },
   logTextLatest: {
-    color: '#38bdf8',
+    color: color.accent.primary,
     fontSize: 15,
     fontWeight: '800',
     marginBottom: 8,
@@ -522,7 +829,7 @@ const styles = StyleSheet.create({
       textTransform: 'uppercase',
   },
   lineupPlayerName: {
-      color: '#cbd5e1',
+      color: color.text.secondary,
       fontSize: 12,
       marginBottom: 4,
   },
@@ -530,8 +837,12 @@ const styles = StyleSheet.create({
     marginTop: 48,
     paddingBottom: 40,
   },
+  halfTimeActions: {
+    gap: 12,
+    alignItems: 'center',
+  },
   btnSimulate: {
-    backgroundColor: '#38bdf8',
+    backgroundColor: color.accent.primary,
     paddingVertical: 10,
     paddingHorizontal: 32,
     borderRadius: 0,
@@ -540,7 +851,7 @@ const styles = StyleSheet.create({
     minWidth: 200,
   },
   btnPause: {
-    backgroundColor: '#F59E0B',
+    backgroundColor: color.warning.base,
     paddingVertical: 10,
     paddingHorizontal: 32,
     borderRadius: 0,
@@ -549,7 +860,7 @@ const styles = StyleSheet.create({
     minWidth: 200,
   },
   btnContinue: {
-    backgroundColor: '#10B981',
+    backgroundColor: color.success.base,
     paddingVertical: 10,
     paddingHorizontal: 32,
     borderRadius: 0,
@@ -558,7 +869,7 @@ const styles = StyleSheet.create({
     minWidth: 200,
   },
   btnText: {
-    color: '#0f172a',
+    color: color.bg.screen,
     fontSize: 16,
     fontWeight: '900',
   },
@@ -580,61 +891,92 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 5,
   },
-  // Tactical modal
-  tacticsModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    justifyContent: 'flex-end',
+  liveControlPanel: {
+    borderWidth: 1,
+    borderColor: color.border.default,
+    backgroundColor: color.bg.card,
+    padding: 12,
+    marginBottom: 16,
   },
-  tacticsModalContainer: {
-    backgroundColor: '#0f172a',
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    borderTopWidth: 2,
-    borderTopColor: '#38bdf8',
-    maxHeight: '80%',
-    paddingBottom: 20,
-  },
-  tacticsModalHeader: {
+  liveControlHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1e293b',
+    gap: 12,
+    marginBottom: 12,
   },
-  tacticsModalTitle: {
-    color: '#f8fafc',
-    fontSize: 18,
+  liveControlTitle: {
+    color: color.text.primary,
+    fontSize: 16,
     fontWeight: '900',
   },
-  tacticsModalCloseBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#334155',
-    borderRadius: 0,
+  liveControlMeta: {
+    color: color.text.muted,
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
   },
-  tacticsModalCloseText: {
-    color: '#94a3b8',
-    fontSize: 13,
+  shapeButton: {
+    borderWidth: 1,
+    borderColor: color.accent.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  shapeButtonText: {
+    color: color.accent.primary,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  subPickerGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  subPickerCol: {
+    flex: 1,
+  },
+  subPickerTitle: {
+    color: color.text.primary,
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  subPlayerRow: {
+    borderWidth: 1,
+    borderColor: color.border.subtle,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    marginBottom: 6,
+  },
+  subPlayerSelected: {
+    borderColor: color.accent.primary,
+    backgroundColor: color.accent.dim,
+  },
+  subPlayerName: {
+    color: color.text.secondary,
+    fontSize: 11,
     fontWeight: '800',
   },
-  tacticsModalScroll: {
-    padding: 16,
-    gap: 18,
+  subPlayerMeta: {
+    color: color.text.faint,
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 2,
   },
-  tacticsModalResumeBtn: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    backgroundColor: '#38bdf8',
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderRadius: 0,
+  pendingSubsBox: {
+    marginTop: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: color.border.subtle,
   },
-  tacticsModalResumeText: {
-    color: '#0f172a',
-    fontSize: 14,
-    fontWeight: '900',
+  pendingSubText: {
+    color: color.text.muted,
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+  subActionRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
 });

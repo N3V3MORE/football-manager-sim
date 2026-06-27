@@ -496,13 +496,38 @@ const resolveFixtureWinnerId = (fixture: Fixture, rng?: RandomGenerator): string
   // Tied knockout: resolve via penalty shootout instead of silently advancing the home team.
   if (fixture.isKnockout) {
     const random = resolveRandom(rng);
-    const winnerTeamId = random() < 0.5 ? fixture.homeTeamId : fixture.awayTeamId;
-    fixture.winnerTeamId = winnerTeamId;
-    fixture.resolution = 'penalties';
-    return winnerTeamId;
+    return random() < 0.5 ? fixture.homeTeamId : fixture.awayTeamId;
   }
   // Non-knockout tie (should not normally reach competition progression).
   return fixture.homeTeamId;
+};
+
+/**
+ * Resolves a fixture winner and, for tied knockouts decided by penalties, caches
+ * the result on a CLONE stored back into `fixtures`. Cloning (instead of mutating
+ * the input fixture in place) preserves the caller's object while still ensuring
+ * the returned fixtures carry `winnerTeamId`/`resolution`. The cache is load-bearing:
+ * `resolveFixtureLoserIds` re-derives the winner, and the cached `winnerTeamId`
+ * makes that second call return early so the RNG is consumed exactly once per tie
+ * (preserving deterministic replay).
+ */
+const resolveAndCacheFixtureWinner = (
+  fixtures: Record<string, Fixture>,
+  fixtureId: string,
+  rng?: RandomGenerator
+): string | undefined => {
+  const fixture = fixtures[fixtureId];
+  const winnerTeamId = resolveFixtureWinnerId(fixture, rng);
+  const isTiedKnockout = fixture.isKnockout
+    && !fixture.winnerTeamId
+    && fixture.resolution !== 'void'
+    && fixture.resolution !== 'forfeit'
+    && (fixture.homeScore || 0) === (fixture.awayScore || 0)
+    && Boolean(winnerTeamId);
+  if (isTiedKnockout) {
+    fixtures[fixtureId] = { ...fixture, winnerTeamId, resolution: 'penalties' };
+  }
+  return winnerTeamId;
 };
 
 const resolveFixtureLoserIds = (fixture: Fixture, rng?: RandomGenerator): string[] => {
@@ -558,7 +583,7 @@ export const resolveCompetitionProgression = (
       if (currentRound.fixtureIds.some(fixtureId => !nextFixtures[fixtureId]?.isPlayed)) return;
 
       const winnerTeamIds = currentRound.fixtureIds
-        .map(fixtureId => resolveFixtureWinnerId(nextFixtures[fixtureId], rng))
+        .map(fixtureId => resolveAndCacheFixtureWinner(nextFixtures, fixtureId, rng))
         .filter((teamId): teamId is string => Boolean(teamId));
       const loserTeamIds = currentRound.fixtureIds.flatMap(fixtureId => resolveFixtureLoserIds(nextFixtures[fixtureId], rng));
       const updatedRound: CompetitionRoundState = {

@@ -1,7 +1,6 @@
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useGameStore } from '@/src/store/gameStore';
 import { Formation, Player, TeamTactics } from '@/src/models/types';
@@ -15,6 +14,9 @@ import { PlayerPickerModal } from '@/components/squad/player-picker-modal';
 import { SquadInfoModal } from '@/components/squad/squad-info-modal';
 import { TacticSection } from '@/components/squad/tactic-section';
 import { isPlayerUnavailable } from '@/src/core/playerStatusUtils';
+import { Screen, SegmentedControl } from '@/components/ui';
+import { TabHeader } from '@/components/ui/page-header';
+import { color, space } from '@/src/design/tokens';
 
 const FORMATIONS: Formation[] = [
   '4-3-3',
@@ -261,37 +263,45 @@ export default function SquadScreen() {
   const pickerSections = activeSlot ? getPickerSections(activeSlot) : null;
   const tactics = myTeam?.tactics;
 
+  const PANE_SEGMENTS = [
+    { label: 'Starting XI', value: 'xi' as const },
+    { label: 'Tactics', value: 'tactics' as const },
+  ];
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <Screen scroll={false}>
       <ScrollView scrollEnabled={scrollEnabled} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View style={styles.headerRow}>
-            <Text style={styles.title}>Tactics & Squad</Text>
-            <TouchableOpacity style={styles.infoBtn} onPress={() => setShowInfo(true)}>
+        <TabHeader
+          title="Squad"
+          right={
+            <TouchableOpacity
+              style={styles.infoBtn}
+              onPress={() => setShowInfo(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Tactics help"
+            >
               <Text style={styles.infoBtnText}>i</Text>
             </TouchableOpacity>
-          </View>
+          }
+        />
 
-          <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowFormationDrop(true)}>
+        <View style={styles.controls}>
+          <TouchableOpacity
+            style={styles.dropdownBtn}
+            onPress={() => setShowFormationDrop(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`Formation ${activeFormation}`}
+          >
             <Text style={styles.dropdownLabel}>Formation</Text>
             <Text style={styles.dropdownValue}>{activeFormation}</Text>
             <Text style={styles.dropdownCaret}>v</Text>
           </TouchableOpacity>
 
-          <View style={styles.paneSwitch}>
-            <TouchableOpacity
-              style={[styles.paneSwitchBtn, activePane === 'xi' && styles.paneSwitchBtnActive]}
-              onPress={() => setActivePane('xi')}
-            >
-              <Text style={[styles.paneSwitchText, activePane === 'xi' && styles.paneSwitchTextActive]}>Starting XI</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.paneSwitchBtn, activePane === 'tactics' && styles.paneSwitchBtnActive]}
-              onPress={() => setActivePane('tactics')}
-            >
-              <Text style={[styles.paneSwitchText, activePane === 'tactics' && styles.paneSwitchTextActive]}>Tactics</Text>
-            </TouchableOpacity>
-          </View>
+          <SegmentedControl
+            segments={PANE_SEGMENTS}
+            value={activePane}
+            onChange={(value) => setActivePane(value)}
+          />
         </View>
 
         {activePane === 'xi' ? (
@@ -396,49 +406,41 @@ export default function SquadScreen() {
       />
 
       <SquadInfoModal visible={showInfo} onClose={() => setShowInfo(false)} />
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: '#0f172a' },
-  header:      { padding: 16, backgroundColor: '#1e293b', borderBottomWidth: 1, borderBottomColor: '#334155' },
-  headerRow:   { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  title:       { fontSize: 24, fontWeight: '900', color: '#f8fafc', flex: 1 },
-  infoBtn:     { width: 30, height: 30, borderRadius: 0, backgroundColor: '#334155', alignItems: 'center', justifyContent: 'center' },
-  infoBtnText: { color: '#94a3b8', fontSize: 14, fontWeight: '900' },
+  controls: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.md },
+  infoBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 0,
+    backgroundColor: color.border.default,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoBtnText: { color: color.text.muted, fontSize: 14, fontWeight: '900' },
 
   // Formation dropdown trigger
   dropdownBtn: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#0f172a', borderRadius: 0, borderWidth: 1, borderColor: '#334155',
-    paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12,
+    backgroundColor: color.bg.screen, borderRadius: 0, borderWidth: 1, borderColor: color.border.default,
+    paddingVertical: 10, paddingHorizontal: 14,
   },
-  dropdownLabel: { fontSize: 11, color: '#64748b', fontWeight: '700', marginRight: 6, textTransform: 'uppercase' },
-  dropdownValue: { flex: 1, fontSize: 16, fontWeight: '900', color: '#f8fafc' },
-  dropdownCaret: { fontSize: 14, color: '#64748b' },
-  paneSwitch: {
-    flexDirection: 'row',
-    backgroundColor: '#0f172a',
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: '#334155',
-    padding: 4,
-  },
-  paneSwitchBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 0 },
-  paneSwitchBtnActive: { backgroundColor: '#38bdf8' },
-  paneSwitchText: { color: '#94a3b8', fontSize: 12, fontWeight: '900' },
-  paneSwitchTextActive: { color: '#0f172a' },
+  dropdownLabel: { fontSize: 11, color: color.text.faint, fontWeight: '700', marginRight: 6, textTransform: 'uppercase' },
+  dropdownValue: { flex: 1, fontSize: 16, fontWeight: '900', color: color.text.primary },
+  dropdownCaret: { fontSize: 14, color: color.text.faint },
 
   // Pitch
   pitchWrapper:      { paddingHorizontal: 10, paddingVertical: 10 },
   pitch: {
-    backgroundColor: '#14532d', borderRadius: 0,
+    backgroundColor: color.success.bgStrong, borderRadius: 0,
     height: 480,
-    borderWidth: 2, borderColor: '#166534', overflow: 'hidden', position: 'relative',
+    borderWidth: 2, borderColor: color.success.bgStrongBorder, overflow: 'hidden', position: 'relative',
   },
   pitchOutline: {
-    position: 'absolute', top: 12, bottom: 12, left: 12, right: 12, 
+    position: 'absolute', top: 12, bottom: 12, left: 12, right: 12,
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)', borderRadius: 0
   },
   pitchSlots: {
@@ -461,9 +463,9 @@ const styles = StyleSheet.create({
   // Player cards
   section:       { paddingHorizontal: 12, paddingTop: 4 },
   sectionTitle:  {
-    fontSize: 13, fontWeight: '900', color: '#64748b', marginTop: 14, marginBottom: 6,
+    fontSize: 13, fontWeight: '900', color: color.text.faint, marginTop: 14, marginBottom: 6,
     textTransform: 'uppercase', letterSpacing: 1,
   },
-  emptyNote:     { fontSize: 11, color: '#475569', fontStyle: 'italic', paddingLeft: 4, marginBottom: 4 },
-  tacticsPane: { padding: 16, gap: 18 },
+  emptyNote:     { fontSize: 11, color: color.text.faint, fontStyle: 'italic', paddingLeft: 4, marginBottom: 4 },
+  tacticsPane: { padding: space.lg, gap: 18 },
 });

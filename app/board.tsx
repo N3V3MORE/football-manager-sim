@@ -1,13 +1,14 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
 import { PageHeader } from '@/components/ui/page-header';
+import { Screen, EmptyState } from '@/components/ui';
 import { useGameStore } from '@/src/store/gameStore';
 import { SeasonSummary, TrophyEntry } from '@/src/models/types';
 import { getCompetitionName } from '@/src/core/competitionEngine';
 import { getReviewVerdict } from '@/src/core/boardEngine';
+import { color, space } from '@/src/design/tokens';
 
 const OUTCOME_LABEL: Record<SeasonSummary['outcome'], string> = {
   champion: 'Champion',
@@ -18,11 +19,11 @@ const OUTCOME_LABEL: Record<SeasonSummary['outcome'], string> = {
 };
 
 const OUTCOME_COLOR: Record<SeasonSummary['outcome'], string> = {
-  champion: '#f59e0b',
-  promoted: '#10B981',
-  stayed: '#94a3b8',
-  relegated: '#ef4444',
-  sacked: '#7f1d1d',
+  champion: color.warning.base,
+  promoted: color.success.base,
+  stayed: color.text.muted,
+  relegated: color.danger.base,
+  sacked: color.danger.bg,
 };
 
 const TROPHY_LABEL: Record<TrophyEntry['type'], string> = {
@@ -34,11 +35,11 @@ const TROPHY_LABEL: Record<TrophyEntry['type'], string> = {
 };
 
 const TROPHY_COLOR: Record<TrophyEntry['type'], string> = {
-  champion: '#f59e0b',
-  promoted: '#10B981',
-  relegated: '#ef4444',
-  cup_winner: '#38bdf8',
-  continental_winner: '#f59e0b',
+  champion: color.warning.base,
+  promoted: color.success.base,
+  relegated: color.danger.base,
+  cup_winner: color.accent.primary,
+  continental_winner: color.warning.base,
 };
 
 export default function BoardScreen() {
@@ -62,23 +63,23 @@ export default function BoardScreen() {
 
   const verdict = getReviewVerdict(approval, pressure, replacementRisk);
   let statusText = 'Stable';
-  let statusColor = '#f59e0b';
+  let statusColor: string = color.warning.base;
   if (verdict === 'critical') {
     statusText = 'Critical Review';
-    statusColor = '#7f1d1d';
+    statusColor = color.danger.bg;
   } else if (verdict === 'warning') {
     statusText = 'Under Pressure';
-    statusColor = '#ef4444';
+    statusColor = color.danger.base;
   } else if (verdict === 'thriving') {
     statusText = 'Untouchable';
-    statusColor = '#10B981';
+    statusColor = color.success.base;
   }
 
   const totalPlayed = careerRecord.totalWins + careerRecord.totalDraws + careerRecord.totalLosses;
   const positiveResults = careerRecord.trophies.filter(trophy => trophy.type !== 'relegated');
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <Screen scroll={false}>
       <PageHeader title="Board Room" backLabel="< Hub" onBack={() => router.replace('/')} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -158,9 +159,12 @@ export default function BoardScreen() {
               <Text style={styles.empty}>No objectives set.</Text>
             )}
           </>
-        ) : (
-          <Text style={styles.empty}>No club is currently assigned. Review your career record and inbox offers.</Text>
-        )}
+            ) : (
+              <EmptyState
+                title="No club assigned"
+                message="Review your career record below and watch your inbox for new job offers."
+              />
+            )}
 
         {careerRecord.seasonsManaged > 0 && (
           <>
@@ -196,9 +200,9 @@ export default function BoardScreen() {
               </View>
               {totalPlayed > 0 ? (
                 <View style={styles.recordBar}>
-                  <View style={[styles.recordSegment, { flex: careerRecord.totalWins, backgroundColor: '#10B981' }]} />
-                  <View style={[styles.recordSegment, { flex: careerRecord.totalDraws, backgroundColor: '#f59e0b' }]} />
-                  <View style={[styles.recordSegment, { flex: careerRecord.totalLosses, backgroundColor: '#ef4444' }]} />
+                  <View style={[styles.recordSegment, { flex: careerRecord.totalWins, backgroundColor: color.success.base }]} />
+                  <View style={[styles.recordSegment, { flex: careerRecord.totalDraws, backgroundColor: color.warning.base }]} />
+                  <View style={[styles.recordSegment, { flex: careerRecord.totalLosses, backgroundColor: color.danger.base }]} />
                 </View>
               ) : null}
             </View>
@@ -254,44 +258,43 @@ export default function BoardScreen() {
           <Text style={styles.empty}>Complete a season to see your career record.</Text>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
-  scroll: { padding: 16, gap: 16 },
+  scroll: { padding: space.lg, gap: space.lg },
   gaugeCard: {
-    backgroundColor: '#1e293b',
+    backgroundColor: color.bg.card,
     padding: 20,
     borderRadius: 0,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
   },
   gaugeLabel: {
-    color: '#94a3b8',
+    color: color.text.muted,
     fontSize: 12,
     textTransform: 'uppercase',
     fontWeight: '900',
     letterSpacing: 1,
   },
   gaugeValue: { fontSize: 48, fontWeight: '900', marginTop: 10 },
-  gaugeStatus: { color: '#cbd5e1', fontSize: 16, fontWeight: '700', marginTop: 4, marginBottom: 20 },
-  barBg: { height: 8, width: '100%', backgroundColor: '#0f172a', borderRadius: 0, overflow: 'hidden' },
+  gaugeStatus: { color: color.text.secondary, fontSize: 16, fontWeight: '700', marginTop: 4, marginBottom: 20 },
+  barBg: { height: 8, width: '100%', backgroundColor: color.bg.screen, borderRadius: 0, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: 0 },
-  sectionTitle: { color: '#f8fafc', fontSize: 18, fontWeight: '800', marginTop: 10 },
+  sectionTitle: { color: color.text.primary, fontSize: 18, fontWeight: '800', marginTop: 10 },
   contextCard: {
-    backgroundColor: '#1e293b',
-    padding: 16,
+    backgroundColor: color.bg.card,
+    padding: space.lg,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
     gap: 12,
   },
-  contextBody: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
+  contextBody: { color: color.text.secondary, fontSize: 13, lineHeight: 20 },
   contextLabel: {
-    color: '#94a3b8',
+    color: color.text.muted,
     fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -300,60 +303,60 @@ const styles = StyleSheet.create({
   tagRow: { flexDirection: 'row', gap: 10 },
   contextTag: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: color.bg.screen,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
     padding: 10,
     gap: 4,
   },
   contextTagLabel: {
-    color: '#64748b',
+    color: color.text.faint,
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
-  contextTagValue: { color: '#f8fafc', fontSize: 13, fontWeight: '800', textTransform: 'capitalize' },
+  contextTagValue: { color: color.text.primary, fontSize: 13, fontWeight: '800', textTransform: 'capitalize' },
   objCard: {
-    backgroundColor: '#1e293b',
-    padding: 16,
+    backgroundColor: color.bg.card,
+    padding: space.lg,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  objDesc: { color: '#e2e8f0', fontSize: 14, fontWeight: '600', flex: 1, marginRight: 10 },
+  objDesc: { color: color.text.secondary, fontSize: 14, fontWeight: '600', flex: 1, marginRight: 10 },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 0 },
-  metBadge: { backgroundColor: '#064e3b' },
-  pendingBadge: { backgroundColor: '#1e3a8a' },
-  failedBadge: { backgroundColor: '#7f1d1d' },
+  metBadge: { backgroundColor: color.success.bg },
+  pendingBadge: { backgroundColor: color.info.bg },
+  failedBadge: { backgroundColor: color.danger.bg },
   statusText: { fontSize: 11, fontWeight: '900' },
-  metText: { color: '#34d399' },
-  pendingText: { color: '#60a5fa' },
-  failedText: { color: '#fca5a5' },
-  empty: { color: '#64748b', fontStyle: 'italic' },
+  metText: { color: color.success.fg },
+  pendingText: { color: color.info.base },
+  failedText: { color: color.danger.fg },
+  empty: { color: color.text.faint, fontStyle: 'italic' },
   careerCard: {
-    backgroundColor: '#1e293b',
-    padding: 16,
+    backgroundColor: color.bg.card,
+    padding: space.lg,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
     gap: 12,
   },
   careerRow: { flexDirection: 'row', justifyContent: 'space-around' },
   careerStat: { alignItems: 'center' },
-  careerStatValue: { color: '#f8fafc', fontSize: 22, fontWeight: '900' },
-  careerStatLabel: { color: '#64748b', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginTop: 2 },
+  careerStatValue: { color: color.text.primary, fontSize: 22, fontWeight: '900' },
+  careerStatLabel: { color: color.text.faint, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', marginTop: 2 },
   recordBar: { height: 6, flexDirection: 'row', overflow: 'hidden', gap: 1 },
   recordSegment: { height: '100%' },
   trophyCard: {
-    backgroundColor: '#1e293b',
+    backgroundColor: color.bg.card,
     padding: 14,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -361,25 +364,24 @@ const styles = StyleSheet.create({
   trophyBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 0 },
   trophyBadgeText: { fontSize: 11, fontWeight: '900' },
   trophyInfo: { flex: 1 },
-  trophyDivision: { color: '#e2e8f0', fontSize: 13, fontWeight: '700' },
-  trophySeason: { color: '#64748b', fontSize: 11, fontWeight: '600', marginTop: 2 },
+  trophyDivision: { color: color.text.secondary, fontSize: 13, fontWeight: '700' },
+  trophySeason: { color: color.text.faint, fontSize: 11, fontWeight: '600', marginTop: 2 },
   historyCard: {
-    backgroundColor: '#1e293b',
+    backgroundColor: color.bg.card,
     padding: 14,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
   historyLeft: { flex: 1 },
-  historyTeam: { color: '#f8fafc', fontSize: 13, fontWeight: '800' },
-  historyDivision: { color: '#64748b', fontSize: 11, fontWeight: '600', marginTop: 2 },
+  historyTeam: { color: color.text.primary, fontSize: 13, fontWeight: '800' },
+  historyDivision: { color: color.text.faint, fontSize: 11, fontWeight: '600', marginTop: 2 },
   historyMid: { alignItems: 'flex-end', marginRight: 8 },
-  historyRecord: { color: '#cbd5e1', fontSize: 12, fontWeight: '700' },
-  historyGoals: { color: '#64748b', fontSize: 11, fontWeight: '600', marginTop: 2 },
+  historyRecord: { color: color.text.secondary, fontSize: 12, fontWeight: '700' },
+  historyGoals: { color: color.text.faint, fontSize: 11, fontWeight: '600', marginTop: 2 },
   outcomePill: { paddingHorizontal: 8, paddingVertical: 4 },
   outcomePillText: { fontSize: 11, fontWeight: '900' },
 });
-

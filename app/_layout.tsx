@@ -1,21 +1,22 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { installAgentGameHandler } from '@/src/dev/agentGameHandler';
 import { useGameStore } from '@/src/store/gameStore';
 import { PERSIST_STORAGE_KEY, clearPersistLoadError, getPersistLoadError, safeStorage } from '@/src/store/persistence';
+import { Button, Screen } from '@/components/ui';
+import { ConfirmHost } from '@/components/ui/confirm-host';
+import { color, space, type } from '@/src/design/tokens';
 
 export const unstable_settings = {
   anchor: '(tabs)',
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const userTeamId = useGameStore(state => state.userTeamId);
   const [hasHydrated, setHasHydrated] = useState(false);
   const [loadError, setLoadError] = useState(getPersistLoadError());
@@ -56,25 +57,43 @@ export default function RootLayout() {
     setHasHydrated(true);
   };
 
-  if (!hasHydrated) return null;
-
-  if (loadError) {
+  // B4: hydration skeleton. Previously this returned `null`, which flashed a blank
+  // screen on cold start. A branded loader confirms the app is alive while the
+  // persisted store rehydrates.
+  if (!hasHydrated) {
     return (
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorTitle}>Saved game could not be loaded</Text>
-          <Text style={styles.errorMessage}>{loadError.message}</Text>
-          <Pressable style={styles.errorButton} onPress={handleStartFresh}>
-            <Text style={styles.errorButtonText}>Start fresh</Text>
-          </Pressable>
-        </View>
-        <StatusBar style="auto" />
+      <ThemeProvider value={DarkTheme}>
+        <Screen scroll={false} edges={['top', 'bottom']}>
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingTitle}>Manager Sim</Text>
+            <Text style={styles.loadingHint}>Loading your saved game…</Text>
+          </View>
+        </Screen>
+        <StatusBar style="light" />
       </ThemeProvider>
     );
   }
 
+  if (loadError) {
+    return (
+      <ThemeProvider value={DarkTheme}>
+        <Screen scroll={false} edges={['top', 'bottom']}>
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorTitle}>Saved game could not be loaded</Text>
+            <Text style={styles.errorMessage}>{loadError.message}</Text>
+            <Button title="Start fresh" variant="primary" onPress={handleStartFresh} />
+          </View>
+        </Screen>
+        <StatusBar style="light" />
+      </ThemeProvider>
+    );
+  }
+
+  // DECISION (B1/B4): dark-only. The half-wired light plumbing was removed; we
+  // always render the dark navigation theme so the system chrome matches the
+  // dark surfaces every screen now uses.
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={DarkTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="league" options={{ headerShown: false }} />
@@ -84,39 +103,45 @@ export default function RootLayout() {
         <Stack.Screen name="stats" options={{ headerShown: false }} />
         <Stack.Screen name="match" options={{ presentation: 'fullScreenModal', title: 'Match Day' }} />
       </Stack>
-      <StatusBar style="auto" />
+      <ConfirmHost />
+      <StatusBar style="light" />
     </ThemeProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.md,
+  },
+  loadingTitle: {
+    fontSize: type.h1.fontSize,
+    fontWeight: '900',
+    color: color.text.primary,
+  },
+  loadingHint: {
+    fontSize: type.body.fontSize,
+    color: color.text.faint,
+  },
   errorContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-    gap: 16,
+    padding: space.xl,
+    gap: space.lg,
   },
   errorTitle: {
     fontSize: 22,
     fontWeight: '700',
     textAlign: 'center',
+    color: color.text.primary,
   },
   errorMessage: {
     fontSize: 16,
     lineHeight: 22,
-    opacity: 0.8,
+    color: color.text.muted,
     textAlign: 'center',
-  },
-  errorButton: {
-    borderRadius: 10,
-    backgroundColor: '#2563eb',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
-  errorButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
   },
 });

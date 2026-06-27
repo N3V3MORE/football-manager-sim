@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, Text, ScrollView } from 'react-native';
 import { useGameStore } from '@/src/store/gameStore';
 import { getTransferWindowLabel, isTransferWindowOpen } from '@/src/utils/calendar';
 import { Player } from '@/src/models/types';
@@ -9,6 +8,9 @@ import { formatContractLength, getPlayerAvailabilityStatus, isContractExpiringSo
 import { TransferDialog, TransferDialogState } from '@/components/transfers/transfer-dialog';
 import { TransferPlayerCard } from '@/components/transfers/transfer-player-card';
 import { TransferTabs } from '@/components/transfers/transfer-tabs';
+import { Screen, Card, Badge, EmptyState } from '@/components/ui';
+import { color, space, type } from '@/src/design/tokens';
+import { useConfirmStore } from '@/src/store/confirmStore';
 
 type TransferTab = 'market' | 'squad';
 
@@ -26,8 +28,9 @@ export default function TransfersScreen() {
 
   const [tab, setTab] = useState<TransferTab>('market');
   const [dialog, setDialog] = useState<TransferDialogState>(null);
+  const showAlert = useConfirmStore(s => s.showAlert);
 
-  if (!userTeamId) return <View style={styles.container} />;
+  if (!userTeamId) return <Screen scroll={false} />;
   const userTeam = teams[userTeamId];
 
   const marketPlayers = sortPlayersByPositionGroup(Object.values(players).filter(p => p.isTransferListed && p.teamId !== userTeamId));
@@ -35,7 +38,10 @@ export default function TransfersScreen() {
 
   const handleBuy = (player: Player) => {
     if (!windowOpen) {
-      Alert.alert('Transfer Window Closed', 'You cannot buy players outside of the transfer window.');
+      showAlert({
+        title: 'Transfer Window Closed',
+        message: 'You cannot buy players outside of the transfer window.',
+      });
       return;
     }
     setDialog({
@@ -59,25 +65,25 @@ export default function TransfersScreen() {
 
     if (dialog.type === 'buy') {
       if (!windowOpen) {
-        Alert.alert('Transfer Window Closed', 'The transfer window has closed.');
+        showAlert({ title: 'Transfer Window Closed', message: 'The transfer window has closed.' });
         setDialog(null);
         return;
       }
       const fee = Number(dialog.fee);
       const wage = Number(dialog.wage);
       if (!Number.isFinite(fee) || fee <= 0 || !Number.isFinite(wage) || wage <= 0) {
-        Alert.alert('Invalid Offer', 'Enter a positive transfer fee and wage.');
+        showAlert({ title: 'Invalid Offer', message: 'Enter a positive transfer fee and wage.' });
         return;
       }
       const result = buyPlayer(dialog.player.id, fee, wage);
       setDialog(null);
-      Alert.alert(result.success ? 'Success' : 'Rejected', result.message);
+      showAlert({ title: result.success ? 'Success' : 'Rejected', message: result.message });
       return;
     }
 
     const price = Number(dialog.price);
     if (!Number.isFinite(price) || price <= 0) {
-      Alert.alert('Invalid Price', 'Enter a positive asking price.');
+      showAlert({ title: 'Invalid Price', message: 'Enter a positive asking price.' });
       return;
     }
     listPlayerForSale(dialog.player.id, price);
@@ -98,29 +104,36 @@ export default function TransfersScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
+    <Screen scroll={false}>
+      <Card padded={space.lg} style={styles.headerCard}>
         <Text style={styles.title}>Transfer Market</Text>
         <Text style={styles.budget}>Budget: GBP {userTeam.budget.toFixed(1)}m</Text>
-        <View style={[styles.banner, windowOpen ? styles.bannerOpen : styles.bannerClosed]}>
-          <Text style={styles.bannerText}>{windowLabel}</Text>
-        </View>
-      </View>
+        <Badge
+          variant={windowOpen ? 'success' : 'danger'}
+          shape="square"
+          style={styles.banner}
+        >
+          {windowLabel}
+        </Badge>
+      </Card>
 
       <TransferTabs activeTab={tab} marketCount={marketPlayers.length} onChange={setTab} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {tab === 'market' && (
-          marketPlayers.length === 0 ? <Text style={styles.empty}>No players listed.</Text> :
-          marketPlayers.map(p => (
-            <TransferPlayerCard
-              key={p.id}
-              player={p}
-              subLabel={`${teams[p.teamId]?.name || ''} | ${getPlayerAvailabilityStatus(p)} | ${formatContractLength(p)}`}
-              actionLabel={`GBP ${p.askingPrice.toFixed(1)}m`}
-              onAction={() => handleBuy(p)}
-            />
-          ))
+          marketPlayers.length === 0 ? (
+            <EmptyState title="No players listed" message="The market is quiet right now." />
+          ) : (
+            marketPlayers.map(p => (
+              <TransferPlayerCard
+                key={p.id}
+                player={p}
+                subLabel={`${teams[p.teamId]?.name || ''} | ${getPlayerAvailabilityStatus(p)} | ${formatContractLength(p)}`}
+                actionLabel={`GBP ${p.askingPrice.toFixed(1)}m`}
+                onAction={() => handleBuy(p)}
+              />
+            ))
+          )
         )}
 
         {tab === 'squad' && (
@@ -144,19 +157,14 @@ export default function TransfersScreen() {
         onChangeValue={updateDialogValue}
         onSubmit={handleSubmitDialog}
       />
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
-  header: { padding: 16, backgroundColor: '#1e293b' },
-  title: { fontSize: 24, fontWeight: '900', color: '#f8fafc' },
-  budget: { fontSize: 16, color: '#10B981', fontWeight: '700', marginTop: 4 },
-  banner: { padding: 10, borderRadius: 0, marginTop: 12, alignItems: 'center' },
-  bannerOpen: { backgroundColor: '#065f46' },
-  bannerClosed: { backgroundColor: '#7f1d1d' },
-  bannerText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  scroll: { padding: 16, gap: 10 },
-  empty: { color: '#64748b', textAlign: 'center', marginTop: 20 },
+  headerCard: { borderWidth: 0 },
+  title: { fontSize: type.h2.fontSize, fontWeight: type.h2.fontWeight, color: color.text.primary },
+  budget: { fontSize: type.subtitle.fontSize, color: color.success.base, fontWeight: '700', marginTop: space.xs },
+  banner: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: 10, marginTop: space.md },
+  scroll: { padding: space.lg, gap: 10 },
 });

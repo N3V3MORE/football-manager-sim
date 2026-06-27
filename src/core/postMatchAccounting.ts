@@ -1,4 +1,4 @@
-import { Player, TeamTactics } from '../models/types';
+import { Player, PlayerMatchContribution, TeamTactics } from '../models/types';
 import { addPlayerStat } from './matchUtils';
 import { clampToMatchMinutes } from './minuteMapUtils';
 import { RandomGenerator, resolveRandom } from './random';
@@ -6,12 +6,9 @@ import { ENGINE_CONFIG } from '../config/engineConfig';
 
 export const CLEAN_SHEET_MINUTES_REQUIRED = 60;
 
-export type PlayerMatchContribution = {
-  goals?: number;
-  assists?: number;
-  yellowCards?: number;
-  redCards?: number;
-};
+// `PlayerMatchContribution` now lives in the model layer (`models/types/live-match.ts`).
+// Re-exported here so existing `from './postMatchAccounting'` / `from '../core/postMatchAccounting'` imports keep working.
+export type { PlayerMatchContribution };
 
 export const didConcedeInWindow = (
   concededGoalMinutes: number[],

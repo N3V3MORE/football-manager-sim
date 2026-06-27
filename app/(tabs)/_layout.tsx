@@ -3,19 +3,20 @@ import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { tabBar } from '@/src/design/tokens';
 export default function TabLayout() {
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#38bdf8',
-        tabBarInactiveTintColor: '#94a3b8',
+        tabBarActiveTintColor: tabBar.active,
+        tabBarInactiveTintColor: tabBar.inactive,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          backgroundColor: '#1e293b',
+          backgroundColor: tabBar.bg,
           borderTopWidth: 1,
-          borderTopColor: '#334155',
+          borderTopColor: tabBar.border,
         },
       }}>
       <Tabs.Screen
@@ -30,12 +31,6 @@ export default function TabLayout() {
         options={{
           title: 'Squad',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.3.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="tactics"
-        options={{
-          href: null,
         }}
       />
       <Tabs.Screen

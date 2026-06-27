@@ -1,5 +1,7 @@
 export { applySubstitutions } from './substitutionEngine';
 
+export const SUBSTITUTION_CHECKPOINTS = [56, 66, 76, 84] as const;
+
 export type SubstitutionState = {
   substitutesUsed: number;
   substitutionWindowsUsed: number;

@@ -1,46 +1,12 @@
-import { Fixture, Player, Team, TeamTactics } from '../models/types';
+import { Fixture, LiveMatchState, Player, Team, TeamTactics } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { autoAssignLineup } from '../core/lineupEngine';
 import { applyMatchResult } from '../core/teamUtils';
 import { isPlayerUnavailable } from '../core/playerStatusUtils';
-import { PlayerMatchContribution } from '../core/postMatchAccounting';
 
-export type LiveMatchState = {
-  initialized: boolean;
-  yellowCardPlayerIds: string[];
-  sentOffPlayerIds: string[];
-  firstAttackIsHome?: boolean;
-  sentOffMinutes?: Record<string, number>;
-  homeGoalMinutes?: number[];
-  awayGoalMinutes?: number[];
-  matchContributions?: Record<string, PlayerMatchContribution>;
-  homeStarterIds: string[];
-  awayStarterIds: string[];
-  currentHomePlayerIds?: string[];
-  currentAwayPlayerIds?: string[];
-  homeBenchIds?: string[];
-  awayBenchIds?: string[];
-  homeMinuteMap?: Record<string, number>;
-  awayMinuteMap?: Record<string, number>;
-  homeSubEntryMinutes?: Record<string, number>;
-  awaySubEntryMinutes?: Record<string, number>;
-  homeGoalkeeperId?: string;
-  awayGoalkeeperId?: string;
-  homeSubstitutionState?: {
-    substitutesUsed: number;
-    substitutionWindowsUsed: number;
-    maxSubstitutes?: number;
-    maxWindows?: number;
-  };
-  awaySubstitutionState?: {
-    substitutesUsed: number;
-    substitutionWindowsUsed: number;
-    maxSubstitutes?: number;
-    maxWindows?: number;
-  };
-  appliedSubstitutionCheckpoints?: number[];
-  processedMinutes?: number[];
-};
+// `LiveMatchState` now lives in the model layer (`models/types/live-match.ts`).
+// Re-exported here so existing `from '../store/liveMatchHelpers'` imports keep working.
+export type { LiveMatchState } from '../models/types';
 
 const LIVE_MATCH_MINUTES = 90;
 

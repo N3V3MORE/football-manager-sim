@@ -1,12 +1,12 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, View, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { CalendarFixtureRow } from '@/components/calendar/calendar-fixture-row';
 import { CalendarWindowBanner } from '@/components/calendar/calendar-window-banner';
 import { useGameStore } from '@/src/store/gameStore';
 import { formatFixtureShortDate, formatSeasonLabel, getWindowStatus } from '@/src/utils/calendar';
 import { getTeamTheme } from '@/src/constants/teamColors';
+import { Screen } from '@/components/ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { Fixture } from '@/src/models/types';
 import { getTeamFixturesChronologically } from '@/src/core/fixtureLifecycle';
@@ -88,10 +88,10 @@ export default function CalendarScreen() {
     [competitions, currentWeek, myFixtures, seasonNumber, teams, userTeamId]
   );
 
-  if (!userTeamId) return <View style={styles.container} />;
+  if (!userTeamId) return <Screen scroll={false} />;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <Screen scroll={false}>
       <PageHeader
         title="Season Calendar"
         subtitle={formatSeasonLabel(seasonNumber)}
@@ -123,11 +123,10 @@ export default function CalendarScreen() {
           </React.Fragment>
         ))}
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
   scroll: { paddingVertical: 10 },
 });

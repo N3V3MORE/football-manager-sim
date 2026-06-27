@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,7 +9,6 @@ import {
   type DimensionValue,
 } from 'react-native';
 import { router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGameStore } from '@/src/store/gameStore';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { Player, Team } from '@/src/models/types';
@@ -21,6 +19,8 @@ import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
 import { DEFAULT_COUNTRY_ID, LEAGUE_COUNTRIES, getLeagueCountry } from '@/src/core/leaguePyramids';
 import { sortTeamsByTable } from '@/src/core/leagueUtils';
 import { PageHeader } from '@/components/ui/page-header';
+import { Screen, ModalSheet } from '@/components/ui';
+import { color, space } from '@/src/design/tokens';
 
 const MINI_SLOT_WIDTH = 46;
 const MINI_SLOT_HEIGHT = 54;
@@ -145,7 +145,7 @@ export default function LeagueTableScreen() {
               {isActiveDivision ? 'Your current division' : 'Scroll down through this country'}
             </Text>
           </View>
-          <TouchableOpacity style={styles.divisionJumpBtn} onPress={() => scrollToDivision(countryId, division)}>
+          <TouchableOpacity style={styles.divisionJumpBtn} onPress={() => scrollToDivision(countryId, division)} accessibilityRole="button" accessibilityLabel={`Jump to ${division}`}>
             <Text style={styles.divisionJumpText}>Go</Text>
           </TouchableOpacity>
         </View>
@@ -170,12 +170,18 @@ export default function LeagueTableScreen() {
             const theme = getTeamTheme(team.name);
 
             return (
-              <TouchableOpacity key={team.id} style={[styles.row, isUser && styles.userRow]} onPress={() => setSelectedTeam(team)}>
+              <TouchableOpacity
+                key={team.id}
+                style={[styles.row, isUser && styles.userRow]}
+                onPress={() => setSelectedTeam(team)}
+                accessibilityRole="button"
+                accessibilityLabel={`${index + 1}. ${team.name}, ${team.points} points${isUser ? ', your team' : ''}`}
+              >
                 <Text style={[styles.cell, styles.pos, isUser && styles.userText]}>{index + 1}</Text>
                 <View style={styles.nameCell}>
                   <View style={styles.kitStrip}>
                     <View style={[styles.kitBlock, { backgroundColor: theme.primary }]} />
-                    <View style={[styles.kitBlock, { backgroundColor: theme.secondary === '#FFFFFF' ? '#e2e8f0' : theme.secondary }]} />
+                    <View style={[styles.kitBlock, { backgroundColor: theme.secondary === '#FFFFFF' ? color.text.secondary : theme.secondary }]} />
                   </View>
                   <Text style={[styles.cell, styles.name, isUser && styles.userText]} numberOfLines={1}>{team.name}</Text>
                 </View>
@@ -214,7 +220,7 @@ export default function LeagueTableScreen() {
               <Text style={styles.countryLabel}>{country.label}</Text>
               <Text style={styles.countryHint}>{country.reelHint}</Text>
             </View>
-            <TouchableOpacity style={styles.countryTopBtn} onPress={() => scrollCountryToTop(countryId)}>
+            <TouchableOpacity style={styles.countryTopBtn} onPress={() => scrollCountryToTop(countryId)} accessibilityRole="button" accessibilityLabel={`Scroll ${country.label} to top`}>
               <Text style={styles.countryTopBtnText}>Top</Text>
             </TouchableOpacity>
           </View>
@@ -225,7 +231,7 @@ export default function LeagueTableScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <Screen scroll={false}>
       <PageHeader
         title="League Table"
         subtitle="Swipe left/right for countries. Scroll down for lower divisions."
@@ -238,6 +244,9 @@ export default function LeagueTableScreen() {
             key={country.id}
             style={[styles.reelChip, country.id === activeCountry.id && styles.reelChipActive]}
             onPress={() => scrollToCountry(country.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${country.label} leagues`}
+            accessibilityState={{ selected: country.id === activeCountry.id }}
           >
             <Text style={[styles.reelChipText, country.id === activeCountry.id && styles.reelChipTextActive]}>
               {country.label}
@@ -262,106 +271,92 @@ export default function LeagueTableScreen() {
         {LEAGUE_COUNTRIES.map(country => renderCountryPage(country.id))}
       </ScrollView>
 
-      <Modal
+      <ModalSheet
         visible={selectedTeam !== null}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setSelectedTeam(null)}
+        onClose={() => setSelectedTeam(null)}
+        title={selectedTeam?.name ?? ''}
+        subtitle={selectedTeam ? getTeamTheme(selectedTeam.name).stadium : undefined}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            {selectedTeam && (() => {
-              const theme = getTeamTheme(selectedTeam.name);
-              const lineup = getLastLineup(selectedTeam);
-              const subPlayers = sortPlayersByPositionGroup(
-                Object.values(players).filter(p => p.teamId === selectedTeam.id && !p.isStarting && p.isSub)
-              );
-              return (
-                <>
-                  <View style={styles.modalHeader}>
-                    <View style={styles.modalKitStrip}>
-                      <View style={[styles.modalKitBlock, { backgroundColor: theme.primary }]} />
-                      <View style={[styles.modalKitBlock, { backgroundColor: theme.secondary === '#FFFFFF' ? '#e2e8f0' : theme.secondary }]} />
-                    </View>
-                    <Text style={styles.modalTitle}>{selectedTeam.name}</Text>
-                    <Text style={styles.modalSubtitle}>{theme.stadium}</Text>
-                    <TouchableOpacity style={styles.modalClose} onPress={() => setSelectedTeam(null)}>
-                      <Text style={styles.modalCloseText}>X</Text>
-                    </TouchableOpacity>
-                  </View>
+        {selectedTeam && (() => {
+          const theme = getTeamTheme(selectedTeam.name);
+          const lineup = getLastLineup(selectedTeam);
+          const subPlayers = sortPlayersByPositionGroup(
+            Object.values(players).filter(p => p.teamId === selectedTeam.id && !p.isStarting && p.isSub)
+          );
+          return (
+            <>
+              <View style={styles.modalKitStrip}>
+                <View style={[styles.modalKitBlock, { backgroundColor: theme.primary }]} />
+                <View style={[styles.modalKitBlock, { backgroundColor: theme.secondary === '#FFFFFF' ? color.text.secondary : theme.secondary }]} />
+              </View>
 
-                  <ScrollView>
-                    {lineup ? (
-                      <>
-                        <Text style={styles.modalSectionTitle}>Last Starting XI</Text>
-                        {renderMiniPitch(selectedTeam, lineup)}
-                        {subPlayers.length > 0 && (
-                          <>
-                            <Text style={styles.modalSectionTitle}>Substitutes</Text>
-                            {subPlayers.map(p => (
-                              <View key={p.id} style={styles.modalPlayerRow}>
-                        <View style={[styles.modalPosPill, { backgroundColor: getPositionColor(p.position) }]}>
-                                  <Text style={styles.modalPosText}>{p.subPosition || p.position}</Text>
-                                </View>
-                                <Text style={[styles.modalPlayerName, { color: '#94a3b8' }]}>{p.name}</Text>
-                                <Text style={styles.modalPlayerRating}>{p.overallRating}</Text>
-                              </View>
-                            ))}
-                          </>
-                        )}
-                      </>
-                    ) : (
-                      <View style={styles.noLineupBox}>
-                        <Text style={styles.noLineupText}>No match played yet this season</Text>
-                      </View>
-                    )}
-                  </ScrollView>
+              {lineup ? (
+                <>
+                  <Text style={styles.modalSectionTitle}>Last Starting XI</Text>
+                  {renderMiniPitch(selectedTeam, lineup)}
+                  {subPlayers.length > 0 && (
+                    <>
+                      <Text style={styles.modalSectionTitle}>Substitutes</Text>
+                      {subPlayers.map(p => (
+                        <View key={p.id} style={styles.modalPlayerRow}>
+                          <View style={[styles.modalPosPill, { backgroundColor: getPositionColor(p.position) }]}>
+                            <Text style={styles.modalPosText}>{p.subPosition || p.position}</Text>
+                          </View>
+                          <Text style={[styles.modalPlayerName, { color: color.text.muted }]}>{p.name}</Text>
+                          <Text style={styles.modalPlayerRating}>{p.overallRating}</Text>
+                        </View>
+                      ))}
+                    </>
+                  )}
                 </>
-              );
-            })()}
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+              ) : (
+                <View style={styles.noLineupBox}>
+                  <Text style={styles.noLineupText}>No match played yet this season</Text>
+                </View>
+              )}
+            </>
+          );
+        })()}
+      </ModalSheet>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
   reelRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   reelChip: {
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 0,
-    backgroundColor: '#1e293b',
+    backgroundColor: color.bg.card,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
   },
-  reelChipActive: { backgroundColor: '#0f172a', borderColor: '#38bdf8' },
-  reelChipText: { color: '#94a3b8', fontSize: 11, fontWeight: '800' },
-  reelChipTextActive: { color: '#38bdf8' },
+  reelChipActive: { backgroundColor: color.bg.screen, borderColor: color.accent.primary },
+  reelChipText: { color: color.text.muted, fontSize: 11, fontWeight: '800' },
+  reelChipTextActive: { color: color.accent.primary },
   countryPager: { flex: 1 },
   countryPage: { flex: 1 },
   countryScrollContent: { paddingBottom: 18 },
   countryBanner: {
-    paddingHorizontal: 16,
+    paddingHorizontal: space.lg,
     paddingTop: 4,
     paddingBottom: 4,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  countryLabel: { color: '#f8fafc', fontSize: 15, fontWeight: '900' },
-  countryHint: { color: '#64748b', fontSize: 11, marginTop: 2 },
+  countryLabel: { color: color.text.primary, fontSize: 15, fontWeight: '900' },
+  countryHint: { color: color.text.faint, fontSize: 11, marginTop: 2 },
   countryTopBtn: {
-    backgroundColor: '#0f172a',
+    backgroundColor: color.bg.screen,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 0,
   },
-  countryTopBtnText: { color: '#cbd5e1', fontSize: 11, fontWeight: '900' },
+  countryTopBtnText: { color: color.text.secondary, fontSize: 11, fontWeight: '900' },
   divisionSection: { paddingHorizontal: 8, paddingTop: 2, paddingBottom: 20 },
   divisionSectionActive: {},
   divisionHeaderRow: {
@@ -371,46 +366,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  divisionTitle: { color: '#f8fafc', fontSize: 18, fontWeight: '900' },
-  divisionSubtitle: { color: '#64748b', fontSize: 11, marginTop: 2 },
+  divisionTitle: { color: color.text.primary, fontSize: 18, fontWeight: '900' },
+  divisionSubtitle: { color: color.text.faint, fontSize: 11, marginTop: 2 },
   divisionJumpBtn: {
-    backgroundColor: '#1e293b',
+    backgroundColor: color.bg.card,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 0,
   },
-  divisionJumpText: { color: '#cbd5e1', fontSize: 12, fontWeight: '800' },
+  divisionJumpText: { color: color.text.secondary, fontSize: 12, fontWeight: '800' },
   table: {
-    backgroundColor: '#1e293b',
+    backgroundColor: color.bg.card,
     margin: 8,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: color.border.default,
     overflow: 'hidden',
   },
   row: {
     flexDirection: 'row',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155',
+    borderBottomColor: color.border.default,
     alignItems: 'center',
     paddingHorizontal: 4,
   },
-  headerRow: { backgroundColor: '#0f172a' },
-  userRow: { backgroundColor: '#0ea5e920' },
-  cell: { fontSize: 12, color: '#cbd5e1' },
+  headerRow: { backgroundColor: color.bg.screen },
+  userRow: { backgroundColor: color.accent.dim },
+  cell: { fontSize: 12, color: color.text.secondary },
   nameCell: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  pos: { width: 22, textAlign: 'center', fontWeight: '900', color: '#94a3b8' },
+  pos: { width: 22, textAlign: 'center', fontWeight: '900', color: color.text.muted },
   name: { flex: 1, fontWeight: '700', fontSize: 11 },
   stat: { width: 29, textAlign: 'center', fontWeight: '600' },
-  pts: { width: 32, textAlign: 'center', fontWeight: '900', color: '#f8fafc' },
-  userText: { color: '#38bdf8', fontWeight: '900' },
+  pts: { width: 32, textAlign: 'center', fontWeight: '900', color: color.text.primary },
+  userText: { color: color.accent.primary, fontWeight: '900' },
   kitStrip: {
     flexDirection: 'row',
     width: 14,
@@ -420,24 +415,6 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
   kitBlock: { flex: 1 },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalCard: {
-    backgroundColor: '#1e293b',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-    paddingBottom: 40,
-  },
-  modalHeader: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#334155',
-    alignItems: 'center',
-  },
   modalKitStrip: {
     flexDirection: 'row',
     width: 40,
@@ -445,34 +422,24 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     overflow: 'hidden',
     marginBottom: 8,
+    alignSelf: 'center',
   },
   modalKitBlock: { flex: 1 },
-  modalTitle: { fontSize: 22, fontWeight: '900', color: '#f8fafc' },
-  modalSubtitle: { fontSize: 13, color: '#64748b', marginTop: 2 },
-  modalClose: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    padding: 8,
-  },
-  modalCloseText: { color: '#94a3b8', fontSize: 18, fontWeight: '900' },
   modalSectionTitle: {
     fontSize: 13,
     fontWeight: '900',
-    color: '#64748b',
+    color: color.text.faint,
     textTransform: 'uppercase',
     letterSpacing: 1,
-    paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 6,
   },
   modalPlayerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155',
+    borderBottomColor: color.border.default,
   },
   modalPosPill: {
     paddingHorizontal: 7,
@@ -483,11 +450,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalPosText: { color: '#fff', fontSize: 10, fontWeight: '900' },
-  modalPlayerName: { flex: 1, fontSize: 15, fontWeight: '700', color: '#f1f5f9' },
+  modalPlayerName: { flex: 1, fontSize: 15, fontWeight: '700', color: color.text.secondary },
   modalPlayerRating: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#38bdf8',
+    color: color.accent.primary,
     width: 32,
     textAlign: 'right',
   },
@@ -496,10 +463,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
     marginTop: 4,
     marginBottom: 8,
-    backgroundColor: '#14532d',
+    backgroundColor: color.success.bgStrong,
     borderRadius: 0,
     borderWidth: 2,
-    borderColor: '#166534',
+    borderColor: color.success.bgStrongBorder,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -550,8 +517,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   miniRating: {
-    backgroundColor: '#cbd5e1',
-    color: '#0f172a',
+    backgroundColor: color.text.secondary,
+    color: color.bg.screen,
     alignSelf: 'center',
     minWidth: 20,
     paddingHorizontal: 0,
@@ -563,5 +530,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   noLineupBox: { padding: 40, alignItems: 'center' },
-  noLineupText: { color: '#64748b', fontStyle: 'italic', textAlign: 'center' },
+  noLineupText: { color: color.text.faint, fontStyle: 'italic', textAlign: 'center' },
 });

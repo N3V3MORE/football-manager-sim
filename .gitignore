@@ -52,3 +52,5 @@ v1_simulation_audit.json
 .serena/
 .antigravity/
 .stitch/
+.opencode/
+opencode.json

@@ -1,15 +1,18 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScrollView, StyleSheet } from 'react-native';
 
 import { CurrentTeamCard } from '@/components/settings/current-team-card';
 import { AvailabilityWatchCard } from '@/components/settings/availability-watch-card';
 import { ContractWatchCard } from '@/components/settings/contract-watch-card';
 import { DevToolsCard } from '@/components/settings/dev-tools-card';
 import { TeamSelectionSheet } from '@/components/settings/team-selection-sheet';
+import { Screen } from '@/components/ui';
+import { TabHeader } from '@/components/ui/page-header';
 import { useGameStore } from '@/src/store/gameStore';
+import { useConfirmStore } from '@/src/store/confirmStore';
 import { sortTeamsByDivisionAndName } from '@/src/core/leagueUtils';
 import { isContractExpiringSoon, isPlayerInjured, isPlayerUnavailable } from '@/src/core/playerStatusUtils';
+import { space } from '@/src/design/tokens';
 
 
 export default function SettingsScreen() {
@@ -24,6 +27,7 @@ export default function SettingsScreen() {
   const renewPlayerContract = useGameStore(state => state.renewPlayerContract);
 
   const [showChangeTeam, setShowChangeTeam] = useState(false);
+  const showConfirm = useConfirmStore(s => s.showConfirm);
 
   const userTeam = userTeamId ? teams[userTeamId] : null;
   const sortedTeams = useMemo(
@@ -66,13 +70,10 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Settings</Text>
-          <Text style={styles.subtitle}>Club controls and squad status</Text>
-        </View>
+    <Screen scroll={false}>
+      <TabHeader title="Settings" subtitle="Club controls and squad status" />
 
+      <ScrollView contentContainerStyle={styles.scroll}>
         <CurrentTeamCard
           team={userTeam}
           injuredCount={injuredCount}
@@ -113,32 +114,23 @@ export default function SettingsScreen() {
               setShowChangeTeam(false);
               return;
             }
-            Alert.alert(
-              'Switch Teams',
-              `Are you sure you want to leave ${userTeam?.name ?? 'your current club'} and take control of ${targetTeam.name} (${targetTeam.division})?\n\nThis will be recorded as a career event and your manager identity will follow you.`,
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Switch',
-                  style: 'destructive',
-                  onPress: () => {
-                    changeTeam(teamId);
-                    setShowChangeTeam(false);
-                  },
-                },
-              ]
-            );
+            showConfirm({
+              title: 'Switch Teams',
+              message: `Are you sure you want to leave ${userTeam?.name ?? 'your current club'} and take control of ${targetTeam.name} (${targetTeam.division})?\n\nThis will be recorded as a career event and your manager identity will follow you.`,
+              confirmText: 'Switch',
+              destructive: true,
+              onConfirm: () => {
+                changeTeam(teamId);
+                setShowChangeTeam(false);
+              },
+            });
           }}
         />
       )}
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
-  scroll: { padding: 16, paddingBottom: 40 },
-  header: { marginBottom: 16 },
-  title: { fontSize: 26, fontWeight: '900', color: '#f8fafc' },
-  subtitle: { color: '#64748b', fontSize: 13, marginTop: 2, fontWeight: '600' },
+  scroll: { padding: space.lg, paddingBottom: 40 },
 });

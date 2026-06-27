@@ -298,6 +298,52 @@ export const applySeasonEndToCareer = (
   return { careerRecord: updatedRecord, reputationDelta };
 };
 
+export const getSackingImminentWeek = (team?: Team | null): number => {
+  const baseWeek = team?.boardProfile.patience === 'high'
+    ? 5
+    : team?.boardProfile.patience === 'low'
+      ? 3
+      : 4;
+  const replacementBuffer = team && team.manager.replacementRisk < 55 ? 1 : 0;
+  return baseWeek + replacementBuffer;
+};
+
+export const dismissUserManagerFromTeam = (
+  allTeams: Record<string, Team>,
+  competitions: Record<string, CompetitionState>,
+  teamId: string,
+  careerRecord: CareerRecord,
+  season: number
+): {
+  teams: Record<string, Team>;
+  careerRecord: CareerRecord;
+  summary: SeasonSummary;
+  reputationDelta: number;
+} | null => {
+  const team = allTeams[teamId];
+  if (!team) return null;
+  const userManager = careerRecord.userManager ?? buildUserManagerIdentity(team.manager);
+  const summary = buildSeasonSummary(season, team, allTeams, competitions);
+  summary.outcome = 'sacked';
+  const careerUpdate = applySeasonEndToCareer(
+    { ...careerRecord, userManager },
+    summary
+  );
+
+  return {
+    teams: {
+      ...allTeams,
+      [team.id]: {
+        ...team,
+        manager: buildVacatedClubManager(team, userManager),
+      },
+    },
+    careerRecord: careerUpdate.careerRecord,
+    summary,
+    reputationDelta: careerUpdate.reputationDelta,
+  };
+};
+
 export const evaluateSackingRisk = (
   boardApproval: number | Team,
   consecutiveLowApprovalWeeks: number
@@ -306,15 +352,14 @@ export const evaluateSackingRisk = (
   const approval = typeof boardApproval === 'number' ? boardApproval : boardApproval.boardApproval;
   const lowThreshold = getSackingApprovalThreshold(team);
   const warnWeek = team?.boardProfile.patience === 'low' ? 2 : 3;
-  const imminentWeek = team?.boardProfile.patience === 'high' ? 5 : team?.boardProfile.patience === 'low' ? 3 : 4;
-  const replacementBuffer = team && team.manager.replacementRisk < 55 ? 1 : 0;
+  const imminentWeek = getSackingImminentWeek(team);
 
   if (approval < lowThreshold) {
     const newWeeks = consecutiveLowApprovalWeeks + 1;
     return {
       newConsecutiveWeeks: newWeeks,
       shouldWarn: newWeeks === warnWeek,
-      isSackingImminent: newWeeks >= (imminentWeek + replacementBuffer),
+      isSackingImminent: newWeeks >= imminentWeek,
     };
   }
   return { newConsecutiveWeeks: 0, shouldWarn: false, isSackingImminent: false };
