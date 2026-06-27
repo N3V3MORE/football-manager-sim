@@ -46,6 +46,7 @@ app-example
 # local simulation outputs
 detailed_season_results.txt
 season_tracking_report.json
+v1_simulation_audit.json
 
 # local agent/indexing folders
 .serena/

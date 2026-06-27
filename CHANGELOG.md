@@ -6,6 +6,8 @@ What changed:
 - Added a five-season agent regression gate and dead-code check to the release path.
 - Tightened the release gate to run Expo Doctor and export before publishing.
 - Removed an unused match-substitution facade so the engine-facing module stays smaller.
+- Added a v1 simulation audit for goals, cards, attackers, teams, and possession outliers.
+- Tuned discipline so booked players usually avoid another cardable foul, reducing red-card outliers while preserving second-yellow dismissals.
 
 ## v4.3.0 - Stable freeze
 

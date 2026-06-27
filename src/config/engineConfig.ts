@@ -55,9 +55,10 @@ export const ENGINE_CONFIG = {
   STEAMROLL_BONUS_2: 1.25,
 
   // DISCIPLINE
-  MIDFIELD_FOUL_CHANCE: 0.69,
-  FOUL_CHANCE: 0.30,
-  RED_CARD_CHANCE: 0.015,
+  MIDFIELD_FOUL_CHANCE: 0.56,
+  FOUL_CHANCE: 0.22,
+  RED_CARD_CHANCE: 0.008,
+  BOOKED_PLAYER_FOUL_AVOIDANCE_CHANCE: 0.75,
   // SECOND_YELLOW_RED_CHANCE: Deprecated — second yellows are now always dismissals
   // (per real football rules). Kept for backward compat; no longer read by engine.
   SECOND_YELLOW_RED_CHANCE: 1.0,

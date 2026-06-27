@@ -933,6 +933,7 @@ const checkDisciplineRatesArePlausible = () => {
     const fixturesToPlay = Object.values(state.fixtures).slice(0, 900);
     let yellowCards = 0;
     let redCards = 0;
+    let secondYellowReds = 0;
 
     fixturesToPlay.forEach(fixture => {
       const beforeCards = Object.values(state.players).reduce(
@@ -943,6 +944,7 @@ const checkDisciplineRatesArePlausible = () => {
         { yellow: 0, red: 0 }
       );
       const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures);
+      secondYellowReds += result.events.filter(event => /second yellow/i.test(event)).length;
       state.players = result.players;
       state.teams = result.teams;
       state.fixtures[fixture.id] = result.fixture;
@@ -959,13 +961,18 @@ const checkDisciplineRatesArePlausible = () => {
 
     const yellowRate = yellowCards / fixturesToPlay.length;
     const redRate = redCards / fixturesToPlay.length;
+    const secondYellowRate = secondYellowReds / fixturesToPlay.length;
     assert(
       yellowRate >= 1.8 && yellowRate <= 5.5,
       `Expected plausible yellow-card rate, got ${yellowRate.toFixed(2)} per match`
     );
     assert(
-      redRate >= 0.06 && redRate <= 0.35,
+      redRate >= 0.04 && redRate <= 0.24,
       `Expected plausible red-card rate, got ${redRate.toFixed(2)} per match`
+    );
+    assert(
+      secondYellowRate <= 0.14,
+      `Expected second-yellow reds to be rare, got ${secondYellowRate.toFixed(2)} per match`
     );
   } finally {
     Math.random = originalRandom;

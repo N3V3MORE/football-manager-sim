@@ -158,6 +158,35 @@ const pickCommentary = (random: () => number, options: string[]) => (
   options[Math.floor(random() * options.length)] || options[0] || null
 );
 
+type QuickSimMatchStats = {
+  homePossessions: number;
+  awayPossessions: number;
+  totalPossessions: number;
+  homePossessionShare: number;
+};
+
+type QuickSimMatchResult = {
+  players: Record<string, Player>;
+  teams: Record<string, Team>;
+  fixture: Fixture;
+  events: string[];
+  matchStats: QuickSimMatchStats;
+};
+
+const buildQuickSimMatchStats = (
+  homePossessions: number,
+  awayPossessions: number
+): QuickSimMatchStats => {
+  const totalPossessions = homePossessions + awayPossessions;
+
+  return {
+    homePossessions,
+    awayPossessions,
+    totalPossessions,
+    homePossessionShare: totalPossessions > 0 ? homePossessions / totalPossessions : 0.5,
+  };
+};
+
 const buildNeutralPossessionEvent = (
   attacker: Team,
   defender: Team,
@@ -274,7 +303,8 @@ export const simulatePossession = (
   defenderGoals: number,
   attackerShape?: TeamShapeProfile,
   defenderShape?: TeamShapeProfile,
-  rng?: RandomGenerator
+  rng?: RandomGenerator,
+  bookedPlayerIds?: Set<string>
 ): { goal: boolean; scorer?: Player; assister?: Player; event: string | null; foul?: { player: Player; type: 'Y' | 'R' } } => {
   const random = resolveRandom(rng);
   if (attPlayers.length === 0 || defPlayers.length === 0) return { goal: false, event: null };
@@ -295,6 +325,13 @@ export const simulatePossession = (
 
   const aTac = attacker.tactics;
   const dTac = defender.tactics;
+  const pickFouler = (pool: Player[], weight: (player: Player) => number) => {
+    const unbookedPool = pool.filter(player => !bookedPlayerIds?.has(player.id));
+    const selectedPool = unbookedPool.length > 0 && random() < ENGINE_CONFIG.BOOKED_PLAYER_FOUL_AVOIDANCE_CHANCE
+      ? unbookedPool
+      : pool;
+    return weightedPick(selectedPool, weight, rng);
+  };
 
   // Mentality: attacking choices affect the attack, defensive choices affect the defender.
   if (aTac.mentality === 'Attacking') {
@@ -388,7 +425,7 @@ export const simulatePossession = (
         : 1;
     if (random() < clamp(ENGINE_CONFIG.MIDFIELD_FOUL_CHANCE * midfieldFoulMultiplier, 0, 0.75)) {
       const foulPool = defensiveWall.length > 0 ? defensiveWall : defPlayers;
-      const fouler = weightedPick(foulPool, p => (p.stats.defending || 50) + p.stats.physical * 0.25, rng);
+      const fouler = pickFouler(foulPool, p => (p.stats.defending || 50) + p.stats.physical * 0.25);
       const type = random() < ENGINE_CONFIG.RED_CARD_CHANCE ? 'R' : 'Y';
       return { goal: false, event: buildFoulEvent(fouler, type, random), foul: { player: fouler, type } };
     }
@@ -457,7 +494,9 @@ export const simulatePossession = (
   if (!runDuel(creationStat, defenderStat, ENGINE_CONFIG.DUEL_LUCK_ATTACK, rng)) {
     if (random() < ENGINE_CONFIG.FOUL_CHANCE) {
       const type = random() < ENGINE_CONFIG.RED_CARD_CHANCE ? 'R' : 'Y';
-      return { goal: false, event: buildFoulEvent(activeDefender, type, random), foul: { player: activeDefender, type } };
+      const foulPool = defenderPool.length > 0 ? defenderPool : [activeDefender];
+      const fouler = pickFouler(foulPool, p => (p.stats.defending || 50) + p.stats.pace * 0.15);
+      return { goal: false, event: buildFoulEvent(fouler, type, random), foul: { player: fouler, type } };
     }
     return { goal: false, event: buildFinalThirdStopEvent(creator, defender, activeDefender, random) };
   }
@@ -516,11 +555,12 @@ export const quickSimMatch = (
   fixtures: Record<string, Fixture>,
   userTeamId?: string | null,
   options?: { rng?: RandomGenerator }
-): { players: Record<string, Player>, teams: Record<string, Team>, fixture: Fixture, events: string[] } => {
+): QuickSimMatchResult => {
   const rng = options?.rng ?? createFixtureEventRandomGenerator(fixtureId, 0);
   const fixture = fixtures[fixtureId];
-  if (!fixture || fixture.isPlayed) return { players, teams, fixture, events: [] };
-  if (fixture.resolution === 'void') return { players, teams, fixture, events: [] };
+  const emptyMatchStats = buildQuickSimMatchStats(0, 0);
+  if (!fixture || fixture.isPlayed) return { players, teams, fixture, events: [], matchStats: emptyMatchStats };
+  if (fixture.resolution === 'void') return { players, teams, fixture, events: [], matchStats: emptyMatchStats };
 
   const updatedPlayers = { ...players };
   const updatedTeams = { ...teams };
@@ -553,6 +593,7 @@ export const quickSimMatch = (
       teams: finalized.teams,
       fixture: finalized.fixture,
       events: matchEvents,
+      matchStats: emptyMatchStats,
     };
   }
 
@@ -587,6 +628,8 @@ export const quickSimMatch = (
   const matchYellowCards = new Set<string>();
   const sentOffPlayers = new Set<string>();
   const sentOffMinutes: Record<string, number> = {};
+  let homePossessions = 0;
+  let awayPossessions = 0;
   const matchContributions: Record<string, PlayerMatchContribution> = {};
   let forcedWinnerTeamId: string | undefined;
   let forcedResolution: Fixture['resolution'] | undefined;
@@ -762,7 +805,13 @@ export const quickSimMatch = (
       if (!homeLiveValidation.ok && !awayLiveValidation.ok) {
         const voidFixture = buildVoidFixture(fixture);
         matchEvents.push(`Match voided: ${homeLiveValidation.reason || 'home XI legal'}; ${awayLiveValidation.reason || 'away XI legal'}.`);
-        return { players, teams, fixture: voidFixture, events: matchEvents };
+        return {
+          players,
+          teams,
+          fixture: voidFixture,
+          events: matchEvents,
+          matchStats: buildQuickSimMatchStats(homePossessions, awayPossessions),
+        };
       }
       const outcome = getAdministrativeFixtureOutcome(fixture, homeLiveValidation.ok, awayLiveValidation.ok);
       forcedResolution = outcome.resolution;
@@ -788,6 +837,8 @@ export const quickSimMatch = (
       awayShape,
       rng
     );
+    if (isHomeAttacking) homePossessions += 1;
+    else awayPossessions += 1;
     const attTeam = isHomeAttacking ? homeTeam : awayTeam;
     const defTeam = isHomeAttacking ? awayTeam : homeTeam;
     const attPlayers = isHomeAttacking ? scaledHome : scaledAway;
@@ -804,7 +855,8 @@ export const quickSimMatch = (
       isHomeAttacking ? aScore : hScore,
       attShape,
       defShape,
-      rng
+      rng,
+      matchYellowCards
     );
     if (poss.event) matchEvents.push(poss.event);
     if (poss.goal) {
@@ -934,6 +986,7 @@ export const quickSimMatch = (
     teams: finalizedTeams,
     fixture: updatedFixture,
     events: matchEvents,
+    matchStats: buildQuickSimMatchStats(homePossessions, awayPossessions),
   };
 };
 

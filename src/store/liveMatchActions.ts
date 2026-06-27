@@ -381,7 +381,8 @@ export const processLiveMatchMinuteState = (
       isHomeAttacking ? updatedFixture.awayScore! : updatedFixture.homeScore!,
       attShape,
       defShape,
-      activeRng
+      activeRng,
+      matchYellowCards
     );
     eventMsg = res.event;
 
