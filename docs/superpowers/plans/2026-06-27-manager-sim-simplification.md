@@ -14,6 +14,7 @@
 
 **Files:**
 - Modify: `src/core/matchEngine.ts`
+- Create: `src/core/matchFinalization.ts`
 - Test: `scripts/agent_game_check.ts`
 
 - [x] **Step 1: Replace the duplicated pre-match invalid-XI branch**
