@@ -154,12 +154,23 @@ const getNextKnockoutFieldSize = (entrantCount: number) => {
   return target;
 };
 
+const extractFixtureCounter = (fixtureId: string): number => {
+  const stripped = fixtureId.replace(/^F/, '');
+  const scopedMatch = stripped.match(/^\d+-(\d+)$/);
+  if (scopedMatch) return Number(scopedMatch[1]);
+  const legacyNum = Number(stripped);
+  return Number.isFinite(legacyNum) ? legacyNum : NaN;
+};
+
 const getNextFixtureCounter = (fixtures: Record<string, Fixture>) => (
   Object.keys(fixtures).reduce((max, fixtureId) => {
-    const numericId = Number(fixtureId.replace(/^F/, ''));
-    return Number.isFinite(numericId) ? Math.max(max, numericId + 1) : max;
+    const counter = extractFixtureCounter(fixtureId);
+    return Number.isFinite(counter) ? Math.max(max, counter + 1) : max;
   }, 1)
 );
+
+const buildFixtureId = (season: number, counter: number): string =>
+  season > 1 ? `F${season}-${counter}` : `F${counter}`;
 
 const getSeededTeamIds = (
   teamIds: string[],
@@ -182,6 +193,7 @@ const getSeededTeamIds = (
 const scheduleKnockoutRound = (
   competitionId: CompetitionId,
   competitionType: CompetitionType,
+  season: number,
   round: CompetitionRoundState,
   teamIds: string[],
   teams: Record<string, Team>,
@@ -219,7 +231,7 @@ const scheduleKnockoutRound = (
     if (random() < 0.5) {
       [homeTeamId, awayTeamId] = [awayTeamId, homeTeamId];
     }
-    const fixtureId = `F${fixtureCounter++}`;
+    const fixtureId = buildFixtureId(season, fixtureCounter++);
     fixtures[fixtureId] = {
       id: fixtureId,
       week: round.week,
@@ -298,6 +310,7 @@ const buildKnockoutCompetition = (
   const scheduledRound = scheduleKnockoutRound(
     competitionId,
     competitionType,
+    season,
     rounds[0],
     entrantTeamIds,
     teams,
@@ -393,6 +406,7 @@ export const buildSeasonCompetitionBundle = (
     const generated = buildRoundRobinFixtures(
       divisionTeamIds,
       division,
+      season,
       fixtureCounter,
       leagueDateOrdinals
     );
@@ -581,6 +595,7 @@ export const resolveCompetitionProgression = (
       const scheduledRound = scheduleKnockoutRound(
         updatedCompetition.id,
         updatedCompetition.type,
+        updatedCompetition.season,
         nextRound,
         advancingTeamIds,
         teams,

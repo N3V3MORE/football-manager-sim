@@ -207,9 +207,13 @@ const assertRoundRobinSchedule = (rounds: RoundRobinMatch[][], teamIds: string[]
   if (maxStreak > 3) throw new Error(`Home/away streak too long: ${maxStreak}.`);
 };
 
+const buildLeagueFixtureId = (season: number, counter: number): string =>
+  season > 1 ? `F${season}-${counter}` : `F${counter}`;
+
 export const buildRoundRobinFixtures = (
   teamIds: string[],
   division: LeagueDivision,
+  season: number,
   fixtureCounterStart = 1,
   dateOrdinals?: number[]
 ) => {
@@ -244,7 +248,7 @@ export const buildRoundRobinFixtures = (
   firstHalfRounds.forEach((roundFixtures, roundIndex) => {
     const dateOrdinal = dateOrdinals?.[roundIndex] ?? roundIndex * 7;
     roundFixtures.forEach(fixture => {
-      const fixtureId = `F${fixtureCounter++}`;
+      const fixtureId = buildLeagueFixtureId(season, fixtureCounter++);
       fixtures[fixtureId] = createLeagueFixture(fixtureId, dateOrdinal, division, fixture.home, fixture.away);
     });
   });
@@ -252,7 +256,7 @@ export const buildRoundRobinFixtures = (
   [...firstHalfRounds].reverse().forEach((roundFixtures, secondHalfIndex) => {
     const dateOrdinal = dateOrdinals?.[rounds + secondHalfIndex] ?? (rounds + secondHalfIndex) * 7;
     roundFixtures.forEach(fixture => {
-      const fixtureId = `F${fixtureCounter++}`;
+      const fixtureId = buildLeagueFixtureId(season, fixtureCounter++);
       fixtures[fixtureId] = createLeagueFixture(fixtureId, dateOrdinal, division, fixture.away, fixture.home);
     });
   });
