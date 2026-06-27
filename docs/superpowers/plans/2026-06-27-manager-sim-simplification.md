@@ -61,7 +61,7 @@ npm run -s check:agent
 
 Expected: all commands exit 0.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Stage only the files in this task and commit:
 
@@ -77,32 +77,37 @@ git commit -m "refactor: reuse administrative fixture finalization"
 - Modify: `src/core/matchSubstitutions.ts`
 - Test: `scripts/agent_game_check.ts`
 
-- [ ] **Step 1: Export the shared state helpers**
+- [x] **Step 1: Export the shared state helpers**
 
-In `src/core/matchSubstitutions.ts`, export the existing `SubstitutionState`, `createSubstitutionState`, and a new helper:
+In `src/core/matchSubstitutions.ts`, export the existing `SubstitutionState`, `createSubstitutionState`, and two state helpers:
 
 ```ts
+export const canUseSubstitutionWindow = (state: SubstitutionState) => (
+  state.substitutesUsed < state.maxSubstitutes && state.substitutionWindowsUsed < state.maxWindows
+);
+
 export const recordSubstitution = (state: SubstitutionState) => {
   state.substitutesUsed += 1;
   state.substitutionWindowsUsed += 1;
 };
 ```
 
-- [ ] **Step 2: Use the shared helpers in quick simulation**
+- [x] **Step 2: Use the shared helpers in quick simulation**
 
 In `src/core/matchEngine.ts`, import:
 
 ```ts
 import {
+  applySubstitutions,
+  canUseSubstitutionWindow,
   createSubstitutionState,
   recordSubstitution,
-  SubstitutionState,
 } from './matchSubstitutions';
 ```
 
-Then remove the local `MatchSubstitutionState`, `createSubstitutionState`, and `recordSubstitution` definitions.
+Then remove the local `MatchSubstitutionState`, `createSubstitutionState`, `canUseSubstitutionWindow`, and `recordSubstitution` definitions.
 
-- [ ] **Step 3: Validate the slice**
+- [x] **Step 3: Validate the slice**
 
 Run:
 
@@ -114,7 +119,7 @@ npm run -s check:agent
 
 Expected: all commands exit 0.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Stage only the files in this task and commit:
 

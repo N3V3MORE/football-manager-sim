@@ -3,7 +3,6 @@ import { ENGINE_CONFIG } from '../config/engineConfig';
 import type { TeamShapeProfile } from './matchTypes';
 import { getTeamMatchBench, getTeamMatchStarters } from './lineupEngine';
 import { buildFallbackShapeProfile, buildTeamShapeProfile } from './shapeEngine';
-import { applySubstitutions } from './substitutionEngine';
 import { applySharedPostMatchAccounting, PlayerMatchContribution } from './postMatchAccounting';
 import { rebuildFormationMap, removePlayerFromTeamSelections } from './formationMapUtils';
 import { applyMinuteCaps, buildStarterBenchMinuteMap } from './minuteMapUtils';
@@ -14,6 +13,12 @@ import { applyMatchResult } from './teamUtils';
 import { selectEmergencyGoalkeeperId, selectDesignatedGoalkeeperId, validateMatchdayXI } from './matchdayValidation';
 import { applyFixtureSuspensionService, buildVoidFixture, getAdministrativeFixtureOutcome } from './fixtureLifecycle';
 import { resolveAdministrativeFixture } from './matchFinalization';
+import {
+  applySubstitutions,
+  canUseSubstitutionWindow,
+  createSubstitutionState,
+  recordSubstitution,
+} from './matchSubstitutions';
 import {
   addPlayerStat,
   avgStat,
@@ -32,29 +37,6 @@ export { buildTeamShapeProfile } from './shapeEngine';
 export { getFormModifier, getMoraleModifier, runDuel } from './matchUtils';
 
 const LOW_INTENSITY_COMMENTARY_CHANCE = 0.04;
-
-type MatchSubstitutionState = {
-  substitutesUsed: number;
-  substitutionWindowsUsed: number;
-  maxSubstitutes: number;
-  maxWindows: number;
-};
-
-const createSubstitutionState = (): MatchSubstitutionState => ({
-  substitutesUsed: 0,
-  substitutionWindowsUsed: 0,
-  maxSubstitutes: 5,
-  maxWindows: 3,
-});
-
-const canUseSubstitutionWindow = (state: MatchSubstitutionState) => (
-  state.substitutesUsed < state.maxSubstitutes && state.substitutionWindowsUsed < state.maxWindows
-);
-
-const recordSubstitution = (state: MatchSubstitutionState) => {
-  state.substitutesUsed += 1;
-  state.substitutionWindowsUsed += 1;
-};
 
 const drainQuickMatchEnergy = (players: Player[], team: Team) => {
   const drainMultiplier =
