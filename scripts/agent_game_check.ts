@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { Fixture } from '../src/models/types';
-import { compareFixturesChronologically } from '../src/core/fixtureLifecycle';
+import { compareFixturesChronologically, getNextDueFixture } from '../src/core/fixtureLifecycle';
 import { getSeasonWeekLimit } from '../src/core/leagueUtils';
 import { installAgentGameHandler } from '../src/dev/agentGameHandler';
 import { useGameStore } from '../src/store/gameStore';
@@ -29,18 +29,23 @@ const record = (name: string, fn: () => void) => {
   }
 };
 
-const getUserFixtures = (excludedFixtureIds = new Set<string>()) => {
+const getNextDueUserFixture = (excludedFixtureIds = new Set<string>()) => {
   const current = state();
   const userTeamId = current.userTeamId;
   assert.ok(userTeamId, 'User team must be selected');
 
-  return Object.values(current.fixtures)
-    .filter(fixture => (
-      !fixture.isPlayed &&
-      !excludedFixtureIds.has(fixture.id) &&
-      (fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId)
-    ))
-    .sort(compareFixturesChronologically);
+  const fixture = getNextDueFixture(current.fixtures, userTeamId, current.currentWeek);
+  if (!fixture || excludedFixtureIds.has(fixture.id)) {
+    return Object.values(current.fixtures)
+      .filter(f => (
+        !f.isPlayed &&
+        !excludedFixtureIds.has(f.id) &&
+        f.week <= current.currentWeek &&
+        (f.homeTeamId === userTeamId || f.awayTeamId === userTeamId)
+      ))
+      .sort(compareFixturesChronologically)[0] || null;
+  }
+  return fixture;
 };
 
 const assertPlayedFixtureIsValid = (fixture: Fixture) => {
@@ -160,8 +165,8 @@ try {
   });
 
   record('live match path', () => {
-    const [fixture] = getUserFixtures();
-    assert.ok(fixture, 'Expected an unplayed user fixture for live match');
+    const fixture = getNextDueUserFixture();
+    assert.ok(fixture, 'Expected an unplayed due user fixture for live match');
     liveFixtureId = fixture.id;
 
     let eventCount = 0;
@@ -177,9 +182,15 @@ try {
     assert.ok(eventCount > 0, 'Live match should emit at least one event');
   });
 
+  record('advance week for quick sim', () => {
+    const beforeWeek = state().currentWeek;
+    state().advanceWeek();
+    assert.ok(state().currentWeek > beforeWeek, 'Week should advance');
+  });
+
   record('quick sim path', () => {
-    const [fixture] = getUserFixtures(new Set([liveFixtureId]));
-    assert.ok(fixture, 'Expected an unplayed user fixture for quick sim');
+    const fixture = getNextDueUserFixture(new Set([liveFixtureId]));
+    assert.ok(fixture, 'Expected an unplayed due user fixture for quick sim');
     quickFixtureId = fixture.id;
 
     state().playMatch(quickFixtureId);
