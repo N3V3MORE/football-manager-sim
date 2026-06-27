@@ -5,6 +5,7 @@ import { formatContractLength, isContractExpiringSoon, isPlayerUnavailable } fro
 import { buildSquadPlan } from '../core/squadPlanningEngine';
 import {
   CareerRecord,
+  CompetitionState,
   ContractDecision,
   Fixture,
   InboxAction,
@@ -20,10 +21,28 @@ import { getNextDueFixture } from '../core/fixtureLifecycle';
 
 export const MAX_INBOX_MESSAGES = 60;
 
+export const getInboxSeason = (
+  competitions: Record<string, CompetitionState>,
+  fixture?: Fixture
+): number => {
+  const fixtureSeason = fixture ? competitions[fixture.competitionId]?.season : undefined;
+  if (typeof fixtureSeason === 'number' && fixtureSeason > 0) return fixtureSeason;
+
+  return Object.values(competitions).reduce(
+    (current, competition) => (
+      typeof competition.season === 'number' && competition.season > current
+        ? competition.season
+        : current
+    ),
+    1
+  );
+};
+
 type MessageDraft = Omit<InboxMessage, 'id'>;
 
 type WeeklyAssistantInput = {
   currentWeek: number;
+  season?: number;
   userTeamId: string | null;
   teams: Record<string, Team>;
   players: Record<string, Player>;
@@ -33,6 +52,7 @@ type WeeklyAssistantInput = {
 
 type PostMatchReportInput = {
   currentWeek: number;
+  season?: number;
   userTeamId: string | null;
   fixture: Fixture;
   teams: Record<string, Team>;
@@ -62,7 +82,12 @@ const slugify = (value: string) => (
 
 const buildMessageId = (draft: MessageDraft) => {
   const entity = draft.fixtureId || draft.playerId || draft.teamId || `${draft.title}-${draft.body}`;
-  return `${draft.source}-${draft.category}-w${draft.week}-${slugify(entity)}`;
+  // Only include season prefix for season >= 2 to preserve backward compatibility
+  // with existing season-1 saves that have IDs without season.
+  const seasonPrefix = typeof draft.season === 'number' && draft.season > 1
+    ? `s${draft.season}-`
+    : '';
+  return `${draft.source}-${draft.category}-${seasonPrefix}w${draft.week}-${slugify(entity)}`;
 };
 
 const buildMessage = (draft: MessageDraft): InboxMessage => ({
@@ -348,11 +373,12 @@ export const pruneInboxMessagesForManagedTeam = (
   })
 );
 
-export const generateSystemInboxMessages = (week: number, news: string[]) => (
+export const generateSystemInboxMessages = (week: number, news: string[], season?: number) => (
   news
     .filter(item => getSystemMessageCategory(item) !== 'system_news')
     .map(item => buildMessage({
       week,
+      season,
       source: 'system',
       category: getSystemMessageCategory(item),
       title: getMessageTitleForNews(item),
@@ -456,6 +482,7 @@ const generateContractMessages = (
 
 export const generateAssistantWeekMessages = ({
   currentWeek,
+  season,
   userTeamId,
   teams,
   players,
@@ -493,6 +520,7 @@ export const generateAssistantWeekMessages = ({
     const energySeed = `${currentWeek}-${team.id}-${fixture.id}-energy-${lowEnergyStarters.map(player => player.id).join('-')}`;
     messages.push(buildMessage({
       week: currentWeek,
+      season,
       source: 'assistant',
       category: 'pre_match_energy',
       title: pickTemplate(energySeed, [
@@ -524,6 +552,7 @@ export const generateAssistantWeekMessages = ({
     const availabilitySeed = `${currentWeek}-${team.id}-${fixture.id}-availability-${warnings.join('|')}`;
     messages.push(buildMessage({
       week: currentWeek,
+      season,
       source: 'assistant',
       category: 'pre_match_availability',
       title: pickTemplate(availabilitySeed, [
@@ -572,6 +601,7 @@ export const generateAssistantWeekMessages = ({
         ]);
     messages.push(buildMessage({
       week: currentWeek,
+      season,
       source: 'assistant',
       category: 'lineup_suggestion',
       title: pickTemplate(lineupSeed, [
@@ -595,6 +625,7 @@ export const generateAssistantWeekMessages = ({
     const squadSeed = `${currentWeek}-${team.id}-${fixture.id}-squad-load-${tiredStarters.length}`;
     messages.push(buildMessage({
       week: currentWeek,
+      season,
       source: 'assistant',
       category: 'squad_warning',
       title: pickTemplate(squadSeed, [
@@ -645,6 +676,7 @@ export const generateAssistantWeekMessages = ({
       ]);
     messages.push(buildMessage({
       week: currentWeek,
+      season,
       source: 'assistant',
       category: 'transfer_advice',
       title: pickTemplate(marketSeed, [
@@ -663,6 +695,7 @@ export const generateAssistantWeekMessages = ({
 
 export const generatePostMatchReportMessage = ({
   currentWeek,
+  season,
   userTeamId,
   fixture,
   teams,
@@ -773,6 +806,7 @@ export const generatePostMatchReportMessage = ({
 
   return buildMessage({
     week: currentWeek,
+    season,
     source: 'assistant',
     category: 'post_match_report',
     title: `${pickTemplate(`${reportSeed}-title`, ['Post-match', 'Match review', 'Analyst report'])}: ${team.name} ${myGoals}-${theirGoals} ${opponent.name}${fixture.competitionType !== 'league' ? ` (${getCompetitionShortName(fixture.competitionId)})` : ''}`,

@@ -25,6 +25,7 @@ import {
   generatePostMatchReportMessage,
   generateSackWarningMessage,
   generateSystemInboxMessages,
+  getInboxSeason,
   mergeInboxMessages,
   pruneInboxMessagesForManagedTeam,
 } from './inboxHelpers';
@@ -68,9 +69,11 @@ const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TSt
     updatedTeams = teams;
     updatedFixtures = { ...updatedFixtures, [fixtureToPlay.id]: fixture };
     updatedLiveMatches = removeLiveMatchFixture(updatedLiveMatches, fixtureToPlay.id);
+    const fixtureSeason = getInboxSeason(updatedCompetitions, fixture);
 
     const postMatchReport = generatePostMatchReportMessage({
       currentWeek: state.currentWeek,
+      season: fixtureSeason,
       userTeamId: state.userTeamId,
       fixture,
       teams,
@@ -100,7 +103,11 @@ const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TSt
   if (competitionProgression.generatedNews.length > 0) {
     inboxMessages = mergeInboxMessages(
       inboxMessages,
-      generateSystemInboxMessages(state.currentWeek, competitionProgression.generatedNews)
+      generateSystemInboxMessages(
+        state.currentWeek,
+        competitionProgression.generatedNews,
+        getInboxSeason(competitionProgression.competitions)
+      )
     );
   }
 
@@ -253,6 +260,8 @@ const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
       state.news
     );
 
+    const nextInboxSeason = getInboxSeason(nextSeason.competitions);
+
     return {
       ...state,
       currentWeek: nextSeason.currentWeek,
@@ -265,7 +274,7 @@ const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
       liveMatches: {},
       inboxMessages: mergeInboxMessages(pruneInboxMessagesForManagedTeam(state.inboxMessages, null), [
         ...weekMessages,
-        ...generateSystemInboxMessages(nextSeason.currentWeek, nextSeason.generatedNews),
+        ...generateSystemInboxMessages(nextSeason.currentWeek, nextSeason.generatedNews, nextInboxSeason),
       ]),
     };
   }
@@ -316,9 +325,11 @@ const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
     state.news,
     skipReviewTeamIds
   );
+  const nextInboxSeason = getInboxSeason(nextSeason.competitions);
   const nextAssistantMessages = nextUserTeamId
     ? generateAssistantWeekMessages({
         currentWeek: nextSeason.currentWeek,
+        season: nextInboxSeason,
         userTeamId: nextUserTeamId,
         teams: nextSeason.teams,
         players: nextSeason.players,
@@ -343,7 +354,7 @@ const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
       [
         ...weekMessages,
         ...careerMessages,
-        ...generateSystemInboxMessages(nextSeason.currentWeek, nextSeason.generatedNews),
+        ...generateSystemInboxMessages(nextSeason.currentWeek, nextSeason.generatedNews, nextInboxSeason),
         ...nextAssistantMessages,
       ]
     ),
@@ -389,7 +400,8 @@ const generateTransferInboxMessages = (
   decisions: AITransferDecision[],
   userTeamId: string | null,
   teams: Record<string, Team>,
-  players: Record<string, Player>
+  players: Record<string, Player>,
+  season?: number
 ): InboxMessage[] => {
   if (!userTeamId) return [];
   const userDivision = teams[userTeamId]?.division;
@@ -410,10 +422,12 @@ const generateTransferInboxMessages = (
       const player = players[decision.playerId];
       if (!buyer || !player) return;
 
-      const id = `system-transfer_advice-w${decision.week || 0}-${decision.playerId}-${decision.teamId}`;
+      const seasonPrefix = typeof season === 'number' && season > 1 ? `s${season}-` : '';
+      const id = `system-transfer_advice-${seasonPrefix}w${decision.week || 0}-${decision.playerId}-${decision.teamId}`;
       messages.push({
         id,
         week: decision.week || 0,
+        season,
         source: 'system',
         category: 'transfer_advice',
         title: `${player.name} joins ${buyer.name}`,
@@ -499,12 +513,13 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
   nextState = sackingRisk.nextState;
 
   const weekMessages = [
-    ...generateSystemInboxMessages(initialWeek, progression.generatedNews),
+    ...generateSystemInboxMessages(initialWeek, progression.generatedNews, getInboxSeason(nextState.competitions)),
     ...generateTransferInboxMessages(
       transferState.decisions,
       nextState.userTeamId,
       nextState.teams,
-      nextState.players
+      nextState.players,
+      getInboxSeason(nextState.competitions)
     ),
     ...boardReview.boardMessages,
     ...sackingRisk.sackMessages,
@@ -515,6 +530,7 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
 
   const nextAssistantMessages = generateAssistantWeekMessages({
     currentWeek: nextState.currentWeek,
+    season: getInboxSeason(nextState.competitions),
     userTeamId: nextState.userTeamId,
     teams: nextState.teams,
     players: nextState.players,

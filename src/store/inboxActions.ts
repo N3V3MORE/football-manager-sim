@@ -4,6 +4,7 @@ import { renewPlayerContractState } from './contractActions';
 import { applyLineupSuggestionToTeam } from './lineupActions';
 import {
   generateAssistantWeekMessages,
+  getInboxSeason,
   mergeInboxMessages,
   pruneInboxMessagesForManagedTeam,
 } from './inboxHelpers';
@@ -113,6 +114,7 @@ export const applyInboxActionState = (
     );
     const nextAssistantMessages = generateAssistantWeekMessages({
       currentWeek: state.currentWeek,
+      season: getInboxSeason(state.competitions),
       userTeamId: teamId,
       teams: nextTeams,
       players: nextPlayers,

@@ -32,6 +32,7 @@ import {
   generatePostMatchReportMessage,
   generateSystemInboxMessages,
   generateTeamSwitchMessage,
+  getInboxSeason,
   mergeInboxMessages,
   pruneInboxMessagesForManagedTeam,
 } from './inboxHelpers';
@@ -124,12 +125,13 @@ export const useGameStore = create<GameStore>()(
           [
             ...generateAssistantWeekMessages({
               currentWeek: 1,
+              season: 1,
               userTeamId: actualTeamId,
               teams: data.teams,
               players,
               fixtures: data.fixtures,
             }),
-            ...generateSystemInboxMessages(1, initialNews),
+            ...generateSystemInboxMessages(1, initialNews, 1),
           ]
         );
 
@@ -200,6 +202,7 @@ export const useGameStore = create<GameStore>()(
           const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);
           const postMatchReport = generatePostMatchReportMessage({
             currentWeek: state.currentWeek,
+            season,
             userTeamId: state.userTeamId,
             fixture,
             teams,
@@ -220,7 +223,7 @@ export const useGameStore = create<GameStore>()(
               state.inboxMessages,
               [
                 ...(postMatchReport ? [postMatchReport] : []),
-                ...generateSystemInboxMessages(state.currentWeek, competitionProgression.generatedNews),
+                ...generateSystemInboxMessages(state.currentWeek, competitionProgression.generatedNews, season),
               ]
             ),
           };
@@ -331,6 +334,7 @@ export const useGameStore = create<GameStore>()(
 
           const nextAssistantMessages = generateAssistantWeekMessages({
             currentWeek: state.currentWeek,
+            season: getInboxSeason(state.competitions),
             userTeamId: teamId,
             teams: nextTeams,
             players: state.players,

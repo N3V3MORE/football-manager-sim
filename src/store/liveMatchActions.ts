@@ -31,6 +31,7 @@ import {
 import {
   generatePostMatchReportMessage,
   generateSystemInboxMessages,
+  getInboxSeason,
   mergeInboxMessages,
 } from './inboxHelpers';
 
@@ -710,6 +711,7 @@ export const finishLiveMatchState = (
   const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);
   const postMatchReport = generatePostMatchReportMessage({
     currentWeek: state.currentWeek,
+    season: getInboxSeason(state.competitions, updatedFixture),
     userTeamId: state.userTeamId,
     fixture: updatedFixture,
     teams: updatedTeams,
@@ -730,7 +732,11 @@ export const finishLiveMatchState = (
       state.inboxMessages,
       [
         ...(postMatchReport ? [postMatchReport] : []),
-        ...generateSystemInboxMessages(state.currentWeek, competitionProgression.generatedNews),
+        ...generateSystemInboxMessages(
+          state.currentWeek,
+          competitionProgression.generatedNews,
+          getInboxSeason(competitionProgression.competitions, updatedFixture)
+        ),
       ]
     ),
   };

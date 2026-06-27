@@ -308,6 +308,8 @@ export type InboxAction =
 export interface InboxMessage {
   id: string;
   week: number;
+  /** Season number (1-indexed). Optional for backward compatibility with older saves. */
+  season?: number;
   source: InboxMessageSource;
   category: InboxMessageCategory;
   title: string;
