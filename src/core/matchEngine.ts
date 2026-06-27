@@ -559,7 +559,8 @@ export const quickSimMatch = (
   const rng = options?.rng ?? createFixtureEventRandomGenerator(fixtureId, 0);
   const fixture = fixtures[fixtureId];
   const emptyMatchStats = buildQuickSimMatchStats(0, 0);
-  if (!fixture || fixture.isPlayed) return { players, teams, fixture, events: [], matchStats: emptyMatchStats };
+  if (!fixture) throw new RangeError(`Unknown fixture: ${fixtureId}`);
+  if (fixture.isPlayed) return { players, teams, fixture, events: [], matchStats: emptyMatchStats };
   if (fixture.resolution === 'void') return { players, teams, fixture, events: [], matchStats: emptyMatchStats };
 
   const updatedPlayers = { ...players };

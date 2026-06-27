@@ -168,6 +168,11 @@ const assertMatchResolutionInvariants = () => {
   const data = initGameData();
   const fixture = Object.values(data.fixtures).find(item => item.competitionType === 'league');
   assert.ok(fixture, 'Expected a league fixture for legal-XI regression');
+  assert.throws(
+    () => quickSimMatch('missing-fixture', data.players, data.teams, data.fixtures),
+    /Unknown fixture: missing-fixture/,
+    'Quick sim should reject unknown fixture IDs instead of returning an undefined fixture'
+  );
   const result = quickSimMatch(fixture!.id, data.players, data.teams, data.fixtures, null, { rng: createSeededRandomGenerator(20260622) });
   assert.equal(result.fixture.isPlayed, true, 'Quick sim should always resolve the fixture');
   if (result.fixture.resolution !== 'forfeit') {

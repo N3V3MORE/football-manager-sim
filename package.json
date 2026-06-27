@@ -23,10 +23,11 @@
     "check:season": "tsx -r ./scripts/mock-env.js scripts/agent_season_playthrough.ts",
     "check:season5": "tsx -r ./scripts/mock-env.js scripts/multi_season_regression.ts",
     "check:deadcode": "ts-prune -e",
+    "doctor:release": "node scripts/expo_doctor_gate.js",
     "test:ci": "tsx -r ./scripts/mock-env.js scripts/ci_regression.ts",
     "test:news": "tsx -r ./scripts/mock-env.js scripts/test_news_output.ts",
     "ci": "npm run -s typecheck && npm run -s lint && npm run -s test:ci && npm run -s test:regression && npm run -s check:save && npm run -s check:agent && npm run -s test:phase10",
-    "gate:release": "npm run -s ci && npm run -s check:season5 && npm run -s check:deadcode && npx expo-doctor && npx expo export"
+    "gate:release": "npm run -s ci && npm run -s check:season5 && npm run -s check:deadcode && npm run -s doctor:release && npx expo export"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -58,16 +59,42 @@
     "react-native-screens": "~4.16.0",
     "react-native-web": "~0.21.0",
     "react-native-worklets": "0.5.1",
-    "uuid": "^13.0.0",
+    "uuid": "13.0.2",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "expo-doctor": "1.19.7",
     "ts-prune": "0.10.3",
-    "tsx": "^4.21.0",
+    "tsx": "4.22.4",
     "typescript": "~5.9.2"
+  },
+  "overrides": {
+    "@babel/core": "7.29.7",
+    "@react-native/dev-middleware": {
+      "ws": "6.2.4"
+    },
+    "@xmldom/xmldom": "0.8.13",
+    "js-yaml": "4.3.0",
+    "minimatch@10.2.5": {
+      "brace-expansion": "5.0.6"
+    },
+    "metro": {
+      "ws": "7.5.11"
+    },
+    "postcss": "8.5.10",
+    "react-devtools-core": {
+      "shell-quote": "1.9.0",
+      "ws": "7.5.11"
+    },
+    "react-native": {
+      "ws": "6.2.4"
+    },
+    "xcode": {
+      "uuid": "11.1.1"
+    }
   },
   "private": true
 }
