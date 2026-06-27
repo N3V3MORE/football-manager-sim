@@ -8,6 +8,7 @@ What changed:
 - Removed an unused match-substitution facade so the engine-facing module stays smaller.
 - Added a v1 simulation audit for goals, cards, attackers, teams, and possession outliers.
 - Tuned discipline so booked players usually avoid another cardable foul, reducing red-card outliers while preserving second-yellow dismissals.
+- Aligned Expo SDK 54 package versions so Expo Doctor passes in the release gate.
 
 ## v4.3.0 - Stable freeze
 
