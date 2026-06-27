@@ -9,10 +9,9 @@ import { applyMinuteCaps, buildStarterBenchMinuteMap } from './minuteMapUtils';
 import { applyMatchInjuries } from './injuryEngine';
 import { isPlayerUnavailable } from './playerStatusUtils';
 import { createFixtureEventRandomGenerator, RandomGenerator, resolveRandom } from './random';
-import { applyMatchResult } from './teamUtils';
 import { selectEmergencyGoalkeeperId, selectDesignatedGoalkeeperId, validateMatchdayXI } from './matchdayValidation';
 import { applyFixtureSuspensionService, buildVoidFixture, getAdministrativeFixtureOutcome } from './fixtureLifecycle';
-import { resolveAdministrativeFixture } from './matchFinalization';
+import { applyFixtureTeamResults, resolveAdministrativeFixture } from './matchFinalization';
 import {
   applySubstitutions,
   canUseSubstitutionWindow,
@@ -919,15 +918,23 @@ export const quickSimMatch = (
   };
   const includeTableStats = forcedIncludeTableStats ?? fixture.competitionType === 'league';
 
-  const updateLog = (t: Team, gf: number, ga: number, matchStarters: Player[]) => ({
-    ...(resolution === 'void' ? t : applyMatchResult(t, gf, ga, includeTableStats)),
-    lastStartingXI: matchStarters.map(p => p.id),
-  });
+  const finalizedTeams = applyFixtureTeamResults(
+    updatedFixture,
+    hScore,
+    aScore,
+    resolution,
+    updatedTeams,
+    homeStarters.map(player => player.id),
+    awayStarters.map(player => player.id),
+    includeTableStats
+  );
 
-  updatedTeams[homeTeam.id] = updateLog(homeTeam, hScore, aScore, homeStarters);
-  updatedTeams[awayTeam.id] = updateLog(awayTeam, aScore, hScore, awayStarters);
-
-  return { players: applyFixtureSuspensionService(updatedPlayers, updatedFixture), teams: updatedTeams, fixture: updatedFixture, events: matchEvents };
+  return {
+    players: applyFixtureSuspensionService(updatedPlayers, updatedFixture),
+    teams: finalizedTeams,
+    fixture: updatedFixture,
+    events: matchEvents,
+  };
 };
 
 // Form and morale modifiers are applied at the match call site.

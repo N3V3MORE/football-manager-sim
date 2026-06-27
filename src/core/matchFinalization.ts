@@ -73,3 +73,31 @@ export const resolveAdministrativeFixture = (
     isVoid: false,
   };
 };
+
+export const applyFixtureTeamResults = (
+  fixture: Fixture,
+  homeScore: number,
+  awayScore: number,
+  resolution: Fixture['resolution'],
+  teams: Record<string, Team>,
+  homeStarterIds: string[],
+  awayStarterIds: string[],
+  includeTableStats: boolean
+): Record<string, Team> => {
+  if (resolution === 'void') return teams;
+
+  const homeTeam = teams[fixture.homeTeamId];
+  const awayTeam = teams[fixture.awayTeamId];
+
+  return {
+    ...teams,
+    [homeTeam.id]: {
+      ...(includeTableStats ? applyMatchResult(homeTeam, homeScore, awayScore, true) : homeTeam),
+      lastStartingXI: homeStarterIds,
+    },
+    [awayTeam.id]: {
+      ...(includeTableStats ? applyMatchResult(awayTeam, awayScore, homeScore, true) : awayTeam),
+      lastStartingXI: awayStarterIds,
+    },
+  };
+};

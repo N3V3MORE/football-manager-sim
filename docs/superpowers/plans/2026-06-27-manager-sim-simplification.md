@@ -128,3 +128,89 @@ Stage only the files in this task and commit:
 git add src/core/matchEngine.ts src/core/matchSubstitutions.ts
 git commit -m "refactor: share match substitution state helpers"
 ```
+
+### Task 3: Reuse Completed Fixture Team Result Application
+
+**Files:**
+- Modify: `src/core/matchEngine.ts`
+- Modify: `src/core/matchFinalization.ts`
+- Test: `scripts/agent_game_check.ts`
+
+- [x] **Step 1: Add a finalization helper for completed fixture team results**
+
+In `src/core/matchFinalization.ts`, add:
+
+```ts
+export const applyFixtureTeamResults = (
+  fixture: Fixture,
+  homeScore: number,
+  awayScore: number,
+  resolution: Fixture['resolution'],
+  teams: Record<string, Team>,
+  homeStarterIds: string[],
+  awayStarterIds: string[],
+  includeTableStats: boolean
+): Record<string, Team> => {
+  if (resolution === 'void') return teams;
+
+  const homeTeam = teams[fixture.homeTeamId];
+  const awayTeam = teams[fixture.awayTeamId];
+
+  return {
+    ...teams,
+    [homeTeam.id]: {
+      ...(includeTableStats ? applyMatchResult(homeTeam, homeScore, awayScore, true) : homeTeam),
+      lastStartingXI: homeStarterIds,
+    },
+    [awayTeam.id]: {
+      ...(includeTableStats ? applyMatchResult(awayTeam, awayScore, homeScore, true) : awayTeam),
+      lastStartingXI: awayStarterIds,
+    },
+  };
+};
+```
+
+- [x] **Step 2: Use the helper in quick simulation**
+
+In `src/core/matchEngine.ts`, import `applyFixtureTeamResults` from `./matchFinalization`, remove the local `updateLog` closure, and replace the two team assignments with:
+
+```ts
+const finalizedTeams = applyFixtureTeamResults(
+  updatedFixture,
+  hScore,
+  aScore,
+  resolution,
+  updatedTeams,
+  homeStarters.map(player => player.id),
+  awayStarters.map(player => player.id),
+  includeTableStats
+);
+
+return {
+  players: applyFixtureSuspensionService(updatedPlayers, updatedFixture),
+  teams: finalizedTeams,
+  fixture: updatedFixture,
+  events: matchEvents,
+};
+```
+
+- [x] **Step 3: Validate the slice**
+
+Run:
+
+```bash
+npm run -s typecheck
+npm run -s lint
+npm run -s check:agent
+```
+
+Expected: all commands exit 0.
+
+- [x] **Step 4: Commit**
+
+Stage only the files in this task and commit:
+
+```bash
+git add src/core/matchEngine.ts src/core/matchFinalization.ts docs/superpowers/plans/2026-06-27-manager-sim-simplification.md
+git commit -m "refactor: centralize fixture team results"
+```
