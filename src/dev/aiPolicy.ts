@@ -212,6 +212,7 @@ const rotateTiredPlayers = (game: AIPolicyGameState, team: Team, decisions: AIPo
   const bench = squad
     .filter(player => player.isSub && !isPlayerUnavailable(player))
     .sort((a, b) => playerSelectionScore(b) - playerSelectionScore(a));
+  const usedBenchIds = new Set<string>();
 
   squad
     .filter(player => player.isStarting && !isPlayerUnavailable(player) && player.energy < 55)
@@ -219,6 +220,7 @@ const rotateTiredPlayers = (game: AIPolicyGameState, team: Team, decisions: AIPo
     .slice(0, 3)
     .forEach(tiredPlayer => {
       const alternative = bench.find(candidate => (
+        !usedBenchIds.has(candidate.id) &&
         candidate.position === tiredPlayer.position &&
         candidate.energy > tiredPlayer.energy + 10 &&
         candidate.overallRating >= tiredPlayer.overallRating - 5
@@ -227,6 +229,7 @@ const rotateTiredPlayers = (game: AIPolicyGameState, team: Team, decisions: AIPo
       if (!alternative || !slotKey) return;
 
       game.swapPlayer(tiredPlayer.id, alternative.id, slotKey);
+      usedBenchIds.add(alternative.id);
       decisions.push({
         type: 'rotation',
         playerId: alternative.id,

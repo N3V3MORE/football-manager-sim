@@ -15,7 +15,7 @@ import { checkWeeklyProgressionAppliesRevenueBreakdown, checkWeeklyRevenueUsesDi
 import { checkPlayerRatingUtilsPreserveSharedCurves } from './playerRatingUtils';
 import { checkAppendFixtureResultToStatePreservesPostMatchPatch, checkQuickSimActionLivesWithFixtureResolution } from './fixtureResolution';
 import { checkInboxHelpersUseConcreteModules, checkManagedTeamObjectivesAreInlined, checkSelectedComponentsUseDesignTokens } from './storeStructure';
-import { checkAiAutoplayCommandProducesReport, checkAiAutoplayRunnerScriptsExist } from './aiAutoplay';
+import { checkAiAutoplayCommandProducesReport, checkAiAutoplayRotationDoesNotReuseBenchPlayer, checkAiAutoplayRunnerScriptsExist } from './aiAutoplay';
 
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
@@ -65,6 +65,8 @@ const runRegressionChecks = () => {
   console.log('[OK] AI autoplay runner scripts passed');
   checkAiAutoplayCommandProducesReport();
   console.log('[OK] AI autoplay command report passed');
+  checkAiAutoplayRotationDoesNotReuseBenchPlayer();
+  console.log('[OK] AI autoplay rotation reuse guard passed');
   checkManagerProfilesLoaded();
   console.log('[OK] Manager profile loading passed');
   checkDivisionBootstrap();
