@@ -11,6 +11,7 @@ import { initGameData } from '../utils/initGame';
 import {
   createDefaultCareerRecord,
 } from '../core/careerEngine';
+import { buildManagedTeamObjectives } from '../core/boardEngine';
 import {
   LiveMatchState,
   pruneInvalidLiveMatches,
@@ -41,7 +42,6 @@ import {
   unlistPlayerState,
   withdrawTransferNegotiationState,
 } from './transferActions';
-import { buildManagedTeamObjectives } from './managedTeamObjectives';
 import { DEFAULT_GAME_STATE, PERSIST_STORAGE_KEY, ensureReferentialIntegrity, safeStorage, sanitizePersistedState } from './persistence';
 import { createSeededRandomGenerator } from '../core/random';
 import { advanceWeekState, skipToEndOfSeasonState } from './weekLifecycle';

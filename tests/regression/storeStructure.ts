@@ -30,3 +30,19 @@ export const checkInboxHelpersUseConcreteModules = () => {
   assert(!existsSync(join(process.cwd(), 'src/store/inboxHelpers.ts')), 'inboxHelpers barrel should be deleted');
   assert(!existsSync(join(process.cwd(), 'src/store/inboxSystem.ts')), 'inboxSystem should be merged into inboxCore');
 };
+
+export const checkManagedTeamObjectivesAreInlined = () => {
+  const checkedFiles = [
+    'src/store/careerActions.ts',
+    'src/store/gameStore.ts',
+    'src/store/inboxActions.ts',
+    'src/store/persistence.ts',
+  ];
+
+  checkedFiles.forEach(filePath => {
+    const source = readSource(filePath);
+    assert(!source.includes('managedTeamObjectives'), `${filePath} should inline managed-team objective setup`);
+  });
+
+  assert(!existsSync(join(process.cwd(), 'src/store/managedTeamObjectives.ts')), 'managedTeamObjectives wrapper should be deleted');
+};

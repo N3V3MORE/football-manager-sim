@@ -1,11 +1,11 @@
 import { GameState } from '../models/types';
 import { moveUserManagerToTeam } from '../core/careerEngine';
+import { buildManagedTeamObjectives } from '../core/boardEngine';
 import { renewPlayerContractState } from './contractActions';
 import { applyLineupSuggestionToTeam } from './lineupActions';
 import { acceptTransferCounterState, withdrawTransferNegotiationState } from './transferActions';
 import { generateAssistantWeekMessages } from './inboxAssistant';
 import { getInboxSeason, mergeInboxMessages, pruneInboxMessagesForManagedTeam } from './inboxCore';
-import { buildManagedTeamObjectives } from './managedTeamObjectives';
 
 type InboxActionState = Pick<
   GameState,

@@ -1,9 +1,9 @@
 import {
   moveUserManagerToTeam,
 } from '../core/careerEngine';
+import { buildManagedTeamObjectives } from '../core/boardEngine';
 import { generateAssistantWeekMessages } from './inboxAssistant';
 import { generateTeamSwitchMessage, getInboxSeason, mergeInboxMessages, pruneInboxMessagesForManagedTeam } from './inboxCore';
-import { buildManagedTeamObjectives } from './managedTeamObjectives';
 import type { WeeklyLifecycleState } from './fixtureResolution';
 
 export const changeTeamState = (
