@@ -7,6 +7,12 @@ import { createYouthPotential } from './trainingEngine';
 const YOUTH_FIRST_NAMES = ['Alex', 'Ben', 'Callum', 'Dan', 'Ethan', 'Finn', 'George', 'Harry', 'Isaac', 'Jack'];
 const YOUTH_LAST_NAMES = ['Adams', 'Brown', 'Clark', 'Davies', 'Evans', 'Fisher', 'Green', 'Harris', 'Irvine', 'Jones'];
 const POSITIONS: Position[] = ['GK', 'DEF', 'MID', 'FWD'];
+const YOUTH_TRAITS_BY_POSITION: Record<Position, string[]> = {
+  GK: ['Cross Claimer', 'Far Reach', 'Footwork', 'Rush Out'],
+  DEF: ['Anticipate', 'Block', 'Bruiser', 'Intercept', 'Jockey', 'Slide Tackle', 'Aerial Fortress'],
+  MID: ['First Touch', 'Incisive Pass', 'Long Ball Pass', 'Pinged Pass', 'Press Proven', 'Technical', 'Tiki Taka'],
+  FWD: ['Acrobatic', 'Chip Shot', 'Finesse Shot', 'Low Driven Shot', 'Power Shot', 'Quick Step', 'Rapid'],
+};
 
 const clampRating = (value: number) => Math.max(1, Math.min(99, Math.round(value)));
 
@@ -40,6 +46,20 @@ const getNextIntakePosition = (counts: Record<Position, number>, team: Team, rng
     .sort((a, b) => b.missing - a.missing)[0];
   if (shortage) return shortage.position;
   return POSITIONS[Math.floor(rng() * POSITIONS.length)];
+};
+
+const pickYouthTraits = (position: Position, rng: () => number) => {
+  const pool = YOUTH_TRAITS_BY_POSITION[position];
+  const countRoll = rng();
+  const traitCount = countRoll < 0.45 ? 0 : countRoll < 0.85 ? 1 : 2;
+  const traits: string[] = [];
+
+  while (traits.length < traitCount && traits.length < pool.length) {
+    const trait = pool[Math.floor(rng() * pool.length)];
+    if (!traits.includes(trait)) traits.push(trait);
+  }
+
+  return traits;
 };
 
 export const generateYouthPlayer = (
@@ -135,6 +155,7 @@ export const generateYouthPlayer = (
     yellowCards: 0,
     redCards: 0,
     nationality: 'English',
+    playerTraits: pickYouthTraits(position, rng),
     stats,
   };
 };

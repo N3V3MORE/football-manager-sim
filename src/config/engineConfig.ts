@@ -95,6 +95,56 @@ export const ENGINE_CONFIG = {
   MARKET_VALUE_POWER: 4.0,
   MARKET_VALUE_DIVISOR: 800000,
 
+  // FINANCE
+  FINANCE: {
+    TV_WEEKLY: {
+      'Premier League': 2.5,
+      Championship: 0.8,
+      'League One': 0.3,
+      'League Two': 0.15,
+    },
+    SPONSOR_WEEKLY: {
+      S: 1.5,
+      A: 0.8,
+      B: 0.4,
+      C: 0.2,
+      D: 0.1,
+      E: 0.05,
+      F: 0.05,
+    },
+    MATCHDAY: {
+      'Premier League': 2.5,
+      Championship: 1.0,
+      'League One': 0.5,
+      'League Two': 0.3,
+    },
+    CUP_MATCHDAY: 0.75,
+    LEAGUE_PRIZE_WINNER: {
+      'Premier League': 40,
+      Championship: 8,
+      'League One': 4,
+      'League Two': 2,
+    },
+    LEAGUE_PRIZE_LAST: {
+      'Premier League': 8,
+      Championship: 2,
+      'League One': 1,
+      'League Two': 0.5,
+    },
+    CUP_PRIZE: {
+      winner: 10,
+      runner: 5,
+      semi: 2,
+      quarter: 1,
+    },
+    EUROPE_PRIZE: {
+      winner: 15,
+      runner: 8,
+      semi: 4,
+      quarter: 2,
+    },
+  },
+
   // TRANSFER MARKET HEURISTICS
   TRANSFER_LIST_MIN_MINUTES_SHARE: 0.3,
   TRANSFER_LIST_POOR_FORM_CHANCE: 0.45,

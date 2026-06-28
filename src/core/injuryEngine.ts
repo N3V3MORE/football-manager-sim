@@ -1,6 +1,7 @@
 import { Player } from '../models/types';
 import { RandomGenerator, resolveRandom } from './random';
 import { weightedPick } from './matchUtils';
+import { getTraitBonuses } from './traitEngine';
 
 type InjuryEvent = {
   playerId: string;
@@ -51,7 +52,8 @@ export const applyMatchInjuries = (
   // Weighted random selection: higher load = higher injury risk, but not deterministic.
   const injuredPlayer = weightedPick(candidates, p => {
     const load = (minuteMap[p.id] || 0) + Math.max(0, 65 - updatedPlayers[p.id].energy);
-    return Math.max(0.1, load);
+    const injuryRiskMultiplier = 1 + getTraitBonuses(p).injuryRiskModifier;
+    return Math.max(0.1, load * injuryRiskMultiplier);
   }, rng);
   const weeks = getInjuryLength(random());
   const injuryType = INJURY_TYPES[Math.floor(random() * INJURY_TYPES.length)];

@@ -7,6 +7,7 @@ import { computeMarketValue } from '../utils/calendar';
 import { isPlayerUnavailable } from './playerStatusUtils';
 import { FREE_AGENT_TEAM_ID, isPlayableClub } from './freeAgentPool';
 import { computeWeeklyTraining } from './trainingEngine';
+import { getWeeklyRevenueBreakdown } from './financeEngine';
 
 export { computeWeeklyTransfers } from './transferEngine';
 
@@ -221,10 +222,8 @@ export const computeWeeklyProgression = (
     const operatingBudget = team.operatingBudget !== undefined ? team.operatingBudget : team.budget;
     let newOperatingBudget = operatingBudget - wageCostM;
 
-    const homeFixtureRevenue = playedFixtures
-      .filter(fixture => fixture.homeTeamId === team.id)
-      .reduce((sum, fixture) => sum + (fixture.competitionType === 'league' ? 1.0 : 0.75), 0);
-    newOperatingBudget += homeFixtureRevenue;
+    const weeklyRevenue = getWeeklyRevenueBreakdown(team, playedFixtures);
+    newOperatingBudget += weeklyRevenue.total;
 
     // Transfer budget (team.budget) stays stable; only operating cash fluctuates weekly.
     updatedTeams[team.id] = {

@@ -1,5 +1,6 @@
 import { Player, StatKey, Team } from '../models/types';
 import { computeMarketValue } from '../utils/calendar';
+import { getTrainingTraitXpMultiplier } from './traitEngine';
 
 const statKeys: StatKey[] = ['pace', 'shooting', 'passing', 'dribbling', 'defending', 'physical'];
 
@@ -102,12 +103,15 @@ export const computeWeeklyTraining = (
 
   const baseXp = 8 + Math.floor(rng() * 8);
   const energyMultiplier = player.energy < 50 ? 0.7 : 1;
-  const moraleMultiplier = player.morale > 70 ? 1.1 : 1;
+  const activeFocus = options.focusOverride !== undefined ? options.focusOverride : player.trainingFocus;
+  const moraleMultiplier = player.morale < 40 ? 0.6 : (player.morale > 70 ? 1.1 : 1);
+  const traitMultiplier = getTrainingTraitXpMultiplier(player, activeFocus);
   const xpGain = Math.max(0, Math.round(
     baseXp *
     getAgeMultiplier(player.age) *
     energyMultiplier *
     moraleMultiplier *
+    traitMultiplier *
     (options.xpMultiplier ?? 1)
   ));
 

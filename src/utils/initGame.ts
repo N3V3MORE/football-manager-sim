@@ -7,6 +7,7 @@ import { buildManager, buildGenericManager, deriveInitialBoardApproval } from '.
 import { buildSeasonCompetitionBundle, getContinentalClubNames } from '../core/competitionEngine';
 import { buildBoardObjectives, buildBoardProfile } from '../core/boardEngine';
 import { RandomGenerator, resolveRandom } from '../core/random';
+import { normalizePlayerTraits } from '../core/traitEngine';
 
 const REAL_TEAMS = [
   { name: 'Arsenal',            class: 'A' },
@@ -73,6 +74,7 @@ type BasePlayerRow = {
   age: number;
   nationality: string;
   clubJerseyNumber?: number | null;
+  playerTraits?: string;
   stats: RawPlayerStats;
 };
 
@@ -81,7 +83,6 @@ type LeaguePlayerRow = BasePlayerRow & {
   leagueName: LeagueDivision;
   clubName: string;
   clubTeamId: number;
-  playerTraits?: string;
 };
 
 type LowerLeaguePlayerRow = LeaguePlayerRow;
@@ -157,6 +158,7 @@ const buildPlayerRecord = (
   includeLongName = false
 ): Player => {
   const mv = rp.marketValue && rp.marketValue > 0 ? rp.marketValue : computeMarketValue(rp.overallRating, rp.age);
+  const playerTraits = normalizePlayerTraits(rp.playerTraits);
   return {
     id: playerId,
     name: rp.name,
@@ -187,6 +189,7 @@ const buildPlayerRecord = (
     yellowCards: 0,
     redCards: 0,
     nationality: rp.nationality || 'Unknown',
+    ...(playerTraits.length > 0 ? { playerTraits } : {}),
     ...(rp.clubJerseyNumber !== undefined ? { clubJerseyNumber: rp.clubJerseyNumber ?? null } : {}),
     stats: {
       pace: rp.stats?.pace || 50,

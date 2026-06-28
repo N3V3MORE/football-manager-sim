@@ -1,12 +1,13 @@
 import { PenaltyShootout, Player, Team } from '../models/types';
 import { RandomGenerator, resolveRandom } from './random';
 import { clamp } from './matchUtils';
+import { getTraitBonuses } from './traitEngine';
 
 const getPenaltySkill = (player: Player) => (
-  player.stats.mentality_penalties ??
-  player.stats.penalties ??
-  player.stats.shooting ??
-  player.overallRating
+  (player.stats.mentality_penalties ??
+    player.stats.penalties ??
+    player.stats.shooting ??
+    player.overallRating) + getTraitBonuses(player).penaltyBonus
 );
 
 const getGoalkeeperPenaltySkill = (player?: Player) => {

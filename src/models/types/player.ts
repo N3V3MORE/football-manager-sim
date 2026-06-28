@@ -101,7 +101,7 @@ export interface Player {
   yellowCards: number;
   redCards: number;
   nationality: string;
-  playerTraits?: string;
+  playerTraits?: string[];
   clubJerseyNumber?: number | null;
   stats: PlayerStats;
 }

@@ -24,6 +24,7 @@ import { LiveMatchState, pruneInvalidLiveMatches } from './liveMatchHelpers';
 import { buildManagedTeamObjectives } from './managedTeamObjectives';
 import { createFreeAgentTeam, FREE_AGENT_TEAM_ID } from '../core/freeAgentPool';
 import { sanitizePlayerRolesForTeam } from '../core/playerRoleEngine';
+import { normalizePlayerTraits } from '../core/traitEngine';
 
 export type PersistedStoreState = Partial<GameState & {
   liveMatches: Record<string, LiveMatchState>;
@@ -375,6 +376,7 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
                 .map(([key, value]) => [key, clampInt(value, 0, 99, 0)])
             )
           : undefined;
+        const playerTraits = normalizePlayerTraits((typedPlayer as { playerTraits?: unknown }).playerTraits);
         return [
           playerId,
           {
@@ -392,6 +394,7 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
             trainingXp: clampInt(typedPlayer.trainingXp, 0, 99, 0),
             trainingStatProgress: clampInt(typedPlayer.trainingStatProgress, 0, 2, 0),
             trainingStatGains,
+            ...(playerTraits.length > 0 ? { playerTraits } : { playerTraits: undefined }),
             morale: clampInt(typedPlayer.morale, 0, 100, 50),
             energy: clampInt(typedPlayer.energy, 0, 100, 100),
             injuryWeeks: clampInt(typedPlayer.injuryWeeks, 0, 52, 0),

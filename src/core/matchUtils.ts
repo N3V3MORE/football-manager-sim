@@ -2,6 +2,7 @@ import { ENGINE_CONFIG } from '../config/engineConfig';
 import { Player } from '../models/types';
 import { PlayerCounterStat, RoleTag } from './matchTypes';
 import { RandomGenerator, resolveRandom } from './random';
+import { getTraitBonuses } from './traitEngine';
 
 export const runDuel = (
   att: number,
@@ -148,8 +149,10 @@ export const scaleLineupForMatch = (
     const individualMoraleMultiplier = 1 + (((player.morale || 50) - 50) / 50) * 0.04;
     const energy = clamp(player.energy ?? 100, 0, 100);
     const fatigueRatio = Math.max(0, 70 - energy) / 70;
-    const technicalConditionMultiplier = 1 - Math.pow(fatigueRatio, 1.7) * 0.16;
-    const physicalConditionMultiplier = 1 - Math.pow(fatigueRatio, 1.55) * 0.24;
+    const traitFatigueReduction = getTraitBonuses(player).fatigueReduction;
+    const adjustedFatigueRatio = fatigueRatio * (1 - traitFatigueReduction);
+    const technicalConditionMultiplier = 1 - Math.pow(adjustedFatigueRatio, 1.7) * 0.16;
+    const physicalConditionMultiplier = 1 - Math.pow(adjustedFatigueRatio, 1.55) * 0.24;
     const baseMultiplier = formMultiplier * teamMoraleMultiplier * individualMoraleMultiplier * homeAdvantage * clubMultiplier;
 
     return {

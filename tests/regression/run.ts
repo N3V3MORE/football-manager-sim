@@ -10,6 +10,8 @@ import { checkAcceptCounterMovesPlayerAndMarksNegotiationAccepted, checkActiveNe
 import { checkFreezeRecoveryControlsAreVisible, checkStaleFormationMapRecoveryModel, checkFreeAgentSaveReloadEquivalence, checkValidationCatchesPastUnplayedFixturesAndNonFiniteFinances } from './persistence';
 import { checkWeeklyTrainingFocusRaisesFocusedStat, checkTrainingRespectsPotentialCap, checkSeasonEndProgressionRespectsPotentialCap, checkYouthIntakeAssignsHiddenPotential } from './training';
 import { checkPlayerRoleCompatibilityMatrix, checkPlayerRoleEnergyDrainModifiers, checkRolePickerShowsRoleEffects, checkSlotKeyedPlayerRoleLookup, checkPlayerRolesAdjustShapeProfile, checkMatchRuntimeUsesPlayerRoles } from './roles';
+import { checkRelentlessTraitReducesFatiguePenalty, checkSeededPlayersNormalizeTraits, checkTraitBonusesExposeMechanicalEffects, checkTraitRegistryCoversSeededTraits, checkTraitTrainingFocusAddsXp } from './traits';
+import { checkWeeklyProgressionAppliesRevenueBreakdown, checkWeeklyRevenueUsesDivisionAndSponsorRates } from './finance';
 
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
@@ -165,6 +167,20 @@ const runRegressionChecks = () => {
   console.log('[OK] Season-end potential cap passed');
   checkYouthIntakeAssignsHiddenPotential();
   console.log('[OK] Youth hidden potential assignment passed');
+  checkSeededPlayersNormalizeTraits();
+  console.log('[OK] Seeded trait normalization passed');
+  checkTraitRegistryCoversSeededTraits();
+  console.log('[OK] Trait registry seed coverage passed');
+  checkTraitBonusesExposeMechanicalEffects();
+  console.log('[OK] Trait mechanical effects passed');
+  checkTraitTrainingFocusAddsXp();
+  console.log('[OK] Trait training XP integration passed');
+  checkRelentlessTraitReducesFatiguePenalty();
+  console.log('[OK] Trait fatigue integration passed');
+  checkWeeklyRevenueUsesDivisionAndSponsorRates();
+  console.log('[OK] Weekly revenue breakdown passed');
+  checkWeeklyProgressionAppliesRevenueBreakdown();
+  console.log('[OK] Weekly finance progression passed');
   checkContractDeparturesPreferViableDestinations();
   console.log('[OK] Contract departure destination quality passed');
   checkFreeAgentSaveReloadEquivalence();
