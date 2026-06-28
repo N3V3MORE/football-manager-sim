@@ -1,5 +1,4 @@
 import { GameState, InboxMessage, Player, Team, TransferNegotiation } from '../models/types';
-import { computeWeeklyTransfers } from '../core/progressionEngine';
 import { StoreActionResult } from './contractActions';
 import { isTransferWindowOpen } from '../utils/calendar';
 import { isWageOfferAccepted } from '../core/transferFinance';
@@ -792,20 +791,4 @@ export const unlistPlayerState = (
   if (!player || player.teamId !== state.userTeamId) return state;
   const players = updateTransferListingState(state.players, playerId, false, 0);
   return players ? { players } : state;
-};
-
-export const processWeeklyTransfersState = (state: TransferActionState): TransferActionPatch => {
-  const negotiatedState = resolveWeeklyNegotiationsState(state);
-  const transferState = computeWeeklyTransfers(
-    negotiatedState.players,
-    negotiatedState.teams,
-    negotiatedState.userTeamId,
-    undefined,
-    negotiatedState.currentWeek
-  );
-
-  return {
-    ...transferState,
-    pendingNegotiations: negotiatedState.pendingNegotiations,
-  };
 };

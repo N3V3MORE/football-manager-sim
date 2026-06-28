@@ -1,4 +1,19 @@
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { Team, applyInboxActionState, applySackingRisk, assert, buildBoardObjectives, buildBoardProfile, computeWeeklyProgression, createSeededRandom, hasReachedCompetitionRound, initGameData, readSource, useGameStore } from './shared';
+
+export const checkDeadStoreActionsAreRemoved = () => {
+  const gameStoreSource = readSource('src/store/gameStore.ts');
+  const transferActionsSource = readSource('src/store/transferActions.ts');
+  const agentCheckSource = readSource('scripts/agent_game_check.ts');
+
+  assert(!gameStoreSource.includes('checkBoardObjectives'), 'Public checkBoardObjectives store action should be removed');
+  assert(!gameStoreSource.includes('processWeeklyTransfers'), 'Public processWeeklyTransfers store action should be removed');
+  assert(!transferActionsSource.includes('processWeeklyTransfersState'), 'Dead processWeeklyTransfersState wrapper should be removed');
+  assert(!agentCheckSource.includes('checkBoardObjectives'), 'Agent smoke check should not call checkBoardObjectives');
+  assert(!agentCheckSource.includes('processWeeklyTransfers'), 'Agent smoke check should not call processWeeklyTransfers');
+  assert(!existsSync(join(process.cwd(), 'src/store/boardActions.ts')), 'boardActions wrapper file should be deleted');
+};
 
 export const checkUserTeamProgressionDoesNotAdaptFormation = () => {
   const data = initGameData();

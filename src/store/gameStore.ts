@@ -39,7 +39,6 @@ import {
   approachPlayerState,
   buyPlayerState,
   listPlayerForSaleState,
-  processWeeklyTransfersState,
   signFreeAgentState,
   submitBidState,
   unlistPlayerState,
@@ -51,7 +50,6 @@ import { createSeededRandomGenerator } from '../core/random';
 import { advanceWeekState, skipToEndOfSeasonState } from './weekLifecycle';
 import { finishLiveMatchState, makeLiveSubstitutionsState, processLiveMatchMinuteState, setLiveMatchFormationState } from './liveMatchActions';
 import { playMatchState } from './fixtureResolution';
-import { checkBoardObjectivesState } from './boardActions';
 import { changeTeamState } from './careerActions';
 
 interface GameStore extends GameState {
@@ -84,9 +82,6 @@ interface GameStore extends GameState {
   signFreeAgent: (playerId: string, wageOffered: number) => { success: boolean; message: string };
   listPlayerForSale: (playerId: string, askingPrice: number) => void;
   unlistPlayer: (playerId: string) => void;
-  processWeeklyTransfers: () => void;
-  // Board System
-  checkBoardObjectives: () => void;
   // Live Match Engine
   processMatchMinute: (fixtureId: string, minute: number) => { event: string | null };
   finishLiveMatch: (fixtureId: string) => void;
@@ -381,18 +376,6 @@ export const useGameStore = create<GameStore>()(
 
       unlistPlayer: (playerId: string) => {
         set(state => unlistPlayerState(state, playerId));
-      },
-
-      processWeeklyTransfers: () => {
-        set(state => {
-          if (state.transfersAppliedWeek === state.currentWeek) return state;
-          const result = processWeeklyTransfersState(state);
-          return { ...result, transfersAppliedWeek: state.currentWeek };
-        });
-      },
-
-      checkBoardObjectives: () => {
-         set(state => checkBoardObjectivesState(state));
       },
     }),
     {

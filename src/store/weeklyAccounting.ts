@@ -53,7 +53,6 @@ export const applyBoardReview = <TState extends WeeklyLifecycleState>(state: TSt
 
   // Idempotency guard: skip if a review was already applied for the target
   // week (reviewWeek + 1 equals the new currentWeek after weekly progression).
-  // Mirrors checkBoardObjectives guard in gameStore.ts.
   if (state.boardReviewAppliedWeek === reviewWeek + 1) {
     return { nextState: state, boardMessages: [] as InboxMessage[] };
   }
