@@ -13,6 +13,7 @@ import { checkPlayerRoleCompatibilityMatrix, checkPlayerRoleEnergyDrainModifiers
 import { checkRelentlessTraitReducesFatiguePenalty, checkSeededPlayersNormalizeTraits, checkTraitBonusesExposeMechanicalEffects, checkTraitRegistryCoversSeededTraits, checkTraitTrainingFocusAddsXp } from './traits';
 import { checkWeeklyProgressionAppliesRevenueBreakdown, checkWeeklyRevenueUsesDivisionAndSponsorRates } from './finance';
 import { checkPlayerRatingUtilsPreserveSharedCurves } from './playerRatingUtils';
+import { checkAppendFixtureResultToStatePreservesPostMatchPatch } from './fixtureResolution';
 
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
@@ -85,6 +86,8 @@ const runRegressionChecks = () => {
   console.log('[OK] Discipline rate plausibility passed');
   checkQuickSimMatchSummaryIncludesStatsAndRatings();
   console.log('[OK] Quick-sim match summary checks passed');
+  checkAppendFixtureResultToStatePreservesPostMatchPatch();
+  console.log('[OK] Shared fixture result append helper passed');
   checkPenaltyShootoutUsesIndividualKicks();
   console.log('[OK] Individual penalty shootout checks passed');
   checkQuickSimKnockoutUsesExtraTimeBeforePenalties();

@@ -1,4 +1,4 @@
-import { GameState } from '../models/types';
+import { Fixture, GameState, Player, Team } from '../models/types';
 import { resolveCompetitionProgression } from '../core/competitionEngine';
 import { quickSimMatch } from '../core/matchEngine';
 import { compareFixturesChronologically } from '../core/fixtureLifecycle';
@@ -13,6 +13,58 @@ import {
 
 export type WeeklyLifecycleState = GameState & {
   liveMatches: Record<string, LiveMatchState>;
+};
+
+type CompetitionProgressionResult = ReturnType<typeof resolveCompetitionProgression>;
+
+type AppendFixtureResultInput = {
+  fixture: Fixture;
+  players: Record<string, Player>;
+  teams: Record<string, Team>;
+  previousPlayers: Record<string, Player>;
+  competitionResult?: CompetitionProgressionResult;
+};
+
+export const appendFixtureResultToState = (
+  state: WeeklyLifecycleState,
+  {
+    fixture,
+    players,
+    teams,
+    previousPlayers,
+    competitionResult,
+  }: AppendFixtureResultInput
+): Partial<WeeklyLifecycleState> => {
+  const generatedNews = competitionResult?.generatedNews ?? [];
+  const competitions = competitionResult?.competitions ?? state.competitions;
+  const inboxSeason = getInboxSeason(competitions, fixture);
+  const postMatchReport = generatePostMatchReportMessage({
+    currentWeek: state.currentWeek,
+    season: inboxSeason,
+    userTeamId: state.userTeamId,
+    fixture,
+    teams,
+    players,
+    previousPlayers,
+  });
+  const inboxUpdates = [
+    ...(postMatchReport ? [postMatchReport] : []),
+    ...generateSystemInboxMessages(state.currentWeek, generatedNews, inboxSeason),
+  ];
+
+  return {
+    players,
+    teams,
+    fixtures: competitionResult?.fixtures ?? { ...state.fixtures, [fixture.id]: fixture },
+    competitions,
+    news: generatedNews.length > 0
+      ? [...generatedNews, ...state.news].slice(0, 20)
+      : state.news,
+    liveMatches: removeLiveMatchFixture(state.liveMatches || {}, fixture.id),
+    inboxMessages: inboxUpdates.length > 0
+      ? mergeInboxMessages(state.inboxMessages, inboxUpdates)
+      : state.inboxMessages,
+  };
 };
 
 export const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TState): TState => {
@@ -46,24 +98,25 @@ export const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(sta
       state.userTeamId,
       { rng }
     );
-    updatedPlayers = players;
-    updatedTeams = teams;
-    updatedFixtures = { ...updatedFixtures, [fixtureToPlay.id]: fixture };
-    updatedLiveMatches = removeLiveMatchFixture(updatedLiveMatches, fixtureToPlay.id);
-    const fixtureSeason = getInboxSeason(updatedCompetitions, fixture);
-
-    const postMatchReport = generatePostMatchReportMessage({
-      currentWeek: state.currentWeek,
-      season: fixtureSeason,
-      userTeamId: state.userTeamId,
+    const appendPatch = appendFixtureResultToState({
+      ...state,
+      players: updatedPlayers,
+      teams: updatedTeams,
+      fixtures: updatedFixtures,
+      competitions: updatedCompetitions,
+      liveMatches: updatedLiveMatches,
+      inboxMessages,
+    }, {
       fixture,
       teams,
       players,
       previousPlayers,
     });
-    if (postMatchReport) {
-      inboxMessages = mergeInboxMessages(inboxMessages, [postMatchReport]);
-    }
+    updatedPlayers = appendPatch.players || updatedPlayers;
+    updatedTeams = appendPatch.teams || updatedTeams;
+    updatedFixtures = appendPatch.fixtures || updatedFixtures;
+    updatedLiveMatches = appendPatch.liveMatches || updatedLiveMatches;
+    inboxMessages = appendPatch.inboxMessages || inboxMessages;
   });
 
   const competitionProgression = resolveCompetitionProgression(

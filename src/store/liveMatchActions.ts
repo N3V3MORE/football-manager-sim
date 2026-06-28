@@ -32,12 +32,7 @@ import {
   removeLiveMatchFixture,
   updateTeamStats,
 } from './liveMatchHelpers';
-import {
-  generatePostMatchReportMessage,
-  generateSystemInboxMessages,
-  getInboxSeason,
-  mergeInboxMessages,
-} from './inboxHelpers';
+import { appendFixtureResultToState } from './fixtureResolution';
 
 type LiveMatchActionState = GameState & {
   liveMatches: Record<string, LiveMatchState>;
@@ -1096,36 +1091,12 @@ export const finishLiveMatchState = (
   const suspensionServedPlayers = applyFixtureSuspensionService(updatedPlayers, fixtureWithSummary);
   const nextFixtures = { ...state.fixtures, [fixtureId]: fixtureWithSummary };
   const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, updatedTeams);
-  const liveMatches = removeLiveMatchFixture(state.liveMatches || {}, fixtureId);
-  const postMatchReport = generatePostMatchReportMessage({
-    currentWeek: state.currentWeek,
-    season: getInboxSeason(state.competitions, fixtureWithSummary),
-    userTeamId: state.userTeamId,
-    fixture: fixtureWithSummary,
-    teams: updatedTeams,
-    players: suspensionServedPlayers,
-    previousPlayers,
-  });
 
-  return {
-    fixtures: competitionProgression.fixtures,
-    competitions: competitionProgression.competitions,
-    teams: updatedTeams,
+  return appendFixtureResultToState(state, {
+    fixture: fixtureWithSummary,
     players: suspensionServedPlayers,
-    news: competitionProgression.generatedNews.length > 0
-      ? [...competitionProgression.generatedNews, ...state.news].slice(0, 20)
-      : state.news,
-    liveMatches,
-    inboxMessages: mergeInboxMessages(
-      state.inboxMessages,
-      [
-        ...(postMatchReport ? [postMatchReport] : []),
-        ...generateSystemInboxMessages(
-          state.currentWeek,
-          competitionProgression.generatedNews,
-          getInboxSeason(competitionProgression.competitions, fixtureWithSummary)
-        ),
-      ]
-    ),
-  };
+    teams: updatedTeams,
+    previousPlayers,
+    competitionResult: competitionProgression,
+  });
 };
