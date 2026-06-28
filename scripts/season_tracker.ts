@@ -4,7 +4,8 @@ import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/pr
 import { DIVISION_ORDER, getSeasonWeekLimit, isLeagueDivision, sortTeamsByTable } from '../src/core/leagueUtils';
 import { resolveCompetitionProgression } from '../src/core/competitionEngine';
 import { ENGINE_CONFIG } from '../src/config/engineConfig';
-import { LeagueDivision, Player, Team } from '../src/models/types';
+import { isScoreLogMismatch } from '../src/core/matchAuditUtils';
+import { Fixture, LeagueDivision, Player, Team } from '../src/models/types';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -44,6 +45,7 @@ type MatchReport = {
   homeScore: number;
   awayScore: number;
   totalGoals: number;
+  resolution?: Fixture['resolution'];
   playerDeltas: PlayerMatchDelta[];
   scorers: { playerId: string; name: string; teamName: string; goals: number }[];
   assisters: { playerId: string; name: string; teamName: string; assists: number }[];
@@ -353,6 +355,7 @@ const createMatchReport = (
   awayTeamId: string,
   homeScore: number,
   awayScore: number,
+  resolution: Fixture['resolution'],
   eventMessages: string[]
 ): MatchReport => {
   const playerDeltas = getPlayerDeltas(preMatchPlayers, players, teams);
@@ -374,7 +377,14 @@ const createMatchReport = (
     }));
   const auditFlags: string[] = [];
 
-  if (scorers.reduce((sum, scorer) => sum + scorer.goals, 0) !== totalGoals) auditFlags.push('score_log_mismatch');
+  if (isScoreLogMismatch({
+    homeScore,
+    awayScore,
+    scorerGoals: scorers.reduce((sum, scorer) => sum + scorer.goals, 0),
+    resolution,
+  })) {
+    auditFlags.push('score_log_mismatch');
+  }
   if (totalGoals >= 7) auditFlags.push('high_goal_match');
   if (Math.abs(homeScore - awayScore) >= 5) auditFlags.push('big_margin');
   if (scorers.some(scorer => scorer.goals >= 4)) auditFlags.push('single_player_4_plus_goals');
@@ -395,6 +405,7 @@ const createMatchReport = (
     homeScore,
     awayScore,
     totalGoals,
+    resolution,
     playerDeltas,
     scorers,
     assisters,
@@ -455,6 +466,7 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
         fixture.awayTeamId,
         result.fixture.homeScore ?? 0,
         result.fixture.awayScore ?? 0,
+        result.fixture.resolution,
         result.events
       );
       weekMatches.push(matchReport);

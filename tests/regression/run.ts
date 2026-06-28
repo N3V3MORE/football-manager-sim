@@ -2,7 +2,7 @@
 // ./calendar, ./match, ./transfer, ./board, ./persistence, ./live-match, ./squad.
 // Execution order matches the original scripts/regression_checks.ts runner.
 import { checkFormationSlotLookupUsesExactFormation, checkFormationMapRejectsWrongPositions, checkSeededFormationDiversity, checkRosterSizeConstraints, checkUnavailableBenchPlayersCanBeRemoved, checkRecoveredSelectedBenchDoesNotOverflow, checkLineupActionsPreserveBenchLimit, checkLineupInboxActionFiltersStaleFormationMap, checkTacticalAdaptationRunsOncePerPlayedCount, checkTacticalAdaptationIgnoresUnavailablePlayers } from './squad';
-import { checkCleanSheetWindows, checkPossessionFlowIsNotStrictAlternation, checkBranchGuards, checkSanityMatchScores, checkDisciplineRatesArePlausible, checkQuickSimMatchSummaryIncludesStatsAndRatings, checkMatchRatingsIncludeIndividualOutput, checkCleanSheetRatingsUsePlayerWindow, checkPenaltyShootoutUsesIndividualKicks, checkQuickSimKnockoutUsesExtraTimeBeforePenalties, checkLeaguePlayoffFixtureDoesNotChangeTableStats } from './match';
+import { checkAdministrativeResultsAreExcludedFromScoreLogMismatch, checkCleanSheetWindows, checkPossessionFlowIsNotStrictAlternation, checkBranchGuards, checkSanityMatchScores, checkDisciplineRatesArePlausible, checkQuickSimMatchSummaryIncludesStatsAndRatings, checkMatchRatingsIncludeIndividualOutput, checkCleanSheetRatingsUsePlayerWindow, checkPenaltyShootoutUsesIndividualKicks, checkQuickSimKnockoutUsesExtraTimeBeforePenalties, checkLeaguePlayoffFixtureDoesNotChangeTableStats } from './match';
 import { checkLiveSentOffMinutes, checkLiveSubstitutionsApplyBeforeFullTime, checkUserAiDoesNotSpendLiveSubstitutions, checkManualLiveSubstitutionAndShapeAreMatchLocal, checkManualLiveSubstitutionValidation, checkLiveMatchSummaryIncludesStatsAndRatings, checkLiveKnockoutExtraTimeTransition, checkActiveLiveMatchBlocksWeekAdvance, checkStaleLiveMatchRecovery, checkDirectFinishCompletesUnprocessedLiveMatch, checkZustandStoreLiveMatchCleanup } from './live-match';
 import { checkCompetitionPanelHandlesMissingTeam, checkDivisionBootstrap, checkPromotionRelegation, checkSeasonReportsUseCompetitionLifecycleAndLeagueTables, checkSeasonEndProgressionUpdatesMatchAbility, checkSeasonRolloverReplenishesMinimumSquadAndGoalkeepers, checkEflPlayoffsAreScheduledAfterRegularSeason, checkEflPlayoffSemiFinalsUseAggregateTiebreak, checkRolloverWaitsForPlayoffFinal } from './calendar';
 import { checkDeadStoreActionsAreRemoved, checkUserTeamProgressionDoesNotAdaptFormation, checkManagerProfilesLoaded, checkActiveCupRoundCountsAsReached, checkBoardObjectiveIdsAreStable, checkMidSeasonSackingTerminatesImmediately, checkNonTerminalSackingWarningDoesNotDismiss, checkSeasonEndSackingUsesSharedThreshold, checkUiContractsMatchEngineState, checkInitialGameSetupCanBeSeeded, checkStoreInitializesSelectedTeamDefaults } from './board';
@@ -27,6 +27,8 @@ const runRegressionChecks = () => {
   console.log('[OK] Live sent-off minute check passed');
   checkPossessionFlowIsNotStrictAlternation();
   console.log('[OK] Possession flow variability guard passed');
+  checkAdministrativeResultsAreExcludedFromScoreLogMismatch();
+  console.log('[OK] Administrative score-log audit guard passed');
   checkLiveSubstitutionsApplyBeforeFullTime();
   console.log('[OK] Live in-match substitution check passed');
   checkUserAiDoesNotSpendLiveSubstitutions();

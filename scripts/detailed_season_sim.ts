@@ -3,6 +3,8 @@ import { quickSimMatch } from '../src/core/matchEngine';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
 import { DIVISION_ORDER, getSeasonWeekLimit, sortTeamsByTable } from '../src/core/leagueUtils';
 import { resolveCompetitionProgression } from '../src/core/competitionEngine';
+import { isScoreLogMismatch } from '../src/core/matchAuditUtils';
+import { Fixture } from '../src/models/types';
 import * as fs from 'fs';
 
 type StatSnapshot = {
@@ -21,6 +23,7 @@ type MatchAudit = {
   redCards: number;
   yellowedPlayers: string[];
   redCardLogMismatch: boolean;
+  resolution?: Fixture['resolution'];
 };
 
 const formatScore = (audit: MatchAudit) => audit.label;
@@ -160,6 +163,7 @@ async function runDetailedSim() {
         redCards: matchRedCards,
         yellowedPlayers,
         redCardLogMismatch,
+        resolution: fixture.resolution,
       });
     }
 
@@ -209,7 +213,12 @@ async function runDetailedSim() {
   outputLog.push(`Yellow Cards: ${yellowCards}`);
   outputLog.push(`Red Cards: ${redCards}`);
 
-  const goalLogMismatches = matchAudits.filter(a => a.scorers.length !== a.homeScore + a.awayScore);
+  const goalLogMismatches = matchAudits.filter(a => isScoreLogMismatch({
+    homeScore: a.homeScore,
+    awayScore: a.awayScore,
+    scorerGoals: a.scorers.length,
+    resolution: a.resolution,
+  }));
   const highGoalMatches = matchAudits.filter(a => a.homeScore + a.awayScore >= 7);
   const bigMargins = matchAudits.filter(a => Math.abs(a.homeScore - a.awayScore) >= 5);
   const multiYellowMatches = matchAudits.flatMap(a => (

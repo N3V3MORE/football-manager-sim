@@ -1,4 +1,5 @@
 import { Fixture, Player, applySharedPostMatchAccounting, applyWindowedCleanSheets, assert, createSeededRandom, didConcedeInWindow, initGameData, qualifiesForWindowedCleanSheet, quickSimMatch, readSource, simulatePenaltyShootout } from './shared';
+import { isScoreLogMismatch } from '../../src/core/matchAuditUtils';
 
 export const checkCleanSheetWindows = () => {
   assert(!didConcedeInWindow([], 0, 90, 0), 'Empty conceded-minute list with 0 conceded should be clean');
@@ -50,6 +51,21 @@ export const checkPossessionFlowIsNotStrictAlternation = () => {
   assert(
     !/const isHomeAttacking = \(\(possessionIndex \+ \(firstAttackIsHome \? 0 : 1\)\) % 2\) === 0;/.test(liveMatchActions),
     'Live sim should not use fixed home/away alternating attacks'
+  );
+};
+
+export const checkAdministrativeResultsAreExcludedFromScoreLogMismatch = () => {
+  assert(
+    isScoreLogMismatch({ homeScore: 2, awayScore: 1, scorerGoals: 2, resolution: 'regular' }),
+    'Regular matches should flag when scorer totals do not match the final score'
+  );
+  assert(
+    !isScoreLogMismatch({ homeScore: 0, awayScore: 3, scorerGoals: 0, resolution: 'forfeit' }),
+    'Forfeit scores are administrative results and should not require player scorers'
+  );
+  assert(
+    !isScoreLogMismatch({ homeScore: 0, awayScore: 0, scorerGoals: 0, resolution: 'void' }),
+    'Void fixtures should not be reported as score/log mismatches'
   );
 };
 
