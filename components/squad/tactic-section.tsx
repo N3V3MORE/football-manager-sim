@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { color } from '@/src/design/tokens';
 
 type TacticSectionProps = {
   title: string;
@@ -41,11 +42,11 @@ export function TacticSection({
 
 const styles = StyleSheet.create({
   tacticsSection: { gap: 10 },
-  tacticsSectionTitle: { color: '#94a3b8', fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1.5 },
-  tacticsOptionsRow: { flexDirection: 'row', backgroundColor: '#1e293b', borderRadius: 0, padding: 4, borderWidth: 1, borderColor: '#334155' },
+  tacticsSectionTitle: { color: color.text.muted, fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1.5 },
+  tacticsOptionsRow: { flexDirection: 'row', backgroundColor: color.bg.card, borderRadius: 0, padding: 4, borderWidth: 1, borderColor: color.border.default },
   tacticsOptBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 0 },
-  tacticsOptBtnActive: { backgroundColor: '#38bdf8' },
-  tacticsOptText: { color: '#94a3b8', fontSize: 13, fontWeight: '800' },
-  tacticsOptTextActive: { color: '#0f172a' },
-  tacticsHintText: { color: '#475569', fontSize: 11, fontStyle: 'italic', paddingHorizontal: 4, lineHeight: 16 },
+  tacticsOptBtnActive: { backgroundColor: color.accent.primary },
+  tacticsOptText: { color: color.text.muted, fontSize: 13, fontWeight: '800' },
+  tacticsOptTextActive: { color: color.accent.onPrimary },
+  tacticsHintText: { color: color.text.disabled, fontSize: 11, fontStyle: 'italic', paddingHorizontal: 4, lineHeight: 16 },
 });

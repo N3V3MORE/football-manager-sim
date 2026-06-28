@@ -14,7 +14,7 @@ import { checkRelentlessTraitReducesFatiguePenalty, checkSeededPlayersNormalizeT
 import { checkWeeklyProgressionAppliesRevenueBreakdown, checkWeeklyRevenueUsesDivisionAndSponsorRates } from './finance';
 import { checkPlayerRatingUtilsPreserveSharedCurves } from './playerRatingUtils';
 import { checkAppendFixtureResultToStatePreservesPostMatchPatch, checkQuickSimActionLivesWithFixtureResolution } from './fixtureResolution';
-import { checkInboxHelpersUseConcreteModules, checkManagedTeamObjectivesAreInlined } from './storeStructure';
+import { checkInboxHelpersUseConcreteModules, checkManagedTeamObjectivesAreInlined, checkSelectedComponentsUseDesignTokens } from './storeStructure';
 
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
@@ -58,6 +58,8 @@ const runRegressionChecks = () => {
   console.log('[OK] Inbox helper file merge passed');
   checkManagedTeamObjectivesAreInlined();
   console.log('[OK] Managed team objectives wrapper removal passed');
+  checkSelectedComponentsUseDesignTokens();
+  console.log('[OK] Selected component color token migration passed');
   checkManagerProfilesLoaded();
   console.log('[OK] Manager profile loading passed');
   checkDivisionBootstrap();

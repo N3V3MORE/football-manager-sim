@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { color } from '@/src/design/tokens';
 import { Player } from '@/src/models/types';
 
 type TransferPlayerCardProps = {
@@ -60,19 +61,19 @@ export function TransferPlayerCard({
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#1e293b', padding: 12, borderRadius: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  card: { backgroundColor: color.bg.card, padding: 12, borderRadius: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
   cardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   playerTextBlock: { flex: 1, minWidth: 0 },
-  pos: { width: 34, textAlign: 'center', backgroundColor: '#334155', color: '#fff', paddingVertical: 4, borderRadius: 0, fontSize: 10, fontWeight: '900' },
-  name: { color: '#f8fafc', fontWeight: '700', fontSize: 15 },
-  club: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
+  pos: { width: 34, textAlign: 'center', backgroundColor: color.bg.elevated, color: color.text.primary, paddingVertical: 4, borderRadius: 0, fontSize: 10, fontWeight: '900' },
+  name: { color: color.text.primary, fontWeight: '700', fontSize: 15 },
+  club: { color: color.text.muted, fontSize: 12, marginTop: 2 },
   cardRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  ratingBox: { backgroundColor: '#cbd5e1', width: 28, height: 28, borderRadius: 0, justifyContent: 'center', alignItems: 'center' },
-  rating: { color: '#0f172a', fontWeight: '900', fontSize: 12 },
-  actionBtn: { backgroundColor: '#38bdf8', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 0 },
-  actionBtnDanger: { backgroundColor: '#ef4444' },
-  secondaryActionBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#64748b' },
-  actionText: { color: '#0f172a', fontWeight: '900', fontSize: 12 },
-  secondaryActionText: { color: '#cbd5e1' },
-  actionTextDanger: { color: '#fff' },
+  ratingBox: { backgroundColor: color.text.secondary, width: 28, height: 28, borderRadius: 0, justifyContent: 'center', alignItems: 'center' },
+  rating: { color: color.bg.screen, fontWeight: '900', fontSize: 12 },
+  actionBtn: { backgroundColor: color.accent.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 0 },
+  actionBtnDanger: { backgroundColor: color.danger.base },
+  secondaryActionBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: color.text.faint },
+  actionText: { color: color.accent.onPrimary, fontWeight: '900', fontSize: 12 },
+  secondaryActionText: { color: color.text.secondary },
+  actionTextDanger: { color: color.text.primary },
 });

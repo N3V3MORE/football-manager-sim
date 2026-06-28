@@ -46,3 +46,19 @@ export const checkManagedTeamObjectivesAreInlined = () => {
 
   assert(!existsSync(join(process.cwd(), 'src/store/managedTeamObjectives.ts')), 'managedTeamObjectives wrapper should be deleted');
 };
+
+export const checkSelectedComponentsUseDesignTokens = () => {
+  const checkedFiles = [
+    'components/hub/hub-header.tsx',
+    'components/transfers/transfer-player-card.tsx',
+    'components/squad/player-picker-row.tsx',
+    'components/squad/tactic-section.tsx',
+  ];
+  const hexColor = /#[0-9A-Fa-f]{3,8}/;
+
+  checkedFiles.forEach(filePath => {
+    const source = readSource(filePath);
+    assert(source.includes('@/src/design/tokens'), `${filePath} should import design tokens`);
+    assert(!hexColor.test(source), `${filePath} should not contain inline hex colors`);
+  });
+};

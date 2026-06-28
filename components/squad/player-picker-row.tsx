@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Player } from '@/src/models/types';
 import { getPositionColor } from '@/src/constants/positionColors';
+import { color } from '@/src/design/tokens';
 
 type PlayerPickerRowProps = {
   item: Player;
@@ -11,7 +12,7 @@ type PlayerPickerRowProps = {
 export function PlayerPickerRow({ item, onPress }: PlayerPickerRowProps) {
   const isSuspended = item.matchesSuspended > 0;
   const isExhausted = item.energy < 70;
-  const warningColor = (isSuspended || isExhausted) ? '#ef4444' : undefined;
+  const warningColor = (isSuspended || isExhausted) ? color.danger.base : undefined;
 
   return (
     <TouchableOpacity style={[styles.pickerRow, warningColor && { borderColor: warningColor }]} onPress={onPress}>
@@ -32,14 +33,14 @@ export function PlayerPickerRow({ item, onPress }: PlayerPickerRowProps) {
 }
 
 const styles = StyleSheet.create({
-  pickerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#334155', gap: 10 },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: color.border.default, gap: 10 },
   modalPosPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 0, minWidth: 36, alignItems: 'center' },
-  modalPosText: { color: '#fff', fontSize: 10, fontWeight: '900' },
+  modalPosText: { color: color.text.primary, fontSize: 10, fontWeight: '900' },
   playerMeta: { flex: 1 },
-  pickerName: { flex: 1, fontSize: 14, fontWeight: '700', color: '#f1f5f9' },
-  pickerNat: { fontSize: 10, color: '#64748b', width: 60 },
-  pickerRating: { backgroundColor: '#cbd5e1', width: 32, height: 32, borderRadius: 0, justifyContent: 'center', alignItems: 'center' },
-  pickerRatingText: { color: '#0f172a', fontWeight: '900', fontSize: 13 },
-  pickerStarter: { fontSize: 10, color: '#38bdf8', fontWeight: '900' },
-  suspensionText: { fontSize: 10, color: '#ef4444', fontWeight: 'bold' },
+  pickerName: { flex: 1, fontSize: 14, fontWeight: '700', color: color.text.primary },
+  pickerNat: { fontSize: 10, color: color.text.faint, width: 60 },
+  pickerRating: { backgroundColor: color.text.secondary, width: 32, height: 32, borderRadius: 0, justifyContent: 'center', alignItems: 'center' },
+  pickerRatingText: { color: color.bg.screen, fontWeight: '900', fontSize: 13 },
+  pickerStarter: { fontSize: 10, color: color.accent.primary, fontWeight: '900' },
+  suspensionText: { fontSize: 10, color: color.danger.base, fontWeight: 'bold' },
 });
