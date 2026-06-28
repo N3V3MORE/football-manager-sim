@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, ScrollView } from 'react-native';
+import { StyleSheet, Text, ScrollView, View } from 'react-native';
 import { useGameStore } from '@/src/store/gameStore';
 import { getTransferWindowLabel, isTransferWindowOpen } from '@/src/utils/calendar';
-import { Player } from '@/src/models/types';
+import { Player, TransferNegotiation } from '@/src/models/types';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
 import { formatContractLength, getPlayerAvailabilityStatus, isContractExpiringSoon } from '@/src/core/playerStatusUtils';
+import { FREE_AGENT_TEAM_ID } from '@/src/core/freeAgentPool';
 import { TransferDialog, TransferDialogState } from '@/components/transfers/transfer-dialog';
 import { TransferPlayerCard } from '@/components/transfers/transfer-player-card';
 import { TransferTabs } from '@/components/transfers/transfer-tabs';
@@ -12,14 +13,19 @@ import { Screen, Card, Badge, EmptyState } from '@/components/ui';
 import { color, space, type } from '@/src/design/tokens';
 import { useConfirmStore } from '@/src/store/confirmStore';
 
-type TransferTab = 'market' | 'squad';
+type TransferTab = 'market' | 'allPlayers' | 'freeAgents' | 'squad';
 
 export default function TransfersScreen() {
   const currentWeek = useGameStore(s => s.currentWeek);
   const userTeamId = useGameStore(s => s.userTeamId);
   const teams = useGameStore(s => s.teams);
   const players = useGameStore(s => s.players);
+  const pendingNegotiations = useGameStore(s => s.pendingNegotiations || []);
+  const approachPlayer = useGameStore(s => s.approachPlayer);
   const buyPlayer = useGameStore(s => s.buyPlayer);
+  const submitTransferBid = useGameStore(s => s.submitTransferBid);
+  const withdrawTransferNegotiation = useGameStore(s => s.withdrawTransferNegotiation);
+  const signFreeAgent = useGameStore(s => s.signFreeAgent);
   const listPlayerForSale = useGameStore(s => s.listPlayerForSale);
   const unlistPlayer = useGameStore(s => s.unlistPlayer);
 
@@ -34,7 +40,17 @@ export default function TransfersScreen() {
   const userTeam = teams[userTeamId];
 
   const marketPlayers = sortPlayersByPositionGroup(Object.values(players).filter(p => p.isTransferListed && p.teamId !== userTeamId));
+  const allPlayers = sortPlayersByPositionGroup(Object.values(players).filter(p => (
+    p.teamId !== userTeamId &&
+    p.teamId !== FREE_AGENT_TEAM_ID &&
+    !p.isTransferListed
+  )));
+  const freeAgentPlayers = sortPlayersByPositionGroup(Object.values(players).filter(p => p.teamId === FREE_AGENT_TEAM_ID));
   const mySquad = sortPlayersByPositionGroup(Object.values(players).filter(p => p.teamId === userTeamId));
+  const activeNegotiations = pendingNegotiations.filter(item => (
+    item.buyerTeamId === userTeamId &&
+    (item.status === 'pending' || item.status === 'countered')
+  ));
 
   const handleBuy = (player: Player) => {
     if (!windowOpen) {
@@ -60,10 +76,52 @@ export default function TransfersScreen() {
     setDialog({ type: 'sell', player, price: player.marketValue.toString() });
   };
 
+  const handleApproach = (player: Player) => {
+    if (!windowOpen) {
+      showAlert({
+        title: 'Transfer Window Closed',
+        message: 'You cannot approach players outside of the transfer window.',
+      });
+      return;
+    }
+    const result = approachPlayer(player.id);
+    showAlert({ title: result.success ? 'Talks Opened' : 'Rejected', message: result.message });
+  };
+
+  const handleNegotiationBid = (negotiation: TransferNegotiation) => {
+    const player = players[negotiation.playerId];
+    if (!player) return;
+    setDialog({
+      type: 'negotiation',
+      negotiationId: negotiation.id,
+      player,
+      fee: negotiation.askingPrice.toString(),
+      wage: negotiation.currentWage.toString(),
+      askingPrice: negotiation.askingPrice,
+    });
+  };
+
+  const handleWithdrawNegotiation = (negotiation: TransferNegotiation) => {
+    withdrawTransferNegotiation(negotiation.id);
+    const player = players[negotiation.playerId];
+    showAlert({
+      title: 'Talks Withdrawn',
+      message: player ? `You walked away from talks for ${player.name}.` : 'You walked away from the transfer talks.',
+    });
+  };
+
+  const handleSignFreeAgent = (player: Player) => {
+    setDialog({
+      type: 'freeAgent',
+      player,
+      wage: player.wage.toString(),
+    });
+  };
+
   const handleSubmitDialog = () => {
     if (!dialog) return;
 
-    if (dialog.type === 'buy') {
+    if (dialog.type === 'buy' || dialog.type === 'negotiation') {
       if (!windowOpen) {
         showAlert({ title: 'Transfer Window Closed', message: 'The transfer window has closed.' });
         setDialog(null);
@@ -75,7 +133,21 @@ export default function TransfersScreen() {
         showAlert({ title: 'Invalid Offer', message: 'Enter a positive transfer fee and wage.' });
         return;
       }
-      const result = buyPlayer(dialog.player.id, fee, wage);
+      const result = dialog.type === 'negotiation'
+        ? submitTransferBid(dialog.negotiationId, fee, wage)
+        : buyPlayer(dialog.player.id, fee, wage);
+      setDialog(null);
+      showAlert({ title: result.success ? 'Success' : 'Rejected', message: result.message });
+      return;
+    }
+
+    if (dialog.type === 'freeAgent') {
+      const wage = Number(dialog.wage);
+      if (!Number.isFinite(wage) || wage <= 0) {
+        showAlert({ title: 'Invalid Offer', message: 'Enter a positive wage.' });
+        return;
+      }
+      const result = signFreeAgent(dialog.player.id, wage);
       setDialog(null);
       showAlert({ title: result.success ? 'Success' : 'Rejected', message: result.message });
       return;
@@ -93,8 +165,11 @@ export default function TransfersScreen() {
   const updateDialogValue = (field: 'fee' | 'wage' | 'price', value: string) => {
     setDialog(current => {
       if (!current) return current;
-      if (current.type === 'buy' && (field === 'fee' || field === 'wage')) {
+      if ((current.type === 'buy' || current.type === 'negotiation') && (field === 'fee' || field === 'wage')) {
         return { ...current, [field]: value };
+      }
+      if (current.type === 'freeAgent' && field === 'wage') {
+        return { ...current, wage: value };
       }
       if (current.type === 'sell' && field === 'price') {
         return { ...current, price: value };
@@ -117,9 +192,41 @@ export default function TransfersScreen() {
         </Badge>
       </Card>
 
-      <TransferTabs activeTab={tab} marketCount={marketPlayers.length} onChange={setTab} />
+      <TransferTabs
+        activeTab={tab}
+        marketCount={marketPlayers.length}
+        allPlayersCount={allPlayers.length}
+        freeAgentCount={freeAgentPlayers.length}
+        onChange={setTab}
+      />
 
       <ScrollView contentContainerStyle={styles.scroll}>
+        {activeNegotiations.length > 0 && (
+          <View style={styles.negotiationsSection}>
+            <Text style={styles.sectionTitle}>Pending Talks</Text>
+            {activeNegotiations.map(negotiation => {
+              const player = players[negotiation.playerId];
+              if (!player) return null;
+              const seller = teams[negotiation.sellerTeamId];
+              const rivalName = negotiation.rivalBid?.status === 'active'
+                ? teams[negotiation.rivalBid.teamId]?.name
+                : null;
+              return (
+                <TransferPlayerCard
+                  key={negotiation.id}
+                  player={player}
+                  subLabel={`${seller?.name || 'Selling club'} | Ask: GBP ${negotiation.askingPrice.toFixed(1)}m | W${negotiation.expiresWeek}${rivalName ? ` | Rival: ${rivalName}` : ''}`}
+                  actionLabel="Bid"
+                  onAction={() => handleNegotiationBid(negotiation)}
+                  secondaryActionLabel="Withdraw"
+                  secondaryActionVariant="danger"
+                  onSecondaryAction={() => handleWithdrawNegotiation(negotiation)}
+                />
+              );
+            })}
+          </View>
+        )}
+
         {tab === 'market' && (
           marketPlayers.length === 0 ? (
             <EmptyState title="No players listed" message="The market is quiet right now." />
@@ -131,6 +238,38 @@ export default function TransfersScreen() {
                 subLabel={`${teams[p.teamId]?.name || ''} | ${getPlayerAvailabilityStatus(p)} | ${formatContractLength(p)}`}
                 actionLabel={`GBP ${p.askingPrice.toFixed(1)}m`}
                 onAction={() => handleBuy(p)}
+              />
+            ))
+          )
+        )}
+
+        {tab === 'allPlayers' && (
+          allPlayers.length === 0 ? (
+            <EmptyState title="No approach targets" message="No external club players are available to approach." />
+          ) : (
+            allPlayers.map(p => (
+              <TransferPlayerCard
+                key={p.id}
+                player={p}
+                subLabel={`${teams[p.teamId]?.name || ''} | Value: GBP ${p.marketValue.toFixed(1)}m | ${formatContractLength(p)}`}
+                actionLabel="Approach"
+                onAction={() => handleApproach(p)}
+              />
+            ))
+          )
+        )}
+
+        {tab === 'freeAgents' && (
+          freeAgentPlayers.length === 0 ? (
+            <EmptyState title="No free agents" message="The free-agent pool is empty right now." />
+          ) : (
+            freeAgentPlayers.map(p => (
+              <TransferPlayerCard
+                key={p.id}
+                player={p}
+                subLabel={`Free agent | Wage: GBP ${p.wage}k/w | ${formatContractLength(p)}`}
+                actionLabel="Offer"
+                onAction={() => handleSignFreeAgent(p)}
               />
             ))
           )
@@ -167,4 +306,6 @@ const styles = StyleSheet.create({
   budget: { fontSize: type.subtitle.fontSize, color: color.success.base, fontWeight: '700', marginTop: space.xs },
   banner: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: 10, marginTop: space.md },
   scroll: { padding: space.lg, gap: 10 },
+  negotiationsSection: { gap: 8 },
+  sectionTitle: { color: color.text.secondary, fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
 });

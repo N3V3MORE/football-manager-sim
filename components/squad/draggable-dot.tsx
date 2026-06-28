@@ -13,6 +13,7 @@ const BOTTOM_SLOT_PERCENT = 74;
 type DraggableDotProps = {
   slot: Slot;
   assigned: Player | null;
+  roleLabel?: string | null;
   onPress: () => void;
   onDragBegin: () => void;
   onDragEnd: (moveX: number, moveY: number) => boolean;
@@ -33,6 +34,7 @@ export const getPitchSlotPosition = (rowIdx: number, colIdx: number, rowLength: 
 export function DraggableDot({
   slot,
   assigned,
+  roleLabel,
   onPress,
   onDragBegin,
   onDragEnd,
@@ -97,6 +99,11 @@ export function DraggableDot({
               <Text style={styles.pitchRatingText}>{assigned.overallRating}</Text>
             </View>
           )}
+          {assigned && roleLabel && (
+            <View style={styles.pitchRoleBadge}>
+              <Text style={styles.pitchRoleText}>{roleLabel}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </Animated.View>
     </View>
@@ -140,4 +147,16 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   pitchRatingText: { fontSize: 9, fontWeight: '900', color: '#0f172a', textAlign: 'center' },
+  pitchRoleBadge: {
+    backgroundColor: '#14532d',
+    borderWidth: 1,
+    borderColor: '#22c55e',
+    alignSelf: 'center',
+    paddingHorizontal: 4,
+    minHeight: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  pitchRoleText: { fontSize: 8, fontWeight: '900', color: '#dcfce7', textAlign: 'center' },
 });

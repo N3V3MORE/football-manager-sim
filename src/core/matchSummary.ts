@@ -18,6 +18,7 @@ type BuildMatchSummaryInput = {
   awayShotsOnTarget: number;
   homePossessions?: number;
   awayPossessions?: number;
+  maxMatchMinutes?: number;
 };
 
 const getLatestRating = (player: Player) => (
@@ -57,6 +58,7 @@ export const buildMatchSummary = ({
   awayShotsOnTarget,
   homePossessions,
   awayPossessions,
+  maxMatchMinutes = 90,
 }: BuildMatchSummaryInput): MatchSummary => {
   const buildRows = (
     participants: Player[],
@@ -70,7 +72,7 @@ export const buildMatchSummary = ({
       teamId: player.teamId,
       name: player.name,
       position: player.position,
-      minutes: Math.max(0, Math.min(90, Math.round(minuteMap[player.id] || 0))),
+      minutes: Math.max(0, Math.min(maxMatchMinutes, Math.round(minuteMap[player.id] || 0))),
       rating: Number(getLatestRating(player).toFixed(1)),
       goals: getContribution(matchContributions, player.id, 'goals'),
       assists: getContribution(matchContributions, player.id, 'assists'),

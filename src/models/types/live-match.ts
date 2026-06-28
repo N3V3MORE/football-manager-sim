@@ -43,6 +43,27 @@ export type MatchSummary = {
   manOfTheMatchPlayerId?: string;
 };
 
+export type PenaltyKickOutcome = 'goal' | 'save' | 'miss';
+
+export type PenaltyKick = {
+  round: number;
+  teamId: string;
+  takerPlayerId: string;
+  goalkeeperPlayerId?: string;
+  outcome: PenaltyKickOutcome;
+  homeScore: number;
+  awayScore: number;
+};
+
+export type PenaltyShootout = {
+  homeTeamId: string;
+  awayTeamId: string;
+  winnerTeamId: string;
+  homeScore: number;
+  awayScore: number;
+  kicks: PenaltyKick[];
+};
+
 /**
  * Live (minute-by-minute) match runtime state, persisted between advances.
  * Lives in the model layer so store and engine code share one canonical type.
@@ -89,4 +110,8 @@ export type LiveMatchState = {
   };
   appliedSubstitutionCheckpoints?: number[];
   processedMinutes?: number[];
+  extraTimeStarted?: boolean;
+  regulationHomeScore?: number;
+  regulationAwayScore?: number;
+  penaltyShootout?: PenaltyShootout;
 };

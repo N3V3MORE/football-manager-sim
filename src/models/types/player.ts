@@ -1,4 +1,19 @@
 export type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
+export type StatKey = 'pace' | 'shooting' | 'passing' | 'dribbling' | 'defending' | 'physical';
+export type PlayerRole =
+  | 'default'
+  | 'targetMan'
+  | 'falseNine'
+  | 'playmaker'
+  | 'boxToBox'
+  | 'defensiveMid'
+  | 'mezzala'
+  | 'invertedWinger'
+  | 'wideMidfielder'
+  | 'wingBack'
+  | 'stayBack'
+  | 'getForward'
+  | 'pressingForward';
 export type LeagueDivision = 'Premier League' | 'Championship' | 'League One' | 'League Two';
 export type Division = LeagueDivision | 'Continental';
 export type Formation =
@@ -26,7 +41,7 @@ export interface TeamTactics {
   pressing: 'None' | 'Medium' | 'High';
 }
 
-interface PlayerStats {
+export interface PlayerStats {
   pace: number;
   shooting: number;
   passing: number;
@@ -73,6 +88,11 @@ export interface Player {
   wage: number;             // wage in thousands per week
   contractLeft: number;     // years remaining on contract
   impactCoefficient: number;// modifier for clutch/hero moments
+  potential?: number;       // hidden ceiling for player development
+  trainingFocus?: StatKey | null;
+  trainingXp?: number;
+  trainingStatProgress?: number;
+  trainingStatGains?: Partial<Record<StatKey, number>>;
   matchRatingHistory: number[]; // array of hidden ratings for each match
   minutesPlayed: number;        // total season minutes played
   goals: number;

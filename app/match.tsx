@@ -44,6 +44,14 @@ export default function MatchScreen() {
   const liveProcessedMinutes = liveMatchState?.processedMinutes || [];
   const liveProcessedCount = liveProcessedMinutes.length;
   const liveProcessedMax = liveProcessedCount > 0 ? Math.max(...liveProcessedMinutes) : 0;
+  const liveKnockoutNeedsExtraTime = Boolean(
+    fixture?.isKnockout &&
+    (
+      liveMatchState?.extraTimeStarted ||
+      (liveProcessedMax >= 90 && (fixture.homeScore ?? 0) === (fixture.awayScore ?? 0))
+    )
+  );
+  const liveMatchEndMinute = liveKnockoutNeedsExtraTime ? 120 : 90;
   const restoreStateKey = [
     fixtureId,
     fixture?.isPlayed ? 'played' : 'unplayed',
@@ -86,7 +94,7 @@ export default function MatchScreen() {
       minuteRef.current = resumedMinute;
       setMinute(resumedMinute);
       setIsPlaying(false); // always start paused when resuming
-      const isFinished = resumedMinute >= 90;
+      const isFinished = resumedMinute >= liveMatchEndMinute;
       setMatchFinished(isFinished);
       setIsHalfTime(resumedMinute === 45);
       if (resumedMinute === 0) {
@@ -106,7 +114,7 @@ export default function MatchScreen() {
       setMatchFinished(false);
       setLogs(['Match is ready to start!']);
     }
-  }, [fixtureId, restoreStateKey, isPlaying, liveMatches, fixtures]);
+  }, [fixtureId, restoreStateKey, isPlaying, liveMatches, fixtures, liveMatchEndMinute]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -122,11 +130,21 @@ export default function MatchScreen() {
         if (event) {
           setLogs((l) => [event, ...l].slice(0, 8));
         }
+        const latestFixture = useGameStore.getState().fixtures[fixtureId];
+        const needsExtraTime = Boolean(
+          latestFixture?.isKnockout &&
+          nextMin === 90 &&
+          (latestFixture.homeScore ?? 0) === (latestFixture.awayScore ?? 0)
+        );
         if (nextMin === 45) {
           if (!mounted) return;
           setIsHalfTime(true);
           setIsPlaying(false);
-        } else if (nextMin >= 90) {
+        } else if (needsExtraTime) {
+          if (!mounted) return;
+          setIsPlaying(false);
+          setLogs((l) => ['Extra time to come. Use Team Management, then Resume.', ...l].slice(0, 8));
+        } else if (nextMin >= liveMatchEndMinute) {
           if (!mounted) return;
           setMatchFinished(true);
           setIsPlaying(false);
@@ -136,7 +154,7 @@ export default function MatchScreen() {
       }, 167);
     }
     return () => { mounted = false; clearInterval(interval); };
-  }, [isPlaying, isHalfTime, matchFinished, fixtureId, processMatchMinute, finishLiveMatch]);
+  }, [isPlaying, isHalfTime, matchFinished, fixtureId, processMatchMinute, finishLiveMatch, liveMatchEndMinute]);
 
   const handleContinue = () => {
     tap();
@@ -169,7 +187,7 @@ export default function MatchScreen() {
         .map(row => (
           <View key={row.playerId} style={styles.ratingRow}>
             <Text style={styles.ratingName} numberOfLines={1}>{row.name}</Text>
-            <Text style={styles.ratingMeta}>{row.minutes}'</Text>
+            <Text style={styles.ratingMeta}>{`${row.minutes}'`}</Text>
             <Text style={styles.ratingMeta}>{row.rating.toFixed(1)}</Text>
           </View>
         ))
@@ -197,10 +215,25 @@ export default function MatchScreen() {
               <Text style={styles.score}>{aScore}</Text>
             </View>
           </View>
+          {fixture.resolution === 'extra_time' && (
+            <Text style={styles.penaltiesNote}>
+              Won after extra time
+            </Text>
+          )}
           {fixture.resolution === 'penalties' && (
             <Text style={styles.penaltiesNote}>
-              Won on penalties
+              Won on penalties{fixture.penaltyShootout ? ` (${fixture.penaltyShootout.homeScore}-${fixture.penaltyShootout.awayScore})` : ''}
             </Text>
+          )}
+          {fixture.penaltyShootout && (
+            <View style={styles.summaryPanel}>
+              <Text style={styles.summaryTitle}>Penalty Shootout</Text>
+              {fixture.penaltyShootout.kicks.map((kick, index) => (
+                <Text key={`${kick.teamId}-${kick.takerPlayerId}-${index}`} style={styles.ratingMeta}>
+                  {teams[kick.teamId]?.name}: {players[kick.takerPlayerId]?.name || 'Taker'} - {kick.outcome.toUpperCase()} ({kick.homeScore}-{kick.awayScore})
+                </Text>
+              ))}
+            </View>
           )}
           {matchSummary && (
             <View style={styles.summaryPanel}>
@@ -272,7 +305,7 @@ export default function MatchScreen() {
   const handleStart = () => { tap(); setIsPlaying(true); };
   const handlePause = () => { tap(); setIsPlaying(false); setShowTactics(true); };
   const handleResumeHT = () => { tap(); setIsHalfTime(false); setIsPlaying(true); };
-  const canResumeFromTactics = !isHalfTime && !matchFinished && minute > 0 && minute < 90;
+  const canResumeFromTactics = !isHalfTime && !matchFinished && minute > 0 && minute < liveMatchEndMinute;
   const handleResumeFromTactics = () => {
     setShowTactics(false);
     if (canResumeFromTactics) {
@@ -283,13 +316,13 @@ export default function MatchScreen() {
   const handleExit = () => {
     // B4: confirm before silently quick-simming the remaining minutes. Previously
     // tapping EXIT mid-match finalized the result with no warning.
-    if (!matchFinished && minute > 0 && minute < 90) {
+    if (!matchFinished && minute > 0 && minute < liveMatchEndMinute) {
       showConfirm({
         title: 'Exit Match?',
         message: 'The remaining minutes will be quick-simulated and the result finalized.',
         confirmText: 'Sim & Exit',
         onConfirm: () => {
-          for (let m = minute + 1; m <= 90; m++) {
+          for (let m = minute + 1; m <= liveMatchEndMinute; m++) {
             processMatchMinute(fixtureId, m);
           }
           finishLiveMatch(fixtureId);
@@ -392,7 +425,7 @@ export default function MatchScreen() {
   const usedSubs = userSubState?.substitutesUsed || 0;
   const usedWindows = userSubState?.substitutionWindowsUsed || 0;
   const maxSubs = userSubState?.maxSubstitutes || 5;
-  const maxWindows = userSubState?.maxWindows || 3;
+  const maxWindows = Math.max(userSubState?.maxWindows || 3, liveMatchEndMinute > 90 && liveProcessedMax >= 90 ? 4 : 3);
   const remainingSubs = Math.max(0, maxSubs - usedSubs - pendingReplacements.length);
   const isManagingHalfTime = liveProcessedMax === 45;
   const remainingWindows = Math.max(0, maxWindows - usedWindows);
@@ -496,7 +529,12 @@ export default function MatchScreen() {
               <Text style={styles.btnText}>Pause & Tactics</Text>
             </TouchableOpacity>
           )}
-          {!isPlaying && !isHalfTime && !matchFinished && minute > 0 && (
+          {!isPlaying && !isHalfTime && !matchFinished && minute > 0 && minute < liveMatchEndMinute && (
+            <TouchableOpacity style={styles.btnPause} onPress={() => setShowTactics(true)} accessibilityRole="button" accessibilityLabel="Open team management">
+              <Text style={styles.btnText}>Team Management</Text>
+            </TouchableOpacity>
+          )}
+          {!isPlaying && !isHalfTime && !matchFinished && minute > 0 && minute < liveMatchEndMinute && (
             <TouchableOpacity style={styles.btnSimulate} onPress={handleStart} accessibilityRole="button" accessibilityLabel="Resume match">
               <Text style={styles.btnText}>Resume</Text>
             </TouchableOpacity>

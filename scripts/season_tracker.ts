@@ -430,9 +430,7 @@ const runTrackedSeason = (seed: number, seasonIndex: number) => {
   );
   const tacticalChangeLog: TacticalChange[] = [];
   const formationUsage = { back3: 0, back4: 0, back5: 0, other: 0 };
-  const seasonWeeks = getSeasonWeekLimit(state.fixtures, state.competitions);
-
-  for (let week = 1; week <= seasonWeeks; week++) {
+  for (let week = 1; week <= getSeasonWeekLimit(state.fixtures, state.competitions); week++) {
     const weekMatches: MatchReport[] = [];
     const weekStartSetups = snapshotTeamSetups(state.teams);
     Object.values(weekStartSetups).forEach(setup => {

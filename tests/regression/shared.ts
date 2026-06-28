@@ -2,11 +2,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { initGameData } from '../../src/utils/initGame';
 import { quickSimMatch } from '../../src/core/matchEngine';
+import { simulatePenaltyShootout } from '../../src/core/matchTieResolution';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../../src/core/progressionEngine';
 import { getSeasonWeekLimit } from '../../src/core/leagueUtils';
 import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../../src/constants/formations';
 import { rebuildFormationMap, rebuildFormationSlotPlayers } from '../../src/core/formationMapUtils';
-import { getCompetitionPanelForTeam, hasReachedCompetitionRound } from '../../src/core/competitionEngine';
+import { getCompetitionPanelForTeam, hasReachedCompetitionRound, resolveCompetitionProgression } from '../../src/core/competitionEngine';
 import { buildBoardObjectives, buildBoardProfile } from '../../src/core/boardEngine';
 import {
   applySharedPostMatchAccounting,
@@ -16,10 +17,16 @@ import {
 } from '../../src/core/postMatchAccounting';
 import { advanceSeason } from '../../src/core/seasonTransition';
 import { applyTacticalAdaptation } from '../../src/core/tacticalAdaptationEngine';
-import { Formation, InboxMessage, Player, Position, Team } from '../../src/models/types';
+import { Fixture, Formation, InboxMessage, Player, Position, Team } from '../../src/models/types';
 import { useGameStore } from '../../src/store/gameStore';
 import { markAsSubState, toggleStartingState } from '../../src/store/lineupActions';
-import { buyPlayerState } from '../../src/store/transferActions';
+import {
+  acceptTransferCounterState,
+  approachPlayerState,
+  buyPlayerState,
+  resolveWeeklyNegotiationsState,
+  signFreeAgentState,
+} from '../../src/store/transferActions';
 import { computeMarketValue } from '../../src/utils/calendar';
 import { applyInboxActionState } from '../../src/store/inboxActions';
 import { advanceWeekState } from '../../src/store/weekLifecycle';
@@ -161,5 +168,5 @@ export const addSquadPlayers = (
 };
 
 export {
-  initGameData, quickSimMatch, computeWeeklyProgression, computeWeeklyTransfers, getSeasonWeekLimit, BASE_FORMATION_SLOTS, getSlotsForFormation, rebuildFormationMap, rebuildFormationSlotPlayers, getCompetitionPanelForTeam, hasReachedCompetitionRound, buildBoardObjectives, buildBoardProfile, applySharedPostMatchAccounting, didConcedeInWindow, applyWindowedCleanSheets, qualifiesForWindowedCleanSheet, advanceSeason, applyTacticalAdaptation, Formation, InboxMessage, Player, Position, Team, useGameStore, markAsSubState, toggleStartingState, buyPlayerState, computeMarketValue, applyInboxActionState, advanceWeekState, finishLiveMatchState, makeLiveSubstitutionsState, processLiveMatchMinuteState, setLiveMatchFormationState, sanitizePersistedState, isPlayerUnavailable, FREE_AGENT_TEAM_ID, createFreeAgentTeam, getSquadPolicy, applySackingRisk,
+  initGameData, quickSimMatch, simulatePenaltyShootout, computeWeeklyProgression, computeWeeklyTransfers, getSeasonWeekLimit, BASE_FORMATION_SLOTS, getSlotsForFormation, rebuildFormationMap, rebuildFormationSlotPlayers, getCompetitionPanelForTeam, hasReachedCompetitionRound, resolveCompetitionProgression, buildBoardObjectives, buildBoardProfile, applySharedPostMatchAccounting, didConcedeInWindow, applyWindowedCleanSheets, qualifiesForWindowedCleanSheet, advanceSeason, applyTacticalAdaptation, Fixture, Formation, InboxMessage, Player, Position, Team, useGameStore, markAsSubState, toggleStartingState, acceptTransferCounterState, approachPlayerState, buyPlayerState, resolveWeeklyNegotiationsState, signFreeAgentState, computeMarketValue, applyInboxActionState, advanceWeekState, finishLiveMatchState, makeLiveSubstitutionsState, processLiveMatchMinuteState, setLiveMatchFormationState, sanitizePersistedState, isPlayerUnavailable, FREE_AGENT_TEAM_ID, createFreeAgentTeam, getSquadPolicy, applySackingRisk,
 };

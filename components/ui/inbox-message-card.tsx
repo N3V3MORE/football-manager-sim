@@ -38,6 +38,8 @@ const getActionLabel = (message: InboxMessage) => {
   if (message.action.type === 'apply_lineup') return 'Apply Lineup Suggestion';
   if (message.action.type === 'accept_job_offer') return 'Accept Job Offer';
   if (message.action.type === 'renew_contract') return 'Renew Contract';
+  if (message.action.type === 'accept_transfer_counter') return 'Accept Counter';
+  if (message.action.type === 'withdraw_transfer_negotiation') return 'Withdraw';
   return 'Apply Tactic Suggestion';
 };
 

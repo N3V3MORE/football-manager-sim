@@ -42,16 +42,17 @@ export const applyWindowedCleanSheets = (
   minuteMap: Record<string, number>,
   concededGoalMinutes: number[],
   concededGoalsTotal: number,
-  updatedPlayers: Record<string, Player>
+  updatedPlayers: Record<string, Player>,
+  maxMatchMinutes = 90
 ) => {
   teamParticipants
     .filter(player => player.position === 'GK' || player.position === 'DEF')
     .forEach(player => {
-      const minutes = Math.max(0, Math.min(90, minuteMap[player.id] || 0));
+      const minutes = Math.max(0, Math.min(maxMatchMinutes, minuteMap[player.id] || 0));
       if (minutes <= 0) return;
       const isStarter = teamStarterIds.has(player.id);
-      const windowStart = isStarter ? 0 : Math.max(0, 90 - minutes);
-      const windowEnd = isStarter ? minutes : 90;
+      const windowStart = isStarter ? 0 : Math.max(0, maxMatchMinutes - minutes);
+      const windowEnd = isStarter ? minutes : maxMatchMinutes;
       if (qualifiesForWindowedCleanSheet(concededGoalMinutes, windowStart, windowEnd, concededGoalsTotal)) {
         addPlayerStat(updatedPlayers, player.id, 'cleanSheets');
       }
@@ -71,6 +72,7 @@ type SharedPostMatchInput = {
   rng?: RandomGenerator;
   applyEnergyDrain?: boolean;
   playerMatchContributions?: Record<string, PlayerMatchContribution>;
+  maxMatchMinutes?: number;
 };
 
 export const applySharedPostMatchAccounting = ({
@@ -86,6 +88,7 @@ export const applySharedPostMatchAccounting = ({
   rng,
   applyEnergyDrain = true,
   playerMatchContributions = {},
+  maxMatchMinutes = 90,
 }: SharedPostMatchInput) => {
   const random = resolveRandom(rng);
   applyWindowedCleanSheets(
@@ -94,11 +97,12 @@ export const applySharedPostMatchAccounting = ({
     minuteMap,
     concededGoalMinutes,
     concededGoalsTotal,
-    updatedPlayers
+    updatedPlayers,
+    maxMatchMinutes
   );
 
   teamParticipants.forEach(player => {
-    const minutes = clampToMatchMinutes(minuteMap[player.id] || 0);
+    const minutes = clampToMatchMinutes(minuteMap[player.id] || 0, maxMatchMinutes);
     if (minutes <= 0) return;
 
     const drainMultiplier =
@@ -110,8 +114,8 @@ export const applySharedPostMatchAccounting = ({
     if (isDraw) rating += ENGINE_CONFIG.MATCH_RATING_DRAW_BONUS;
     if (!isWin && !isDraw) rating -= ENGINE_CONFIG.MATCH_RATING_LOSS_PENALTY;
     const isStarter = teamStarterIds.has(player.id);
-    const windowStart = isStarter ? 0 : Math.max(0, 90 - minutes);
-    const windowEnd = isStarter ? minutes : 90;
+    const windowStart = isStarter ? 0 : Math.max(0, maxMatchMinutes - minutes);
+    const windowEnd = isStarter ? minutes : maxMatchMinutes;
     const hasCleanSheetWindow = qualifiesForWindowedCleanSheet(
       concededGoalMinutes,
       windowStart,

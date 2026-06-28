@@ -172,9 +172,7 @@ const runSeason = (seasonIndex: number, seed: number) => {
   let straightRedEvents = 0;
   let secondYellowRedEvents = 0;
   let lopsidedPossessionMatches = 0;
-  const seasonWeeks = getSeasonWeekLimit(state.fixtures, state.competitions);
-
-  for (let week = 1; week <= seasonWeeks; week += 1) {
+  for (let week = 1; week <= getSeasonWeekLimit(state.fixtures, state.competitions); week += 1) {
     const weekFixtures = Object.values(state.fixtures).filter(fixture => fixture.week === week);
 
     for (const fixture of weekFixtures) {

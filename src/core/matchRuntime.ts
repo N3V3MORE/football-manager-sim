@@ -13,6 +13,12 @@ import {
   scaleLineupForMatch,
   weightedPick,
 } from './matchUtils';
+import { simulatePenaltyShootout } from './matchTieResolution';
+import {
+  getCompatiblePlayerRoleForTeamSlot,
+  getRoleStatBonus,
+  getRoleWeightMultiplier,
+} from './playerRoleEngine';
 
 const LOW_INTENSITY_COMMENTARY_CHANCE = 0.04;
 
@@ -50,17 +56,6 @@ export const buildCurrentMatchProfile = (
   };
 };
 
-const getPenaltyShootoutEdge = (
-  players: Player[],
-  targetCount: number,
-  homeAdvantage = 1
-) => {
-  const selected = [...players]
-    .sort((a, b) => b.overallRating - a.overallRating)
-    .slice(0, targetCount);
-  return selected.reduce((sum, player) => sum + player.overallRating, 0) * homeAdvantage;
-};
-
 export const resolvePenaltyShootoutWinner = (
   homeTeam: Team,
   awayTeam: Team,
@@ -69,11 +64,7 @@ export const resolvePenaltyShootoutWinner = (
   rng: RandomGenerator,
   homeAdvantage = 1
 ) => {
-  const targetCount = Math.max(1, Math.min(homePlayers.length, awayPlayers.length));
-  const homePenaltyEdge = getPenaltyShootoutEdge(homePlayers, targetCount, homeAdvantage);
-  const awayPenaltyEdge = getPenaltyShootoutEdge(awayPlayers, targetCount, 1);
-  const totalEdge = Math.max(1, homePenaltyEdge + awayPenaltyEdge);
-  return (rng.next() * totalEdge) < homePenaltyEdge ? homeTeam.id : awayTeam.id;
+  return simulatePenaltyShootout(homeTeam, awayTeam, homePlayers, awayPlayers, rng, homeAdvantage).winnerTeamId;
 };
 
 const getPossessionControlScore = (
@@ -249,6 +240,12 @@ export const simulatePossession = (
   if (attPlayers.length === 0 || defPlayers.length === 0) return { goal: false, event: null };
   const attRoles = getRoleGroups(attPlayers);
   const defRoles = getRoleGroups(defPlayers);
+  const attackerRoleFor = (player: Player) => getCompatiblePlayerRoleForTeamSlot(attacker, player);
+  const defenderRoleFor = (player: Player) => getCompatiblePlayerRoleForTeamSlot(defender, player);
+  const uniquePlayers = (...pools: Player[][]) => Array.from(new Map(
+    pools.flat().map(player => [player.id, player])
+  ).values());
+  const roleAdjustedStat = (value: number, bonus?: number) => value * (1 + (bonus || 0));
   const attShape = attackerShape || buildFallbackShapeProfile(attPlayers);
   const defShape = defenderShape || buildFallbackShapeProfile(defPlayers);
   const midAtt = [...attRoles.DM, ...attRoles.CM, ...attRoles.AM, ...attRoles.WIDE_MID];
@@ -314,9 +311,10 @@ export const simulatePossession = (
     ? ENGINE_CONFIG.DEFENDER_PRESS_HIGH_BIG_MOMENT_MULTIPLIER
     : (dTac.pressing === 'None' ? ENGINE_CONFIG.DEFENDER_PRESS_NONE_BIG_MOMENT_MULTIPLIER : 1.0);
   throughBallChance *= tempoMultiplier;
+  const pressingForwardChanceBoost = fwdAtt.filter(player => attackerRoleFor(player) === 'pressingForward').length * 0.03;
   const bigMomentChance = Math.max(
     ENGINE_CONFIG.BIG_MOMENT_MIN_CHANCE,
-    Math.min(ENGINE_CONFIG.BIG_MOMENT_MAX_CHANCE, ENGINE_CONFIG.BIG_MOMENT_CHANCE * tempoMultiplier * defenderPressMultiplier)
+    Math.min(ENGINE_CONFIG.BIG_MOMENT_MAX_CHANCE, ENGINE_CONFIG.BIG_MOMENT_CHANCE * tempoMultiplier * defenderPressMultiplier * (1 + pressingForwardChanceBoost))
   );
 
   // Chance a possession is interesting
@@ -328,18 +326,36 @@ export const simulatePossession = (
   }
 
   // Phase 1: Midfield Build-up
-  const progressionPool = [...attRoles.DM, ...attRoles.CM, ...attRoles.AM, ...attRoles.WIDE_MID, ...attRoles.FB, ...attRoles.WB];
+  const progressionPool = uniquePlayers(
+    [...attRoles.DM, ...attRoles.CM, ...attRoles.AM, ...attRoles.WIDE_MID, ...attRoles.FB, ...attRoles.WB],
+    attRoles.ST.filter(player => attackerRoleFor(player) === 'falseNine'),
+    attPlayers.filter(player => attackerRoleFor(player) === 'boxToBox')
+  ).filter(player => getRoleWeightMultiplier(attackerRoleFor(player), 'buildUp') > 0);
   const activeMid = progressionPool.length > 0
     ? weightedPick(progressionPool, p => {
       const role = inferRoleTag(p);
       const roleMult = role === 'DM' ? 1.1 : (role === 'CM' ? 1.25 : (role === 'AM' ? 1.3 : 1.0));
-      return (p.stats.passing + p.stats.dribbling * 0.4 + p.stats.pace * 0.2) * roleMult;
+      const playerRole = attackerRoleFor(p);
+      const roleBonus = getRoleStatBonus(playerRole, 'buildUp');
+      return (
+        roleAdjustedStat(p.stats.passing, roleBonus.passing) +
+        roleAdjustedStat(p.stats.dribbling, roleBonus.dribbling) * 0.4 +
+        p.stats.pace * 0.2
+      ) * roleMult * getRoleWeightMultiplier(playerRole, 'buildUp');
     }, rng)
     : (attPlayers.find(p => p.position === 'DEF') || attPlayers[0]);
 
-  const defensiveWall = [...defRoles.DM, ...defRoles.CM, ...defDef];
+  const defensiveWall = uniquePlayers(
+    [...defRoles.DM, ...defRoles.CM, ...defDef],
+    [...defRoles.ST, ...defRoles.WINGER].filter(player => defenderRoleFor(player) === 'pressingForward')
+  );
   const midDefending = defensiveWall.length > 0
-    ? (defensiveWall.reduce((sum, p) => sum + (p.stats.defending || 50), 0) / defensiveWall.length) * 0.90
+    ? (defensiveWall.reduce((sum, p) => {
+      const playerRole = defenderRoleFor(p);
+      const roleBonus = getRoleStatBonus(playerRole, 'defending');
+      const pressure = playerRole === 'pressingForward' ? p.stats.pace * 0.15 + p.stats.physical * 0.15 : 0;
+      return sum + (roleAdjustedStat(p.stats.defending || 50, roleBonus.defending) + pressure) * getRoleWeightMultiplier(playerRole, 'defending');
+    }, 0) / defensiveWall.length) * 0.90
     : 50;
   const gkSupport = gkDef[0]
     ? ((gkDef[0].stats.gk_positioning || gkDef[0].stats.gk_reflexes || 50) - 50) * 0.12
@@ -354,7 +370,8 @@ export const simulatePossession = (
 
   // UNDERDOG BUFF: Increased Chaos Factor (from 0.15 to 0.25) so lower teams get through more often
   const buildOutEdge = attShape.buildOutSupport - defShape.centralShield;
-  const phaseOneAttack = activeMid.stats.passing * passBonus * 1.1 * (1 + clamp(buildOutEdge * 0.02, -0.1, 0.16));
+  const activeMidBuildBonus = getRoleStatBonus(attackerRoleFor(activeMid), 'buildUp');
+  const phaseOneAttack = roleAdjustedStat(activeMid.stats.passing, activeMidBuildBonus.passing) * passBonus * 1.1 * (1 + clamp(buildOutEdge * 0.02, -0.1, 0.16));
   const phase1Success = runDuel(phaseOneAttack, phaseOneDefense * interceptBonus, ENGINE_CONFIG.DUEL_LUCK_MIDFIELD, rng);
   if (!phase1Success && random() > ENGINE_CONFIG.PHASE_ONE_FAIL_ESCAPE_CHANCE) {
     const midfieldFoulMultiplier = dTac.pressing === 'High'
@@ -376,23 +393,36 @@ export const simulatePossession = (
   const centralAttackWidth = attRoles.DM.length + attRoles.CM.length + attRoles.AM.length + attRoles.ST.length;
   const shapeWideDelta = (attShape.widePresence - defShape.widePresence) * 0.03;
   const shapeCentralPenalty = (defShape.centralShield - attShape.centralShield) * 0.015;
+  const invertedWingerBias = attRoles.WINGER.filter(player => attackerRoleFor(player) === 'invertedWinger').length * -0.06;
+  const wideRoleBias = uniquePlayers(attRoles.FB, attRoles.WB, attRoles.WIDE_MID)
+    .filter(player => ['wingBack', 'wideMidfielder'].includes(attackerRoleFor(player)))
+    .length * 0.04;
   const wideRouteChance = clamp(
-    ENGINE_CONFIG.WIDE_ROUTE_BASE_CHANCE + (wideAttackWidth - centralAttackWidth) * 0.04 + shapeWideDelta - shapeCentralPenalty,
+    ENGINE_CONFIG.WIDE_ROUTE_BASE_CHANCE + (wideAttackWidth - centralAttackWidth) * 0.04 + shapeWideDelta - shapeCentralPenalty + invertedWingerBias + wideRoleBias,
     ENGINE_CONFIG.WIDE_ROUTE_MIN_CHANCE,
     ENGINE_CONFIG.WIDE_ROUTE_MAX_CHANCE
   );
   const isWideRoute = random() < wideRouteChance;
 
+  const attackingWingBacks = [...attRoles.FB, ...attRoles.WB].filter(player => attackerRoleFor(player) === 'wingBack');
+  const boxToBoxCreators = attPlayers.filter(player => attackerRoleFor(player) === 'boxToBox');
   const creatorPool = isWideRoute
-    ? [...attRoles.WINGER, ...attRoles.WB, ...attRoles.WIDE_MID, ...attRoles.AM]
-    : [...attRoles.AM, ...attRoles.CM, ...attRoles.DM, ...attRoles.ST];
+    ? uniquePlayers([...attRoles.WINGER, ...attRoles.WB, ...attRoles.WIDE_MID, ...attRoles.AM], attackingWingBacks, boxToBoxCreators)
+    : uniquePlayers([...attRoles.AM, ...attRoles.CM, ...attRoles.DM, ...attRoles.ST], boxToBoxCreators);
   const creatorFallback = [...fwdAtt, ...midAtt];
-  const creatorCandidates = creatorPool.length > 0 ? creatorPool : creatorFallback;
+  const creatorCandidates = (creatorPool.length > 0 ? creatorPool : creatorFallback)
+    .filter(player => getRoleWeightMultiplier(attackerRoleFor(player), 'creation') > 0);
   const creator = creatorCandidates.length > 0
     ? weightedPick(creatorCandidates, p => {
       const role = inferRoleTag(p);
       const roleBoost = role === 'AM' ? 1.25 : (role === 'CM' ? 1.1 : 1.0);
-      return (p.stats.passing * 0.9 + p.stats.dribbling * 0.8 + p.stats.pace * 0.3) * roleBoost;
+      const playerRole = attackerRoleFor(p);
+      const roleBonus = getRoleStatBonus(playerRole, 'creation');
+      return (
+        roleAdjustedStat(p.stats.passing, roleBonus.passing) * 0.9 +
+        roleAdjustedStat(p.stats.dribbling, roleBonus.dribbling) * 0.8 +
+        p.stats.pace * 0.3
+      ) * roleBoost * getRoleWeightMultiplier(playerRole, 'creation');
     }, rng)
     : attPlayers[0];
 
@@ -400,13 +430,18 @@ export const simulatePossession = (
     ? [...defRoles.FB, ...defRoles.WB, ...defRoles.CB]
     : [...defRoles.DM, ...defRoles.CM, ...defRoles.CB];
   const activeDefender = defenderPool.length > 0
-    ? weightedPick(defenderPool, p => (p.stats.defending || 50) + p.stats.pace * 0.15, rng)
+    ? weightedPick(defenderPool, p => {
+      const roleBonus = getRoleStatBonus(defenderRoleFor(p), 'defending');
+      return roleAdjustedStat(p.stats.defending || 50, roleBonus.defending) + p.stats.pace * 0.15;
+    }, rng)
     : (defDef[0] || defPlayers[0]);
 
   const creatorRole = inferRoleTag(creator);
+  const creatorPlayerRole = attackerRoleFor(creator);
+  const creatorRoleBonus = getRoleStatBonus(creatorPlayerRole, 'creation');
   const shieldStrength = avgStat([...defRoles.DM, ...defRoles.CM], p => (p.stats.defending || 50), 55);
   const throughBallSkill = creator.stats.passing > 70 ? 1.0 : 0.9;
-  const roleThroughBallBoost = creatorRole === 'AM' || creatorRole === 'CM' ? 1.08 : 1.0;
+  const roleThroughBallBoost = (creatorRole === 'AM' || creatorRole === 'CM' ? 1.08 : 1.0) * (1 + (creatorRoleBonus.throughBall || 0));
   const shieldPenalty = shieldStrength > 72 ? 0.9 : 1.0;
   const shapeThroughBallBoost = attShape.finalThirdPresence > defShape.centralShield ? 1.05 : 0.95;
   const compactBlockPenalty = defShape.lineLoad.def >= 5 ? 0.96 : 1.0;
@@ -415,17 +450,21 @@ export const simulatePossession = (
   );
 
   // Use Physicality for target-man types in Phase 2
+  const creatorPassing = roleAdjustedStat(creator.stats.passing, creatorRoleBonus.passing);
+  const creatorDribbling = roleAdjustedStat(creator.stats.dribbling || 70, creatorRoleBonus.dribbling);
+  const creatorPhysical = roleAdjustedStat(creator.stats.physical || 70, creatorRoleBonus.physical);
   let creationStat = isThroughBall
-    ? (creator.stats.passing * 1.1)
-    : Math.max(creator.stats.dribbling || 70, (creator.stats.physical || 70) * 0.9);
-  if (isWideRoute) creationStat = Math.max(creationStat, creator.stats.pace * 0.95 + creator.stats.dribbling * 0.4);
+    ? (creatorPassing * 1.1)
+    : Math.max(creatorDribbling, creatorPhysical * 0.9);
+  if (isWideRoute) creationStat = Math.max(creationStat, creator.stats.pace * 0.95 + creatorDribbling * 0.4);
 
   creationStat *= passBonus;
   const routeShapeBoost = isWideRoute
     ? (1 + clamp((attShape.widePresence - defShape.widePresence) * 0.02, -0.08, 0.12))
     : (1 + clamp((attShape.centralShield - defShape.centralShield) * 0.02, -0.08, 0.1));
   creationStat *= routeShapeBoost;
-  let defenderStat = (activeDefender.stats.defending || 60) * defensiveBonus;
+  const activeDefenderBonus = getRoleStatBonus(defenderRoleFor(activeDefender), 'defending');
+  let defenderStat = roleAdjustedStat(activeDefender.stats.defending || 60, activeDefenderBonus.defending) * defensiveBonus;
 
   if (isThroughBall && isHighLine) defenderStat *= 0.85;
   if (isThroughBall && isDeepLine) defenderStat *= 1.1;
@@ -441,7 +480,9 @@ export const simulatePossession = (
   }
 
   // Phase 3: Finishing
-  const attackingOptions = [...attRoles.ST, ...attRoles.WINGER, ...attRoles.AM, ...midAtt];
+  const roleFinishers = attPlayers.filter(player => ['getForward', 'boxToBox', 'invertedWinger', 'targetMan'].includes(attackerRoleFor(player)));
+  const attackingOptions = uniquePlayers([...attRoles.ST, ...attRoles.WINGER, ...attRoles.AM, ...midAtt], roleFinishers)
+    .filter(player => getRoleWeightMultiplier(attackerRoleFor(player), 'finishing') > 0);
   const possibleFinishers = attackingOptions.length > 0 ? attackingOptions : attPlayers;
   const finisher = weightedPick(possibleFinishers, p => {
     const shooting = p.stats.shooting || 50;
@@ -451,11 +492,12 @@ export const simulatePossession = (
       role === 'WINGER' ? 1.2 :
       role === 'AM' ? 1.05 :
       (p.position === 'MID' ? 0.85 : 0.3);
-    return Math.max(1, shooting - 55) * roleMultiplier;
+    return Math.max(1, shooting - 55) * roleMultiplier * getRoleWeightMultiplier(attackerRoleFor(p), 'finishing');
   }, rng);
 
   const gk = gkDef[0] || defPlayers[0];
   let shotStat = (finisher.stats.shooting || 70) * shootingBonus;
+  shotStat *= 1 + (getRoleStatBonus(attackerRoleFor(finisher), 'finishing').shooting || 0);
   shotStat *= 1 + clamp((attShape.boxTargetPresence - defShape.lineLoad.def) * 0.025, -0.08, 0.1);
 
   // Toned down impact boost further to prevent 150-goal seasons

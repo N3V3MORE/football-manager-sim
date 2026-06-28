@@ -1,7 +1,8 @@
 import { getSlotsForFormation } from '../constants/formations';
-import { Formation, GameState, Player, TeamTactics } from '../models/types';
+import { Formation, GameState, Player, PlayerRole, TeamTactics } from '../models/types';
 import { rebuildFormationMap } from '../core/formationMapUtils';
 import { isPlayerUnavailable } from '../core/playerStatusUtils';
+import { getCompatiblePlayerRolesForSlot, sanitizePlayerRolesForTeam } from '../core/playerRoleEngine';
 
 type LineupActionState = Pick<GameState, 'players' | 'teams' | 'userTeamId'>;
 type LineupActionResult = LineupActionState | Partial<Pick<GameState, 'players' | 'teams'>>;
@@ -112,13 +113,23 @@ export const setFormationState = (
     const teamStarters = Object.values(updatedPlayers)
       .filter(player => player.teamId === teamId && player.isStarting && !isPlayerUnavailable(player));
     const formationMap = rebuildFormationMap(getSlotsForFormation(formation), teamStarters, existingMap);
+    const nextTeam = { ...team, activeFormation: formation, formationMap };
+    const playerRoles = formation === team.activeFormation
+      ? sanitizePlayerRolesForTeam(nextTeam)
+      : undefined;
     return {
-      teams: { ...state.teams, [teamId]: { ...team, activeFormation: formation, formationMap } },
+      teams: { ...state.teams, [teamId]: { ...nextTeam, playerRoles } },
       players: updatedPlayers,
     };
   }
 
-  const updatedTeam = { ...team, activeFormation: formation };
+  const updatedTeam = {
+    ...team,
+    activeFormation: formation,
+    playerRoles: formation === team.activeFormation
+      ? sanitizePlayerRolesForTeam(team)
+      : undefined,
+  };
   const teamPlayers = Object.values(state.players)
     .filter(player => player.teamId === teamId)
     .sort((a, b) => b.overallRating - a.overallRating);
@@ -164,10 +175,42 @@ export const setFormationState = (
   }
 
   updatedTeam.formationMap = formationMap;
+  updatedTeam.playerRoles = {};
 
   return {
     teams: { ...state.teams, [teamId]: updatedTeam },
     players: updatedPlayers,
+  };
+};
+
+export const setPlayerRoleState = (
+  state: LineupActionState,
+  teamId: string,
+  slotKey: string,
+  role: PlayerRole
+): LineupActionResult => {
+  const team = state.teams[teamId];
+  const slot = getFormationSlot(team, slotKey);
+  if (!team || !slot) return state;
+
+  const compatible = getCompatiblePlayerRolesForSlot(slot.label);
+  if (!compatible.includes(role)) return state;
+
+  const nextRoles = { ...(team.playerRoles || {}) };
+  if (role === 'default') {
+    delete nextRoles[slotKey];
+  } else {
+    nextRoles[slotKey] = role;
+  }
+
+  return {
+    teams: {
+      ...state.teams,
+      [teamId]: {
+        ...team,
+        playerRoles: Object.keys(nextRoles).length > 0 ? nextRoles : undefined,
+      },
+    },
   };
 };
 

@@ -8,6 +8,7 @@ import type {
   Team,
 } from './fixture-competition';
 import type { InboxMessage } from './inbox';
+import type { TransferNegotiation } from './transfer';
 
 type BoardObjectiveType = 'position' | 'goalDiff' | 'spend' | 'max_spend' | 'wins' | 'cup_round';
 export type BoardReviewVerdict = 'thriving' | 'stable' | 'warning' | 'critical';
@@ -101,6 +102,7 @@ export interface GameState {
   userTeamId: string | null;
   teams: Record<string, Team>;
   players: Record<string, Player>;
+  pendingNegotiations?: TransferNegotiation[];
   fixtures: Record<string, Fixture>;
   competitions: Record<string, CompetitionState>;
   news: string[];

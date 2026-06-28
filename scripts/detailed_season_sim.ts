@@ -73,9 +73,7 @@ async function runDetailedSim() {
   let redCards = 0;
   let yellowCards = 0;
   let redCardLogMismatches = 0;
-  const seasonWeeks = getSeasonWeekLimit(state.fixtures, state.competitions);
-
-  for (let w = 1; w <= seasonWeeks; w++) {
+  for (let w = 1; w <= getSeasonWeekLimit(state.fixtures, state.competitions); w++) {
     outputLog.push(`\n--- WEEK ${w} ---`);
     const weekFixtures = Object.values(state.fixtures).filter(f => f.week === w);
 

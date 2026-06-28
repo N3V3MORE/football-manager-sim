@@ -6,6 +6,8 @@ import { color, space } from '@/src/design/tokens';
 
 export type TransferDialogState =
   | { type: 'buy'; player: Player; fee: string; wage: string }
+  | { type: 'negotiation'; negotiationId: string; player: Player; fee: string; wage: string; askingPrice: number }
+  | { type: 'freeAgent'; player: Player; wage: string }
   | { type: 'sell'; player: Player; price: string }
   | null;
 
@@ -24,7 +26,15 @@ export function TransferDialog({
   onChangeValue,
   onSubmit,
 }: TransferDialogProps) {
-  const title = dialog ? (dialog.type === 'buy' ? 'Make Transfer Offer' : 'List Player') : '';
+  const title = dialog
+    ? dialog.type === 'buy'
+      ? 'Make Transfer Offer'
+      : dialog.type === 'negotiation'
+        ? 'Submit Transfer Bid'
+      : dialog.type === 'freeAgent'
+        ? 'Offer Contract'
+        : 'List Player'
+    : '';
   return (
     <ModalSheet
       visible={dialog !== null}
@@ -37,7 +47,7 @@ export function TransferDialog({
         <>
           <Button title="Cancel" variant="secondary" onPress={onClose} style={{ flex: 1 }} />
           <Button
-            title={dialog?.type === 'buy' ? 'Submit Offer' : 'List Player'}
+            title={dialog?.type === 'buy' || dialog?.type === 'negotiation' || dialog?.type === 'freeAgent' ? 'Submit Offer' : 'List Player'}
             variant="primary"
             onPress={onSubmit}
             style={{ flex: 1 }}
@@ -45,7 +55,7 @@ export function TransferDialog({
         </>
       }
     >
-      {dialog?.type === 'buy' && (
+      {(dialog?.type === 'buy' || dialog?.type === 'negotiation') && (
         <>
           <Text style={styles.fieldLabel}>Transfer fee (GBP millions)</Text>
           <TextInput
@@ -56,7 +66,7 @@ export function TransferDialog({
             placeholderTextColor={color.text.faint}
           />
           <Text style={styles.fieldHint}>
-            Asking price: GBP {dialog.player.askingPrice.toFixed(1)}m | Budget: GBP {budget.toFixed(1)}m
+            Asking price: GBP {(dialog.type === 'negotiation' ? dialog.askingPrice : dialog.player.askingPrice).toFixed(1)}m | Budget: GBP {budget.toFixed(1)}m
           </Text>
 
           <Text style={styles.fieldLabel}>Wage (GBP k/week)</Text>
@@ -68,6 +78,20 @@ export function TransferDialog({
             placeholderTextColor={color.text.faint}
           />
           <Text style={styles.fieldHint}>Current wage: GBP {dialog.player.wage}k/w</Text>
+        </>
+      )}
+
+      {dialog?.type === 'freeAgent' && (
+        <>
+          <Text style={styles.fieldLabel}>Wage (GBP k/week)</Text>
+          <TextInput
+            value={dialog.wage}
+            onChangeText={(value) => onChangeValue('wage', value)}
+            keyboardType="number-pad"
+            style={styles.input}
+            placeholderTextColor={color.text.faint}
+          />
+          <Text style={styles.fieldHint}>Expected wage: GBP {dialog.player.wage}k/w</Text>
         </>
       )}
 

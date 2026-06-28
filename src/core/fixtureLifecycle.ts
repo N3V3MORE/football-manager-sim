@@ -120,7 +120,7 @@ export const getAdministrativeFixtureOutcome = (
       ? (homeCanPlay ? fixture.homeTeamId : fixture.awayTeamId)
       : undefined,
     resolution: 'forfeit' as const,
-    includeTableStats: fixture.competitionType === 'league',
+    includeTableStats: fixture.competitionType === 'league' && fixture.round === 'league',
   };
 };
 

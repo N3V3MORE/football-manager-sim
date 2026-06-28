@@ -6,6 +6,7 @@ import { useGameStore } from '@/src/store/gameStore';
 import { Formation, Player, TeamTactics } from '@/src/models/types';
 import { getSlotsForFormation, Slot } from '@/src/constants/formations';
 import { getSlotFitScore, rebuildFormationMap, rebuildFormationSlotPlayers } from '@/src/core/formationMapUtils';
+import { getCompatiblePlayerRolesForSlot, PLAYER_ROLE_DESCRIPTIONS, PLAYER_ROLE_LABELS } from '@/src/core/playerRoleEngine';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
 import { CompactPlayerCard } from '@/components/squad/compact-player-card';
 import { DraggableDot, getPitchSlotPosition, PITCH_DOT_SIZE, PITCH_SLOT_HEIGHT, PITCH_SLOT_WIDTH } from '@/components/squad/draggable-dot';
@@ -109,6 +110,8 @@ export default function SquadScreen() {
   const setTactics    = useGameStore(s => s.setTactics);
   const swapPlayer    = useGameStore(s => s.swapPlayer);
   const markAsSub     = useGameStore(s => s.markAsSub);
+  const setTrainingFocus = useGameStore(s => s.setTrainingFocus);
+  const setPlayerRole = useGameStore(s => s.setPlayerRole);
   const swapStartingSlots = useGameStore(s => s.swapStartingSlots);
 
   const [scrollEnabled, setScrollEnabled] = useState(true);
@@ -260,8 +263,17 @@ export default function SquadScreen() {
   };
 
   const activeSlot = activeSlotIndex !== null ? slots[activeSlotIndex.row]?.[activeSlotIndex.col] : null;
+  const activeSlotKey = activeSlotIndex !== null ? `${activeSlotIndex.row}-${activeSlotIndex.col}` : null;
   const pickerSections = activeSlot ? getPickerSections(activeSlot) : null;
   const tactics = myTeam?.tactics;
+  const roleOptions = activeSlot
+    ? getCompatiblePlayerRolesForSlot(activeSlot.label).map(role => ({
+        label: PLAYER_ROLE_LABELS[role],
+        value: role,
+        description: PLAYER_ROLE_DESCRIPTIONS[role],
+      }))
+    : [];
+  const selectedRole = activeSlotKey ? (myTeam?.playerRoles?.[activeSlotKey] || 'default') : 'default';
 
   const PANE_SEGMENTS = [
     { label: 'Starting XI', value: 'xi' as const },
@@ -317,11 +329,13 @@ export default function SquadScreen() {
                         const assigned = slotPlayers[rowIdx]?.[colIdx];
                         const slotKey = `${rowIdx}-${colIdx}`;
                         const position = getPitchSlotPosition(rowIdx, colIdx, row.length, slots.length);
+                        const role = myTeam?.playerRoles?.[slotKey];
                         return (
                            <View key={slotKey} style={[styles.pitchSlotAnchor, position]}>
                              <DraggableDot
                                 slot={slot}
                                 assigned={assigned}
+                                roleLabel={role && role !== 'default' ? PLAYER_ROLE_LABELS[role].split(' ').map(part => part[0]).join('').slice(0, 3) : null}
                                 onPress={() => handleSlotPress(rowIdx, colIdx)}
                                 onDragBegin={() => { setScrollEnabled(false); measureSlots(); }}
                                 onDragEnd={(mx: number, my: number) => handleDragEnd(rowIdx, colIdx, mx, my)}
@@ -348,6 +362,7 @@ export default function SquadScreen() {
                     isExpanded={isExpanded}
                     onPress={() => setExpandedCardId(isExpanded ? null : player.id)}
                     onLongPress={() => handleSubToggle(player.id, true)}
+                    onTrainingFocusChange={setTrainingFocus}
                   />
                 );
               })}
@@ -366,6 +381,7 @@ export default function SquadScreen() {
                     isExpanded={isExpanded}
                     onPress={() => handleSubToggle(player.id, false)}
                     onLongPress={() => setExpandedCardId(isExpanded ? null : player.id)}
+                    onTrainingFocusChange={setTrainingFocus}
                   />
                 );
               })}
@@ -401,6 +417,11 @@ export default function SquadScreen() {
         visible={activeSlotIndex !== null}
         slot={activeSlot}
         sections={pickerSections}
+        roleOptions={roleOptions}
+        selectedRole={selectedRole}
+        onRoleSelect={(role) => {
+          if (activeSlotKey) setPlayerRole(userTeamId, activeSlotKey, role);
+        }}
         onClose={() => setActiveSlotIndex(null)}
         onPick={handlePickPlayer}
       />

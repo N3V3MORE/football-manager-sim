@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Player } from '@/src/models/types';
+import { Player, StatKey } from '@/src/models/types';
 import { getPositionColor } from '@/src/constants/positionColors';
 import { formatContractLength, getPlayerAvailabilityStatus, isContractExpiringSoon, isPlayerInjured } from '@/src/core/playerStatusUtils';
 
@@ -10,6 +10,26 @@ type CompactPlayerCardProps = {
   isExpanded: boolean;
   onPress: () => void;
   onLongPress: () => void;
+  onTrainingFocusChange?: (playerId: string, focus: StatKey | null) => void;
+};
+
+const TRAINING_OPTIONS: { label: string; value: StatKey | null }[] = [
+  { label: 'BAL', value: null },
+  { label: 'PAC', value: 'pace' },
+  { label: 'SHO', value: 'shooting' },
+  { label: 'PAS', value: 'passing' },
+  { label: 'DRI', value: 'dribbling' },
+  { label: 'DEF', value: 'defending' },
+  { label: 'PHY', value: 'physical' },
+];
+
+const STAT_LABELS: Record<StatKey, string> = {
+  pace: 'PAC',
+  shooting: 'SHO',
+  passing: 'PAS',
+  dribbling: 'DRI',
+  defending: 'DEF',
+  physical: 'PHY',
 };
 
 export function CompactPlayerCard({
@@ -18,6 +38,7 @@ export function CompactPlayerCard({
   isExpanded,
   onPress,
   onLongPress,
+  onTrainingFocusChange,
 }: CompactPlayerCardProps) {
   const isSuspended = item.matchesSuspended > 0;
   const isInjured = isPlayerInjured(item);
@@ -25,6 +46,9 @@ export function CompactPlayerCard({
   const isExpiring = isContractExpiringSoon(item);
   const warningColor = (isSuspended || isInjured || isExhausted || isExpiring) ? '#ef4444' : undefined;
   const statusLine = `${getPlayerAvailabilityStatus(item)} | ${formatContractLength(item)}`;
+  const trainingXp = Math.max(0, Math.min(99, item.trainingXp || 0));
+  const trainingGains = Object.entries(item.trainingStatGains || {})
+    .filter((entry): entry is [StatKey, number] => Number(entry[1]) > 0);
 
   return (
     <View>
@@ -101,6 +125,40 @@ export function CompactPlayerCard({
             <Text style={[styles.seasonStat, styles.yellowCardStat]}>YC {item.yellowCards}</Text>
             <Text style={[styles.seasonStat, styles.redCardStat]}>RC {item.redCards}</Text>
           </View>
+          {onTrainingFocusChange && (
+            <View style={styles.trainingPanel}>
+              <View style={styles.trainingHeader}>
+                <Text style={styles.trainingTitle}>Training</Text>
+                <Text style={styles.trainingMeta}>{trainingXp}/100 XP</Text>
+              </View>
+              <View style={styles.trainingProgressTrack}>
+                <View style={[styles.trainingProgressFill, { width: `${trainingXp}%` }]} />
+              </View>
+              <View style={styles.trainingOptions}>
+                {TRAINING_OPTIONS.map(option => {
+                  const selected = (item.trainingFocus ?? null) === option.value;
+                  return (
+                    <TouchableOpacity
+                      key={option.label}
+                      style={[styles.trainingOption, selected && styles.trainingOptionSelected]}
+                      onPress={() => onTrainingFocusChange(item.id, option.value)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                    >
+                      <Text style={[styles.trainingOptionText, selected && styles.trainingOptionTextSelected]}>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {trainingGains.length > 0 && (
+                <Text style={styles.trainingGains}>
+                  {trainingGains.map(([key, value]) => `${STAT_LABELS[key]} +${value}`).join('  ')}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -158,4 +216,56 @@ const styles = StyleSheet.create({
   seasonStat: { fontSize: 12, color: '#94a3b8', fontWeight: '700' },
   yellowCardStat: { color: '#F59E0B' },
   redCardStat: { color: '#ef4444' },
+  trainingPanel: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
+  },
+  trainingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  trainingTitle: { fontSize: 11, color: '#cbd5e1', fontWeight: '900', textTransform: 'uppercase' },
+  trainingMeta: { fontSize: 11, color: '#94a3b8', fontWeight: '800' },
+  trainingProgressTrack: {
+    height: 6,
+    backgroundColor: '#1e293b',
+    borderRadius: 0,
+    overflow: 'hidden',
+  },
+  trainingProgressFill: {
+    height: 6,
+    backgroundColor: '#22c55e',
+  },
+  trainingOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  trainingOption: {
+    minWidth: 38,
+    minHeight: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#111827',
+    paddingHorizontal: 7,
+  },
+  trainingOptionSelected: {
+    borderColor: '#22c55e',
+    backgroundColor: '#14532d',
+  },
+  trainingOptionText: { color: '#94a3b8', fontSize: 10, fontWeight: '900' },
+  trainingOptionTextSelected: { color: '#dcfce7' },
+  trainingGains: {
+    marginTop: 8,
+    color: '#86efac',
+    fontSize: 11,
+    fontWeight: '800',
+  },
 });

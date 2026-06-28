@@ -3,7 +3,7 @@ import { ENGINE_CONFIG } from '../config/engineConfig';
 import { getTeamMatchBench, getTeamMatchStarters } from './lineupEngine';
 import { applySharedPostMatchAccounting, PlayerMatchContribution } from './postMatchAccounting';
 import { rebuildFormationMap, removePlayerFromTeamSelections } from './formationMapUtils';
-import { applyMinuteCaps, buildStarterBenchMinuteMap } from './minuteMapUtils';
+import { applyMinuteCaps, buildStarterBenchMinuteMap, EXTRA_TIME_MATCH_MINUTES, REGULATION_MATCH_MINUTES } from './minuteMapUtils';
 import { applyMatchInjuries } from './injuryEngine';
 import { isPlayerUnavailable } from './playerStatusUtils';
 import { createFixtureEventRandomGenerator, RandomGenerator } from './random';
@@ -20,23 +20,27 @@ import {
 import { addPlayerStat, getFormModifier } from './matchUtils';
 import {
   buildCurrentMatchProfile,
-  resolvePenaltyShootoutWinner,
   selectPossessionAttacker,
   simulatePossession,
 } from './matchRuntime';
+import { simulatePenaltyShootout } from './matchTieResolution';
+import { getCompatiblePlayerRoleForTeamSlot, getRoleEnergyDrainMultiplier } from './playerRoleEngine';
 
 export { autoAssignLineup } from './lineupEngine';
 export { buildCurrentMatchProfile, resolvePenaltyShootoutWinner, selectPossessionAttacker, simulatePossession } from './matchRuntime';
 
-const drainQuickMatchEnergy = (players: Player[], team: Team) => {
+const drainQuickMatchEnergy = (players: Player[], team: Team, multiplier = 1) => {
   const drainMultiplier =
     (team.tactics.tempo === 'Fast' ? ENGINE_CONFIG.TEMPO_FAST_DRAIN_MULTIPLIER : 1.0) *
     (team.tactics.pressing === 'High' ? ENGINE_CONFIG.PRESSING_HIGH_DRAIN_MULTIPLIER : 1.0);
-  const drain = (ENGINE_CONFIG.BASE_POST_MATCH_ENERGY_DRAIN / ENGINE_CONFIG.TOTAL_POSSESSIONS) * drainMultiplier;
-  return players.map(player => ({
-    ...player,
-    energy: Math.max(0, player.energy - drain),
-  }));
+  const baseDrain = (ENGINE_CONFIG.BASE_POST_MATCH_ENERGY_DRAIN / ENGINE_CONFIG.TOTAL_POSSESSIONS) * drainMultiplier * multiplier;
+  return players.map(player => {
+    const roleDrainMultiplier = getRoleEnergyDrainMultiplier(getCompatiblePlayerRoleForTeamSlot(team, player));
+    return {
+      ...player,
+      energy: Math.max(0, player.energy - baseDrain * roleDrainMultiplier),
+    };
+  });
 };
 
 const replaceFormationMapPlayer = (team: Team, offPlayerId: string, onPlayerId: string): Team => {
@@ -193,6 +197,10 @@ export const quickSimMatch = (
   let forcedWinnerTeamId: string | undefined;
   let forcedResolution: Fixture['resolution'] | undefined;
   let forcedIncludeTableStats: boolean | undefined;
+  let maxMatchMinutes = REGULATION_MATCH_MINUTES;
+  let regulationHomeScore = 0;
+  let regulationAwayScore = 0;
+  let penaltyShootout: Fixture['penaltyShootout'] | undefined;
   const addContribution = (playerId: string, key: keyof PlayerMatchContribution) => {
     matchContributions[playerId] = {
       ...matchContributions[playerId],
@@ -235,10 +243,10 @@ export const quickSimMatch = (
         const offEntryMinute = entries[outfielderOff.id];
         minutes[outfielderOff.id] = offEntryMinute !== undefined
           ? Math.max(0, minute - offEntryMinute)
-          : Math.min(minutes[outfielderOff.id] || 90, minute);
+          : Math.min(minutes[outfielderOff.id] || maxMatchMinutes, minute);
         if (offEntryMinute !== undefined) delete entries[outfielderOff.id];
         entries[reserveGoalkeeper.id] = minute;
-        minutes[reserveGoalkeeper.id] = Math.max(minutes[reserveGoalkeeper.id] || 0, 90 - minute);
+        minutes[reserveGoalkeeper.id] = Math.max(minutes[reserveGoalkeeper.id] || 0, maxMatchMinutes - minute);
 
         if (isHome) {
           currentHomeXI = currentHomeXI.map(player => player.id === outfielderOff.id ? reserveGoalkeeper : player);
@@ -296,7 +304,7 @@ export const quickSimMatch = (
       const entryMinute = homeSubEntryMinutes[playerId];
       homeMinutes[playerId] = entryMinute !== undefined
         ? Math.max(0, minute - entryMinute)
-        : Math.min(homeMinutes[playerId] || 90, minute);
+        : Math.min(homeMinutes[playerId] || maxMatchMinutes, minute);
       if (entryMinute !== undefined) delete homeSubEntryMinutes[playerId];
       coverDismissedGoalkeeper('home', minute);
     }
@@ -306,14 +314,14 @@ export const quickSimMatch = (
       const entryMinute = awaySubEntryMinutes[playerId];
       awayMinutes[playerId] = entryMinute !== undefined
         ? Math.max(0, minute - entryMinute)
-        : Math.min(awayMinutes[playerId] || 90, minute);
+        : Math.min(awayMinutes[playerId] || maxMatchMinutes, minute);
       if (entryMinute !== undefined) delete awaySubEntryMinutes[playerId];
       coverDismissedGoalkeeper('away', minute);
     }
   };
 
   for (let i = 0; i < ENGINE_CONFIG.TOTAL_POSSESSIONS; i++) {
-    const minute = Math.max(1, Math.min(90, Math.ceil(((i + 1) * 90) / ENGINE_CONFIG.TOTAL_POSSESSIONS)));
+    const minute = Math.max(1, Math.min(REGULATION_MATCH_MINUTES, Math.ceil(((i + 1) * REGULATION_MATCH_MINUTES) / ENGINE_CONFIG.TOTAL_POSSESSIONS)));
     while (appliedCheckpointIndex < substitutionCheckpoints.length && minute >= substitutionCheckpoints[appliedCheckpointIndex]) {
       const subMinute = substitutionCheckpoints[appliedCheckpointIndex];
       applySubstitutions(currentHomeXI, availableHomeBench, sentOffPlayers, homeMinutes, homeTeam, hScore, aScore, rng, {
@@ -462,8 +470,150 @@ export const quickSimMatch = (
       }
     }
   }
-  applyMinuteCaps(homeMinutes, sentOffMinutes);
-  applyMinuteCaps(awayMinutes, sentOffMinutes);
+  regulationHomeScore = hScore;
+  regulationAwayScore = aScore;
+
+  const extendActivePlayersToMinute = (endMinute: number) => {
+    currentHomeXI.forEach(player => {
+      if (sentOffPlayers.has(player.id)) return;
+      const entryMinute = homeSubEntryMinutes[player.id] ?? 0;
+      homeMinutes[player.id] = Math.max(homeMinutes[player.id] || 0, endMinute - entryMinute);
+    });
+    currentAwayXI.forEach(player => {
+      if (sentOffPlayers.has(player.id)) return;
+      const entryMinute = awaySubEntryMinutes[player.id] ?? 0;
+      awayMinutes[player.id] = Math.max(awayMinutes[player.id] || 0, endMinute - entryMinute);
+    });
+  };
+
+  if (!forcedResolution && fixture.isKnockout && hScore === aScore) {
+    maxMatchMinutes = EXTRA_TIME_MATCH_MINUTES;
+    homeSubstitutionState.maxWindows = Math.max(homeSubstitutionState.maxWindows, 4);
+    awaySubstitutionState.maxWindows = Math.max(awaySubstitutionState.maxWindows, 4);
+    matchEvents.push('Extra time begins.');
+    let extraTimeSubstitutionApplied = false;
+
+    for (let i = 0; i < ENGINE_CONFIG.EXTRA_TIME_POSSESSIONS; i += 1) {
+      const minute = REGULATION_MATCH_MINUTES + Math.max(1, Math.min(30, Math.ceil(((i + 1) * 30) / ENGINE_CONFIG.EXTRA_TIME_POSSESSIONS)));
+      if (!extraTimeSubstitutionApplied && minute >= 105) {
+        applySubstitutions(currentHomeXI, availableHomeBench, sentOffPlayers, homeMinutes, homeTeam, hScore, aScore, rng, {
+          minuteOverride: 105,
+          playerEntryMinutes: homeSubEntryMinutes,
+          substitutionState: homeSubstitutionState,
+          matchEndMinute: EXTRA_TIME_MATCH_MINUTES,
+          onSubstitution: (offPlayer, onPlayer) => {
+            currentHomeXI = currentHomeXI.map(player => (player.id === offPlayer.id ? onPlayer : player));
+            availableHomeBench = availableHomeBench.filter(player => player.id !== onPlayer.id);
+            homeTeam = replaceFormationMapPlayer(homeTeam, offPlayer.id, onPlayer.id);
+            updatedTeams[homeTeam.id] = homeTeam;
+            if (offPlayer.id === homeGoalkeeperId || onPlayer.position === 'GK') homeGoalkeeperId = onPlayer.id;
+            refreshHomeProfile();
+            matchEvents.push(`${homeTeam.name} make an extra-time change: ${offPlayer.name} off, ${onPlayer.name} on.`);
+          },
+        });
+        applySubstitutions(currentAwayXI, availableAwayBench, sentOffPlayers, awayMinutes, awayTeam, aScore, hScore, rng, {
+          minuteOverride: 105,
+          playerEntryMinutes: awaySubEntryMinutes,
+          substitutionState: awaySubstitutionState,
+          matchEndMinute: EXTRA_TIME_MATCH_MINUTES,
+          onSubstitution: (offPlayer, onPlayer) => {
+            currentAwayXI = currentAwayXI.map(player => (player.id === offPlayer.id ? onPlayer : player));
+            availableAwayBench = availableAwayBench.filter(player => player.id !== onPlayer.id);
+            awayTeam = replaceFormationMapPlayer(awayTeam, offPlayer.id, onPlayer.id);
+            updatedTeams[awayTeam.id] = awayTeam;
+            if (offPlayer.id === awayGoalkeeperId || onPlayer.position === 'GK') awayGoalkeeperId = onPlayer.id;
+            refreshAwayProfile();
+            matchEvents.push(`${awayTeam.name} make an extra-time change: ${offPlayer.name} off, ${onPlayer.name} on.`);
+          },
+        });
+        extraTimeSubstitutionApplied = true;
+      }
+
+      currentHomeXI = drainQuickMatchEnergy(currentHomeXI, homeTeam, ENGINE_CONFIG.EXTRA_TIME_ENERGY_DRAIN_MULTIPLIER);
+      currentAwayXI = drainQuickMatchEnergy(currentAwayXI, awayTeam, ENGINE_CONFIG.EXTRA_TIME_ENERGY_DRAIN_MULTIPLIER);
+      refreshHomeProfile();
+      refreshAwayProfile();
+      const isHomeAttacking = selectPossessionAttacker(
+        homeTeam,
+        awayTeam,
+        scaledHome,
+        scaledAway,
+        homeShape,
+        awayShape,
+        rng
+      );
+      if (isHomeAttacking) homePossessions += 1;
+      else awayPossessions += 1;
+      const attTeam = isHomeAttacking ? homeTeam : awayTeam;
+      const defTeam = isHomeAttacking ? awayTeam : homeTeam;
+      const attPlayers = isHomeAttacking ? scaledHome : scaledAway;
+      const defPlayers = isHomeAttacking ? scaledAway : scaledHome;
+      const attShape = isHomeAttacking ? homeShape : awayShape;
+      const defShape = isHomeAttacking ? awayShape : homeShape;
+
+      const poss = simulatePossession(
+        attTeam,
+        defTeam,
+        attPlayers,
+        defPlayers,
+        isHomeAttacking ? hScore : aScore,
+        isHomeAttacking ? aScore : hScore,
+        attShape,
+        defShape,
+        rng,
+        matchYellowCards
+      );
+      if (poss.event) matchEvents.push(`[ET ${minute}'] ${poss.event}`);
+      if (poss.shot) {
+        if (isHomeAttacking) {
+          homeShots += 1;
+          if (poss.shot.onTarget) homeShotsOnTarget += 1;
+        } else {
+          awayShots += 1;
+          if (poss.shot.onTarget) awayShotsOnTarget += 1;
+        }
+      }
+      if (poss.goal) {
+        if (isHomeAttacking) {
+          hScore += 1;
+          homeGoalMinutes.push(minute);
+        } else {
+          aScore += 1;
+          awayGoalMinutes.push(minute);
+        }
+        if (poss.scorer) addPlayerStat(updatedPlayers, poss.scorer.id, 'goals');
+        if (poss.scorer) addContribution(poss.scorer.id, 'goals');
+        if (poss.assister) addPlayerStat(updatedPlayers, poss.assister.id, 'assists');
+        if (poss.assister) addContribution(poss.assister.id, 'assists');
+      }
+      if (poss.foul) {
+        const playerId = poss.foul.player.id;
+        if (sentOffPlayers.has(playerId)) continue;
+        if (poss.foul.type === 'Y') {
+          if (matchYellowCards.has(playerId)) {
+            addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+            addContribution(playerId, 'yellowCards');
+            sendOffPlayer(playerId, minute);
+            addContribution(playerId, 'redCards');
+            matchEvents.push(`${poss.foul.player.name} receives a second yellow and is sent off.`);
+          } else {
+            addPlayerStat(updatedPlayers, playerId, 'yellowCards');
+            addContribution(playerId, 'yellowCards');
+            matchYellowCards.add(playerId);
+          }
+        } else {
+          sendOffPlayer(playerId, minute);
+          addContribution(playerId, 'redCards');
+        }
+      }
+    }
+    if (hScore === aScore) matchEvents.push('Extra time cannot separate them. Penalties will decide it.');
+    else matchEvents.push(`${hScore > aScore ? homeTeam.name : awayTeam.name} win after extra time.`);
+  }
+
+  extendActivePlayersToMinute(maxMatchMinutes);
+  applyMinuteCaps(homeMinutes, sentOffMinutes, maxMatchMinutes);
+  applyMinuteCaps(awayMinutes, sentOffMinutes, maxMatchMinutes);
 
   const homeParticipants = [...homeStarters, ...homeBench];
   const awayParticipants = [...awayStarters, ...awayBench];
@@ -479,6 +629,7 @@ export const quickSimMatch = (
     updatedPlayers,
     rng,
     playerMatchContributions: matchContributions,
+    maxMatchMinutes,
   });
   applySharedPostMatchAccounting({
     teamParticipants: awayParticipants,
@@ -492,6 +643,7 @@ export const quickSimMatch = (
     updatedPlayers,
     rng,
     playerMatchContributions: matchContributions,
+    maxMatchMinutes,
   });
   [
     ...applyMatchInjuries(homeParticipants, homeMinutes, updatedPlayers, fixture.week, rng),
@@ -512,7 +664,7 @@ export const quickSimMatch = (
     resolution = forcedResolution;
   } else if (fixture.isKnockout) {
     if (hScore === aScore) {
-      winnerTeamId = resolvePenaltyShootoutWinner(
+      penaltyShootout = simulatePenaltyShootout(
         homeTeam,
         awayTeam,
         currentHomeXI.filter(player => !sentOffPlayers.has(player.id)),
@@ -520,11 +672,12 @@ export const quickSimMatch = (
         rng,
         GLOBAL_HOME_ADVANTAGE
       );
+      winnerTeamId = penaltyShootout.winnerTeamId;
       resolution = 'penalties';
       matchEvents.push(`${updatedTeams[winnerTeamId].name} keep their nerve and advance on penalties.`);
     } else {
       winnerTeamId = hScore > aScore ? homeTeam.id : awayTeam.id;
-      resolution = 'regular';
+      resolution = regulationHomeScore === regulationAwayScore ? 'extra_time' : 'regular';
     }
   }
 
@@ -535,6 +688,17 @@ export const quickSimMatch = (
     isPlayed: true,
     winnerTeamId,
     resolution,
+    scoreBreakdown: fixture.isKnockout && regulationHomeScore === regulationAwayScore
+      ? {
+          regulationHomeScore,
+          regulationAwayScore,
+          extraTimeHomeScore: hScore,
+          extraTimeAwayScore: aScore,
+          penaltyHomeScore: penaltyShootout?.homeScore,
+          penaltyAwayScore: penaltyShootout?.awayScore,
+        }
+      : undefined,
+    penaltyShootout,
   };
   const matchSummary = userTeamId && (fixture.homeTeamId === userTeamId || fixture.awayTeamId === userTeamId)
     ? buildMatchSummary({
@@ -555,10 +719,11 @@ export const quickSimMatch = (
         awayShotsOnTarget,
         homePossessions,
         awayPossessions,
+        maxMatchMinutes,
       })
     : undefined;
   const fixtureWithSummary = matchSummary ? { ...updatedFixture, matchSummary } : updatedFixture;
-  const includeTableStats = forcedIncludeTableStats ?? fixture.competitionType === 'league';
+  const includeTableStats = forcedIncludeTableStats ?? (fixture.competitionType === 'league' && fixture.round === 'league');
 
   const finalizedTeams = applyFixtureTeamResults(
     fixtureWithSummary,

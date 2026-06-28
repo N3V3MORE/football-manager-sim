@@ -6,6 +6,7 @@ import { RandomGenerator, resolveRandom } from './random';
 import { computeMarketValue } from '../utils/calendar';
 import { isPlayerUnavailable } from './playerStatusUtils';
 import { FREE_AGENT_TEAM_ID, isPlayableClub } from './freeAgentPool';
+import { computeWeeklyTraining } from './trainingEngine';
 
 export { computeWeeklyTransfers } from './transferEngine';
 
@@ -189,6 +190,25 @@ export const computeWeeklyProgression = (
       };
     }
   });
+
+  Object.values(updatedPlayers).forEach(player => {
+    const team = teams[player.teamId];
+    if (!team || !isPlayableClub(team)) return;
+    const currentPlayer = updatedPlayers[player.id];
+    const trainingPatch = computeWeeklyTraining(
+      currentPlayer,
+      team,
+      currentWeek,
+      random,
+      team.id === userTeamId ? undefined : { xpMultiplier: 0.65, focusOverride: null }
+    );
+    if (Object.keys(trainingPatch).length > 0) {
+      updatedPlayers[player.id] = {
+        ...currentPlayer,
+        ...trainingPatch,
+      };
+    }
+  });
   trimActiveSubstitutes(updatedPlayers, teams);
 
   const updatedTeams = { ...teams };
@@ -247,7 +267,14 @@ export const computeWeeklyProgression = (
     }, {});
     Object.values(updatedPlayers).forEach(player => {
       const team = updatedTeams[player.teamId];
-      let overallRating = player.overallRating + getSeasonProgressionDelta(player, team, playedMatchesByTeam[player.teamId], random);
+      const delta = getSeasonProgressionDelta(player, team, playedMatchesByTeam[player.teamId], random);
+      const potential = typeof player.potential === 'number' && Number.isFinite(player.potential)
+        ? Math.max(1, Math.min(99, player.potential))
+        : undefined;
+      let overallRating = player.overallRating + delta;
+      if (delta > 0 && potential !== undefined) {
+        overallRating = Math.min(overallRating, potential);
+      }
       overallRating = Math.max(1, Math.min(99, overallRating));
 
       const nextAge = player.age + 1;

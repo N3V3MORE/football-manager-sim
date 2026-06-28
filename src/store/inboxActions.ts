@@ -2,6 +2,7 @@ import { GameState } from '../models/types';
 import { moveUserManagerToTeam } from '../core/careerEngine';
 import { renewPlayerContractState } from './contractActions';
 import { applyLineupSuggestionToTeam } from './lineupActions';
+import { acceptTransferCounterState, withdrawTransferNegotiationState } from './transferActions';
 import {
   generateAssistantWeekMessages,
   getInboxSeason,
@@ -21,7 +22,7 @@ type InboxActionState = Pick<
   | 'inboxMessages'
   | 'boardObjectives'
   | 'careerRecord'
->;
+> & Partial<Pick<GameState, 'pendingNegotiations'>>;
 
 type InboxActionPatch = InboxActionState | Partial<InboxActionState>;
 
@@ -87,6 +88,30 @@ export const applyInboxActionState = (
       players: nextPlayers,
       teams: nextTeams,
       inboxMessages: (renewalResult.patch.inboxMessages ?? state.inboxMessages).map(item =>
+        item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+      ),
+    };
+  } else if (message.action.type === 'accept_transfer_counter') {
+    const result = acceptTransferCounterState(state, message.action.payload.negotiationId);
+    if (!result.result.success) {
+      return {
+        inboxMessages: state.inboxMessages.map(item =>
+          item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+        ),
+      };
+    }
+
+    return {
+      ...result.patch,
+      inboxMessages: (result.patch.inboxMessages ?? state.inboxMessages).map(item =>
+        item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+      ),
+    };
+  } else if (message.action.type === 'withdraw_transfer_negotiation') {
+    const patch = withdrawTransferNegotiationState(state, message.action.payload.negotiationId);
+    return {
+      ...patch,
+      inboxMessages: state.inboxMessages.map(item =>
         item.id === messageId ? { ...item, isRead: true, action: undefined } : item
       ),
     };

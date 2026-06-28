@@ -17,6 +17,7 @@ import {
   generateTransferInboxMessages,
   sanitizeFormationMaps,
 } from './weeklyAccounting';
+import { resolveWeeklyNegotiationsState } from './transferActions';
 import { rolloverSeasonIfNeeded } from './seasonRollover';
 import { ensureReferentialIntegrity } from './persistence';
 
@@ -58,6 +59,13 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
     news: progression.news,
     players: progression.players,
     teams: progression.teams,
+  };
+
+  // Resolve user negotiations before AI transfer decisions can act on the same target.
+  const negotiationState = resolveWeeklyNegotiationsState(nextState);
+  nextState = {
+    ...nextState,
+    ...negotiationState,
   };
 
   // Match the analysis scripts: update week state before transfer decisions.
@@ -132,12 +140,14 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
  * `advanceWeek` in the store.
  */
 export const skipToEndOfSeasonState = <TState extends WeeklyLifecycleState>(state: TState): TState => {
-  const maxWeek = getSeasonWeekLimit(state.fixtures, state.competitions);
-  if (maxWeek <= 0) return state;
+  const initialMaxWeek = getSeasonWeekLimit(state.fixtures, state.competitions);
+  if (initialMaxWeek <= 0) return state;
   let current = state;
-  let guard = maxWeek + 20;
+  let guard = initialMaxWeek + 60;
   try {
-    while (current.currentWeek <= maxWeek && guard-- > 0) {
+    while (guard-- > 0) {
+      const maxWeek = getSeasonWeekLimit(current.fixtures, current.competitions);
+      if (maxWeek <= 0 || current.currentWeek > maxWeek) break;
       const next = advanceWeekState(current);
       const fixedTeams = ensureReferentialIntegrity(next.teams ?? current.teams, next.players ?? current.players);
       current = { ...next, teams: fixedTeams } as TState;

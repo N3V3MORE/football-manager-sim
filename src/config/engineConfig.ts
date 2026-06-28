@@ -1,6 +1,8 @@
 export const ENGINE_CONFIG = {
   // MATCH TIMING & PACING
   TOTAL_POSSESSIONS: 28, // Scaled down from 35 to drastically reduce excessive shot attempts
+  EXTRA_TIME_POSSESSIONS: 9,
+  EXTRA_TIME_ENERGY_DRAIN_MULTIPLIER: 1.5,
   ENERGY_DRAIN_PER_MINUTE: 0.25, // Energy lost per minute played
   WEEKLY_ENERGY_RECOVERY: 25, // Energy regained after a week (reduced from 50 to make rotation meaningful)
 

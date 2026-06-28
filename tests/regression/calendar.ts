@@ -1,4 +1,4 @@
-import { FREE_AGENT_TEAM_ID, Player, advanceSeason, assert, computeMarketValue, computeWeeklyProgression, createFreeAgentTeam, createSeededRandom, getCompetitionPanelForTeam, getSeasonWeekLimit, getSquadPolicy, initGameData, readSource } from './shared';
+import { FREE_AGENT_TEAM_ID, Player, advanceSeason, assert, computeMarketValue, computeWeeklyProgression, createFreeAgentTeam, createSeededRandom, getCompetitionPanelForTeam, getSeasonWeekLimit, getSquadPolicy, initGameData, readSource, resolveCompetitionProgression } from './shared';
 
 export const checkCompetitionPanelHandlesMissingTeam = () => {
   const data = initGameData('Arsenal');
@@ -60,7 +60,19 @@ export const checkPromotionRelegation = () => {
     });
   });
 
-  const nextSeason = advanceSeason(data.players, teams, data.competitions, null, []);
+  const championshipTable = Object.values(teams)
+    .filter(team => team.division === 'Championship')
+    .sort((a, b) => b.points - a.points || b.goalsFor - a.goalsFor || a.name.localeCompare(b.name));
+  const playoffWinner = championshipTable[5];
+  const competitions = {
+    ...data.competitions,
+    championship: {
+      ...data.competitions.championship,
+      playoffWinnerTeamId: playoffWinner.id,
+    },
+  };
+
+  const nextSeason = advanceSeason(data.players, teams, competitions, null, []);
   const nextCounts = Object.values(nextSeason.teams).reduce<Record<string, number>>((acc, team) => {
     acc[team.division] = (acc[team.division] || 0) + 1;
     return acc;
@@ -72,17 +84,154 @@ export const checkPromotionRelegation = () => {
   assert(nextCounts['League One'] === 24, 'League One should keep 24 teams after promotion/relegation');
   assert(nextCounts['League Two'] === 24, 'League Two should keep 24 teams after promotion/relegation');
 
-  const championshipTop = Object.values(teams)
-    .filter(team => team.division === 'Championship')
-    .sort((a, b) => b.points - a.points || b.goalsFor - a.goalsFor || a.name.localeCompare(b.name))
-    .slice(0, 3);
+  const championshipAutoPromoted = championshipTable.slice(0, 2);
+  const championshipThird = championshipTable[2];
   const premierBottom = Object.values(teams)
     .filter(team => team.division === 'Premier League')
     .sort((a, b) => a.points - b.points || a.goalsFor - b.goalsFor || a.name.localeCompare(b.name))
     .slice(0, 3);
 
-  assert(championshipTop.every(team => nextSeason.teams[team.id].division === 'Premier League'), 'Top Championship teams should be promoted');
+  assert(championshipAutoPromoted.every(team => nextSeason.teams[team.id].division === 'Premier League'), 'Top two Championship teams should be promoted automatically');
+  assert(nextSeason.teams[playoffWinner.id].division === 'Premier League', 'Championship play-off winner should be promoted');
+  assert(nextSeason.teams[championshipThird.id].division === 'Championship', 'Third place should not be auto-promoted when play-offs produce a different winner');
   assert(premierBottom.every(team => nextSeason.teams[team.id].division === 'Championship'), 'Bottom Premier League teams should be relegated');
+};
+
+export const checkEflPlayoffsAreScheduledAfterRegularSeason = () => {
+  const data = initGameData();
+  const teams = { ...data.teams };
+  const championshipTeams = Object.values(teams)
+    .filter(team => team.division === 'Championship')
+    .sort((a, b) => a.name.localeCompare(b.name));
+  championshipTeams.forEach((team, index) => {
+    teams[team.id] = {
+      ...team,
+      points: 1000 - index,
+      goalsFor: 1000 - index,
+      goalsAgainst: index,
+      wins: 30 - index,
+      draws: 0,
+      losses: index,
+      played: 46,
+    };
+  });
+  const fixtures = Object.fromEntries(Object.entries(data.fixtures).map(([fixtureId, fixture]) => [
+    fixtureId,
+    fixture.competitionId === 'championship' && fixture.round === 'league'
+      ? { ...fixture, isPlayed: true, homeScore: 1, awayScore: 0 }
+      : fixture,
+  ]));
+
+  const progressed = resolveCompetitionProgression(fixtures, data.competitions, teams, { next: createSeededRandom(2026062804) });
+  const semiFixtures = Object.values(progressed.fixtures).filter(fixture => (
+    fixture.competitionId === 'championship' &&
+    fixture.round === 'semi_final'
+  ));
+  const regularSeasonLimit = Math.max(
+    ...Object.values(fixtures)
+      .filter(fixture => fixture.competitionId === 'championship' && fixture.round === 'league')
+      .map(fixture => fixture.week)
+  );
+
+  assert(semiFixtures.length === 4, `Championship play-offs should schedule four semi-final legs, got ${semiFixtures.length}`);
+  assert(semiFixtures.every(fixture => !fixture.isKnockout), 'Play-off semi-final legs should not be standalone knockout fixtures');
+  assert(semiFixtures.every(fixture => fixture.week > regularSeasonLimit), 'Play-off semi-finals should be after the regular season');
+  assert(
+    progressed.competitions.championship.rounds.some(round => round.key === 'semi_final' && round.fixtureIds.length === 4),
+    'Championship competition state should include a semi-final play-off round'
+  );
+};
+
+export const checkEflPlayoffSemiFinalsUseAggregateTiebreak = () => {
+  const data = initGameData();
+  const teams = { ...data.teams };
+  const championshipTeams = Object.values(teams)
+    .filter(team => team.division === 'Championship')
+    .sort((a, b) => a.name.localeCompare(b.name));
+  championshipTeams.forEach((team, index) => {
+    teams[team.id] = {
+      ...team,
+      points: 1000 - index,
+      goalsFor: 1000 - index,
+      goalsAgainst: index,
+      wins: 30 - index,
+      draws: 0,
+      losses: index,
+      played: 46,
+    };
+  });
+  const playedLeagueFixtures = Object.fromEntries(Object.entries(data.fixtures).map(([fixtureId, fixture]) => [
+    fixtureId,
+    fixture.competitionId === 'championship' && fixture.round === 'league'
+      ? { ...fixture, isPlayed: true, homeScore: 1, awayScore: 0 }
+      : fixture,
+  ]));
+  const withSemis = resolveCompetitionProgression(playedLeagueFixtures, data.competitions, teams, { next: createSeededRandom(2026062806) });
+  const semiRound = withSemis.competitions.championship.rounds.find(round => round.key === 'semi_final');
+  assert(semiRound?.fixtureIds.length === 4, 'Aggregate tiebreak regression needs four scheduled semi-final legs');
+  const [firstAId, secondAId, firstBId, secondBId] = semiRound!.fixtureIds;
+  const firstA = withSemis.fixtures[firstAId];
+  const secondA = withSemis.fixtures[secondAId];
+  const firstB = withSemis.fixtures[firstBId];
+  const secondB = withSemis.fixtures[secondBId];
+  assert(firstA && secondA && firstB && secondB, 'Aggregate tiebreak regression needs all semi-final fixtures');
+
+  const playedSemiFixtures = {
+    ...withSemis.fixtures,
+    [firstAId]: { ...firstA, isPlayed: true, homeScore: 2, awayScore: 0 },
+    [secondAId]: { ...secondA, isPlayed: true, homeScore: 2, awayScore: 0 },
+    [firstBId]: { ...firstB, isPlayed: true, homeScore: 0, awayScore: 1 },
+    [secondBId]: { ...secondB, isPlayed: true, homeScore: 1, awayScore: 0 },
+  };
+
+  const withFinal = resolveCompetitionProgression(playedSemiFixtures, withSemis.competitions, teams, { next: () => 0 });
+  const finalRound = withFinal.competitions.championship.rounds.find(round => round.key === 'final');
+  const finalFixture = finalRound?.fixtureIds[0] ? withFinal.fixtures[finalRound.fixtureIds[0]] : undefined;
+  assert(finalFixture, 'Aggregate semi-final winners should schedule a play-off final');
+  assert(
+    withFinal.fixtures[secondAId].winnerTeamId === firstA.homeTeamId,
+    'Aggregate-tied semi-final should use aggregate tiebreak winner, not second-leg match winner'
+  );
+  assert(withFinal.fixtures[secondAId].resolution === 'penalties', 'Aggregate-tied semi-final should mark second leg as penalties');
+  assert(
+    finalFixture!.homeTeamId === firstA.homeTeamId || finalFixture!.awayTeamId === firstA.homeTeamId,
+    'Play-off final should include aggregate tiebreak winner'
+  );
+  assert(
+    finalFixture!.homeTeamId === secondB.homeTeamId || finalFixture!.awayTeamId === secondB.homeTeamId,
+    'Play-off final should include clear aggregate winner from the other semi-final'
+  );
+};
+
+export const checkRolloverWaitsForPlayoffFinal = () => {
+  const data = initGameData();
+  const teams = { ...data.teams };
+  const championshipTeams = Object.values(teams)
+    .filter(team => team.division === 'Championship')
+    .sort((a, b) => a.name.localeCompare(b.name));
+  championshipTeams.forEach((team, index) => {
+    teams[team.id] = {
+      ...team,
+      points: 1000 - index,
+      goalsFor: 1000 - index,
+      goalsAgainst: index,
+      wins: 30 - index,
+      draws: 0,
+      losses: index,
+      played: 46,
+    };
+  });
+  const playedLeagueFixtures = Object.fromEntries(Object.entries(data.fixtures).map(([fixtureId, fixture]) => [
+    fixtureId,
+    fixture.competitionId === 'championship' && fixture.round === 'league'
+      ? { ...fixture, isPlayed: true, homeScore: 1, awayScore: 0 }
+      : fixture,
+  ]));
+  const progressed = resolveCompetitionProgression(playedLeagueFixtures, data.competitions, teams, { next: createSeededRandom(2026062805) });
+  const seasonWeekLimit = getSeasonWeekLimit(progressed.fixtures, progressed.competitions);
+  const oldSeasonWeekLimit = getSeasonWeekLimit(data.fixtures, data.competitions);
+
+  assert(seasonWeekLimit > oldSeasonWeekLimit, 'Season week limit should extend while play-offs are unresolved');
 };
 
 export const checkSeasonReportsUseCompetitionLifecycleAndLeagueTables = () => {

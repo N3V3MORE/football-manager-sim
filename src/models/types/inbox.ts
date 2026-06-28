@@ -50,6 +50,18 @@ export type InboxAction =
       payload: {
         teamId: string;
       };
+    }
+  | {
+      type: 'accept_transfer_counter';
+      payload: {
+        negotiationId: string;
+      };
+    }
+  | {
+      type: 'withdraw_transfer_negotiation';
+      payload: {
+        negotiationId: string;
+      };
     };
 
 export interface InboxMessage {

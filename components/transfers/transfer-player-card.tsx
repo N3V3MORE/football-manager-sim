@@ -8,6 +8,9 @@ type TransferPlayerCardProps = {
   actionLabel: string;
   actionVariant?: 'primary' | 'danger';
   onAction: () => void;
+  secondaryActionLabel?: string;
+  secondaryActionVariant?: 'primary' | 'danger';
+  onSecondaryAction?: () => void;
 };
 
 export function TransferPlayerCard({
@@ -16,6 +19,9 @@ export function TransferPlayerCard({
   actionLabel,
   actionVariant = 'primary',
   onAction,
+  secondaryActionLabel,
+  secondaryActionVariant = 'primary',
+  onSecondaryAction,
 }: TransferPlayerCardProps) {
   return (
     <View style={styles.card}>
@@ -38,6 +44,16 @@ export function TransferPlayerCard({
             {actionLabel}
           </Text>
         </TouchableOpacity>
+        {secondaryActionLabel && onSecondaryAction ? (
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.secondaryActionBtn, secondaryActionVariant === 'danger' && styles.actionBtnDanger]}
+            onPress={onSecondaryAction}
+          >
+            <Text style={[styles.actionText, styles.secondaryActionText, secondaryActionVariant === 'danger' && styles.actionTextDanger]}>
+              {secondaryActionLabel}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </View>
   );
@@ -55,6 +71,8 @@ const styles = StyleSheet.create({
   rating: { color: '#0f172a', fontWeight: '900', fontSize: 12 },
   actionBtn: { backgroundColor: '#38bdf8', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 0 },
   actionBtnDanger: { backgroundColor: '#ef4444' },
+  secondaryActionBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#64748b' },
   actionText: { color: '#0f172a', fontWeight: '900', fontSize: 12 },
+  secondaryActionText: { color: '#cbd5e1' },
   actionTextDanger: { color: '#fff' },
 });

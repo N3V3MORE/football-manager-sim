@@ -3,6 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import {
   Formation,
   GameState,
+  PlayerRole,
+  StatKey,
   TeamTactics,
 } from '../models/types';
 import { initGameData } from '../utils/initGame';
@@ -25,6 +27,7 @@ import {
 import { applyInboxActionState } from './inboxActions';
 import {
   markAsSubState,
+  setPlayerRoleState,
   setFormationState,
   setTacticsState,
   swapPlayerState,
@@ -32,10 +35,15 @@ import {
   toggleStartingState,
 } from './lineupActions';
 import {
+  acceptTransferCounterState,
+  approachPlayerState,
   buyPlayerState,
   listPlayerForSaleState,
   processWeeklyTransfersState,
+  signFreeAgentState,
+  submitBidState,
   unlistPlayerState,
+  withdrawTransferNegotiationState,
 } from './transferActions';
 import { buildManagedTeamObjectives } from './managedTeamObjectives';
 import { DEFAULT_GAME_STATE, PERSIST_STORAGE_KEY, ensureReferentialIntegrity, safeStorage, sanitizePersistedState } from './persistence';
@@ -59,6 +67,8 @@ interface GameStore extends GameState {
   setFormation: (teamId: string, formation: Formation) => void;
   toggleStarting: (playerId: string) => void;
   markAsSub: (playerId: string) => void;
+  setTrainingFocus: (playerId: string, focus: StatKey | null) => void;
+  setPlayerRole: (teamId: string, slotKey: string, role: PlayerRole) => void;
   setTactics: (teamId: string, tactics: Partial<TeamTactics>) => void;
   swapPlayer: (removeId: string | null, addId: string, slotKey?: string) => void;
   swapStartingSlots: (teamId: string, slotA: string, slotB: string) => void;
@@ -66,7 +76,12 @@ interface GameStore extends GameState {
   clearStuckLiveMatches: () => number;
   changeTeam: (teamId: string) => void;
   // Transfer System
+  approachPlayer: (playerId: string) => { success: boolean; message: string };
   buyPlayer: (playerId: string, fee: number, wageOffered: number) => { success: boolean; message: string };
+  submitTransferBid: (negotiationId: string, fee: number, wageOffered: number) => { success: boolean; message: string };
+  acceptTransferCounter: (negotiationId: string) => { success: boolean; message: string };
+  withdrawTransferNegotiation: (negotiationId: string) => void;
+  signFreeAgent: (playerId: string, wageOffered: number) => { success: boolean; message: string };
   listPlayerForSale: (playerId: string, askingPrice: number) => void;
   unlistPlayer: (playerId: string) => void;
   processWeeklyTransfers: () => void;
@@ -141,6 +156,7 @@ export const useGameStore = create<GameStore>()(
           boardObjectives: objectives,
           news: initialNews,
           inboxMessages,
+          pendingNegotiations: [],
           careerRecord: { ...createDefaultCareerRecord(), userManager: initialUserManager },
           liveMatches: {},
           boardReviewAppliedWeek: 0,
@@ -242,6 +258,29 @@ export const useGameStore = create<GameStore>()(
         set(state => markAsSubState(state, playerId));
       },
 
+      setTrainingFocus: (playerId: string, focus: StatKey | null) => {
+        set(state => {
+          const player = state.players[playerId];
+          if (!player || player.teamId !== state.userTeamId) return state;
+          return {
+            players: {
+              ...state.players,
+              [playerId]: {
+                ...player,
+                trainingFocus: focus,
+                trainingXp: player.trainingXp ?? 0,
+                trainingStatProgress: player.trainingStatProgress ?? 0,
+                trainingStatGains: player.trainingStatGains ?? {},
+              },
+            },
+          };
+        });
+      },
+
+      setPlayerRole: (teamId: string, slotKey: string, role: PlayerRole) => {
+        set(state => setPlayerRoleState(state, teamId, slotKey, role));
+      },
+
       skipToEndOfSeason: () => {
         set(state => skipToEndOfSeasonState(state));
       },
@@ -282,10 +321,54 @@ export const useGameStore = create<GameStore>()(
         set(state => changeTeamState(state, teamId));
       },
 
+      approachPlayer: (playerId: string) => {
+        let result: StoreActionResult = { success: false, message: '' };
+        set(state => {
+          const update = approachPlayerState(state, playerId);
+          result = update.result;
+          return update.patch;
+        });
+        return result;
+      },
+
       buyPlayer: (playerId: string, fee: number, wageOffered: number) => {
         let result: StoreActionResult = { success: false, message: '' };
         set(state => {
           const update = buyPlayerState(state, playerId, fee, wageOffered);
+          result = update.result;
+          return update.patch;
+        });
+        return result;
+      },
+
+      submitTransferBid: (negotiationId: string, fee: number, wageOffered: number) => {
+        let result: StoreActionResult = { success: false, message: '' };
+        set(state => {
+          const update = submitBidState(state, negotiationId, fee, wageOffered);
+          result = update.result;
+          return update.patch;
+        });
+        return result;
+      },
+
+      acceptTransferCounter: (negotiationId: string) => {
+        let result: StoreActionResult = { success: false, message: '' };
+        set(state => {
+          const update = acceptTransferCounterState(state, negotiationId);
+          result = update.result;
+          return update.patch;
+        });
+        return result;
+      },
+
+      withdrawTransferNegotiation: (negotiationId: string) => {
+        set(state => withdrawTransferNegotiationState(state, negotiationId));
+      },
+
+      signFreeAgent: (playerId: string, wageOffered: number) => {
+        let result: StoreActionResult = { success: false, message: '' };
+        set(state => {
+          const update = signFreeAgentState(state, playerId, wageOffered);
           result = update.result;
           return update.patch;
         });

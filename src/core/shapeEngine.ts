@@ -2,6 +2,9 @@ import { Slot, getSlotsForFormation } from '../constants/formations';
 import { Player, Team } from '../models/types';
 import { LaneTag, RoleTag, ShapeAccumulator, TeamShapeProfile } from './matchTypes';
 import { inferRoleTag } from './matchUtils';
+import { getCompatiblePlayerRoleForTeamSlot, getRoleShapeAdjustment } from './playerRoleEngine';
+
+type ShapeRoleAdjustments = Partial<Pick<TeamShapeProfile, 'widePresence' | 'centralShield' | 'finalThirdPresence' | 'boxTargetPresence' | 'buildOutSupport'>>;
 
 const createRoleLoad = (): Record<RoleTag, number> => ({
   GK: 0,
@@ -59,13 +62,14 @@ const finalizeShapeProfile = (
   laneLoad: Record<LaneTag, number>,
   lineLoad: { def: number; mid: number; fwd: number },
   roleLoad: Record<RoleTag, number>,
-  gkDistribution: number
+  gkDistribution: number,
+  adjustments: ShapeRoleAdjustments = {}
 ): TeamShapeProfile => {
-  const widePresence = laneLoad.left + laneLoad.right + roleLoad.WINGER * 0.6 + roleLoad.WB * 0.5 + roleLoad.WIDE_MID * 0.4;
-  const centralShield = roleLoad.DM * 1.2 + roleLoad.CM * 0.8 + roleLoad.CB * 0.35;
-  const finalThirdPresence = roleLoad.ST * 1.5 + roleLoad.AM * 0.9 + roleLoad.WINGER * 0.8 + lineLoad.fwd * 0.25;
-  const boxTargetPresence = roleLoad.ST + roleLoad.AM * 0.35 + roleLoad.WINGER * 0.2;
-  const buildOutSupport = roleLoad.DM * 1.0 + roleLoad.CM * 0.8 + roleLoad.FB * 0.35 + roleLoad.WB * 0.45 + (gkDistribution - 50) * 0.03;
+  const widePresence = laneLoad.left + laneLoad.right + roleLoad.WINGER * 0.6 + roleLoad.WB * 0.5 + roleLoad.WIDE_MID * 0.4 + (adjustments.widePresence || 0);
+  const centralShield = roleLoad.DM * 1.2 + roleLoad.CM * 0.8 + roleLoad.CB * 0.35 + (adjustments.centralShield || 0);
+  const finalThirdPresence = roleLoad.ST * 1.5 + roleLoad.AM * 0.9 + roleLoad.WINGER * 0.8 + lineLoad.fwd * 0.25 + (adjustments.finalThirdPresence || 0);
+  const boxTargetPresence = roleLoad.ST + roleLoad.AM * 0.35 + roleLoad.WINGER * 0.2 + (adjustments.boxTargetPresence || 0);
+  const buildOutSupport = roleLoad.DM * 1.0 + roleLoad.CM * 0.8 + roleLoad.FB * 0.35 + roleLoad.WB * 0.45 + (gkDistribution - 50) * 0.03 + (adjustments.buildOutSupport || 0);
   return {
     laneLoad,
     lineLoad,
@@ -107,6 +111,14 @@ export const buildTeamShapeProfile = (
   const lineLoad = { def: 0, mid: 0, fwd: 0 };
   const roleLoad = createRoleLoad();
   const gkAccumulator: ShapeAccumulator = { gkDistributionAccumulator: 0, gkSamples: 0 };
+  const roleAdjustments: ShapeRoleAdjustments = {};
+  const addRoleAdjustments = (player: Player) => {
+    const role = getCompatiblePlayerRoleForTeamSlot(team, player);
+    const adjustment = getRoleShapeAdjustment(role);
+    (Object.keys(adjustment) as (keyof ShapeRoleAdjustments)[]).forEach(key => {
+      roleAdjustments[key] = (roleAdjustments[key] || 0) + (adjustment[key] || 0);
+    });
+  };
 
   const uniqueStarters = Array.from(new Map(
     starters.map(player => [player.id, player])
@@ -138,6 +150,7 @@ export const buildTeamShapeProfile = (
       laneLoad[inferLaneFromSlot(slot, colIdx, row.length)] += 1;
       addLineLoadFromSlot(lineLoad, slot.pos);
       addGkDistributionSample(gkAccumulator, role, player);
+      addRoleAdjustments(player);
     });
   });
 
@@ -147,10 +160,11 @@ export const buildTeamShapeProfile = (
     laneLoad[inferLaneFromPlayer(player)] += 1;
     lineLoad[inferLineFromRole(role)] += 1;
     addGkDistributionSample(gkAccumulator, role, player);
+    addRoleAdjustments(player);
   });
 
   const gkDistribution = gkAccumulator.gkSamples > 0
     ? gkAccumulator.gkDistributionAccumulator / gkAccumulator.gkSamples
     : 50;
-  return finalizeShapeProfile(laneLoad, lineLoad, roleLoad, gkDistribution);
+  return finalizeShapeProfile(laneLoad, lineLoad, roleLoad, gkDistribution, roleAdjustments);
 };

@@ -1,5 +1,5 @@
 import { CareerRecord, CompetitionId, CompetitionState, Manager, SeasonSummary, Team, TrophyEntry, UserManagerIdentity } from '../models/types';
-import { DIVISION_ORDER, PROMOTION_COUNT, RELEGATION_COUNT, sortTeamsByTable } from './leagueUtils';
+import { DIVISION_ORDER, LEAGUE_COMPETITION_BY_DIVISION, PROMOTION_COUNT, RELEGATION_COUNT, sortTeamsByTable } from './leagueUtils';
 import { getCompetitionResultForTeam } from './competitionEngine';
 import { getReviewVerdict, getSackingApprovalThreshold } from './boardEngine';
 import { appointReplacementManager, calculateAgeFromDob } from './managerUtils';
@@ -205,8 +205,10 @@ export const buildSeasonSummary = (
   const hasLowerDivision = divIndex < DIVISION_ORDER.length - 1;
 
   let outcome: SeasonSummary['outcome'] = 'stayed';
+  const leagueCompetition = competitions[LEAGUE_COMPETITION_BY_DIVISION[leagueDivision]];
+  const isPlayoffPromoted = hasUpperDivision && leagueCompetition?.playoffWinnerTeamId === team.id;
   if (position === 1) outcome = 'champion';
-  else if (hasUpperDivision && position <= PROMOTION_COUNT) outcome = 'promoted';
+  else if (hasUpperDivision && (position <= (leagueCompetition?.playoffWinnerTeamId ? 2 : PROMOTION_COUNT) || isPlayoffPromoted)) outcome = 'promoted';
   else if (hasLowerDivision && totalTeams > 0 && position > totalTeams - RELEGATION_COUNT) outcome = 'relegated';
 
   return {

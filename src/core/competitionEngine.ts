@@ -18,7 +18,7 @@ import {
 } from './leagueUtils';
 import { RandomGenerator, resolveRandom } from './random';
 import { isPlayableClub } from './freeAgentPool';
-import { dateOrdinalToWeek } from '../utils/calendar';
+import { dateOrdinalToWeek, LEAGUE_END_ORDINAL } from '../utils/calendar';
 
 const PREMIER_LEAGUE_DATE_ORDINALS = Array.from({ length: 42 }, (_, index) => index * 7)
   .filter(dateOrdinal => ![21, 84, 126, 189].includes(dateOrdinal));
@@ -110,6 +110,11 @@ const EUROPE_ROUNDS: CompetitionRoundKey[] = [
   'semi_final',
   'final',
 ];
+
+const PLAYOFF_DIVISIONS: LeagueDivision[] = ['Championship', 'League One', 'League Two'];
+const PLAYOFF_SEMI_FIRST_LEG_ORDINAL = LEAGUE_END_ORDINAL + 7;
+const PLAYOFF_SEMI_SECOND_LEG_ORDINAL = LEAGUE_END_ORDINAL + 14;
+const PLAYOFF_FINAL_ORDINAL = LEAGUE_END_ORDINAL + 21;
 
 const DIVISION_STRENGTH: Record<Team['division'], number> = {
   'Premier League': 0,
@@ -493,11 +498,8 @@ const resolveFixtureWinnerId = (fixture: Fixture, rng?: RandomGenerator): string
   if (fixture.resolution === 'void' || fixture.resolution === 'forfeit') return undefined;
   if ((fixture.homeScore || 0) > (fixture.awayScore || 0)) return fixture.homeTeamId;
   if ((fixture.awayScore || 0) > (fixture.homeScore || 0)) return fixture.awayTeamId;
-  // Tied knockout: resolve via penalty shootout instead of silently advancing the home team.
-  if (fixture.isKnockout) {
-    const random = resolveRandom(rng);
-    return random() < 0.5 ? fixture.homeTeamId : fixture.awayTeamId;
-  }
+  // Match engines are responsible for tied knockout ET/penalty resolution.
+  if (fixture.isKnockout) return undefined;
   // Non-knockout tie (should not normally reach competition progression).
   return fixture.homeTeamId;
 };
@@ -556,6 +558,287 @@ const describeRoundDraw = (
     .filter((value): value is string => Boolean(value));
   if (ties.length === 0) return `${competitionName} ${round.label} draw complete.`;
   return `${competitionName} ${round.label} draw: ${ties.join('; ')}.`;
+};
+
+const getLeaguePlayoffSeeds = (
+  division: LeagueDivision,
+  teams: Record<string, Team>
+) => sortTeamsByTable(
+  Object.values(teams).filter(team => isPlayableClub(team) && team.division === division)
+).slice(2, 6);
+
+const createPlayoffFixture = (
+  competitionId: CompetitionId,
+  division: LeagueDivision,
+  season: number,
+  counter: number,
+  round: CompetitionRoundKey,
+  dateOrdinal: number,
+  homeTeamId: string,
+  awayTeamId: string,
+  isKnockout = true
+): Fixture => {
+  const fixtureId = buildFixtureId(season, counter);
+  return {
+    id: fixtureId,
+    week: dateOrdinalToWeek(dateOrdinal),
+    dateOrdinal,
+    division,
+    competitionId,
+    competitionType: 'league',
+    round,
+    isKnockout,
+    homeTeamId,
+    awayTeamId,
+    homeScore: null,
+    awayScore: null,
+    isPlayed: false,
+  };
+};
+
+const getAggregateTiebreakEdge = (team?: Team, homeAdvantage = 1) => {
+  if (!team) return homeAdvantage;
+  const goalDifference = team.goalsFor - team.goalsAgainst;
+  return Math.max(1, team.points + goalDifference * 0.35 + team.goalsFor * 0.08) * homeAdvantage;
+};
+
+const getAggregateWinner = (
+  fixtureIds: string[],
+  fixtures: Record<string, Fixture>,
+  teams: Record<string, Team>,
+  rng?: RandomGenerator
+) => {
+  const goalsByTeam: Record<string, number> = {};
+  fixtureIds.forEach(fixtureId => {
+    const fixture = fixtures[fixtureId];
+    if (!fixture) return;
+    goalsByTeam[fixture.homeTeamId] = (goalsByTeam[fixture.homeTeamId] || 0) + (fixture.homeScore || 0);
+    goalsByTeam[fixture.awayTeamId] = (goalsByTeam[fixture.awayTeamId] || 0) + (fixture.awayScore || 0);
+  });
+  const teamIds = Object.keys(goalsByTeam);
+  if (teamIds.length < 2) return undefined;
+  const [leftId, rightId] = teamIds;
+  if (goalsByTeam[leftId] > goalsByTeam[rightId]) return leftId;
+  if (goalsByTeam[rightId] > goalsByTeam[leftId]) return rightId;
+  const secondLeg = fixtures[fixtureIds[fixtureIds.length - 1]];
+  if (!secondLeg) return undefined;
+  const random = resolveRandom(rng);
+  const leftEdge = getAggregateTiebreakEdge(teams[leftId], secondLeg.homeTeamId === leftId ? 1.03 : 1);
+  const rightEdge = getAggregateTiebreakEdge(teams[rightId], secondLeg.homeTeamId === rightId ? 1.03 : 1);
+  const winnerTeamId = (random() * Math.max(1, leftEdge + rightEdge)) < leftEdge ? leftId : rightId;
+  fixtures[secondLeg.id] = {
+    ...secondLeg,
+    winnerTeamId,
+    resolution: 'penalties',
+  };
+  return winnerTeamId;
+};
+
+const getAggregateLoser = (
+  fixtureIds: string[],
+  fixtures: Record<string, Fixture>,
+  winnerTeamId?: string
+) => {
+  if (!winnerTeamId) return undefined;
+  const teamIds = new Set<string>();
+  fixtureIds.forEach(fixtureId => {
+    const fixture = fixtures[fixtureId];
+    if (!fixture) return;
+    teamIds.add(fixture.homeTeamId);
+    teamIds.add(fixture.awayTeamId);
+  });
+  return Array.from(teamIds).find(teamId => teamId !== winnerTeamId);
+};
+
+const scheduleLeaguePlayoffSemiFinals = (
+  competition: CompetitionState,
+  fixtures: Record<string, Fixture>,
+  teams: Record<string, Team>,
+  fixtureCounterStart: number
+) => {
+  if (!competition.leagueDivision || !PLAYOFF_DIVISIONS.includes(competition.leagueDivision)) {
+    return null;
+  }
+  const seeds = getLeaguePlayoffSeeds(competition.leagueDivision, teams);
+  if (seeds.length < 4) return null;
+  const [third, fourth, fifth, sixth] = seeds;
+  const pairings = [
+    { highSeed: third, lowSeed: sixth },
+    { highSeed: fourth, lowSeed: fifth },
+  ];
+  const round = createRoundState('semi_final', PLAYOFF_SEMI_FIRST_LEG_ORDINAL);
+  const nextFixtures: Record<string, Fixture> = {};
+  let fixtureCounter = fixtureCounterStart;
+
+  pairings.forEach(pairing => {
+    const firstLeg = createPlayoffFixture(
+      competition.id,
+      competition.leagueDivision!,
+      competition.season,
+      fixtureCounter++,
+      'semi_final',
+      PLAYOFF_SEMI_FIRST_LEG_ORDINAL,
+      pairing.lowSeed.id,
+      pairing.highSeed.id,
+      false
+    );
+    const secondLeg = createPlayoffFixture(
+      competition.id,
+      competition.leagueDivision!,
+      competition.season,
+      fixtureCounter++,
+      'semi_final',
+      PLAYOFF_SEMI_SECOND_LEG_ORDINAL,
+      pairing.highSeed.id,
+      pairing.lowSeed.id,
+      false
+    );
+    nextFixtures[firstLeg.id] = firstLeg;
+    nextFixtures[secondLeg.id] = secondLeg;
+  });
+
+  return {
+    round: {
+      ...round,
+      label: 'Play-off Semi-final',
+      entrantTeamIds: seeds.map(team => team.id),
+      fixtureIds: Object.keys(nextFixtures),
+    },
+    fixtures: nextFixtures,
+    nextCounter: fixtureCounter,
+  };
+};
+
+const scheduleLeaguePlayoffFinal = (
+  competition: CompetitionState,
+  finalistTeamIds: string[],
+  fixtureCounterStart: number
+) => {
+  if (!competition.leagueDivision || finalistTeamIds.length < 2) return null;
+  const round = createRoundState('final', PLAYOFF_FINAL_ORDINAL);
+  const fixture = createPlayoffFixture(
+    competition.id,
+    competition.leagueDivision,
+    competition.season,
+    fixtureCounterStart,
+    'final',
+    PLAYOFF_FINAL_ORDINAL,
+    finalistTeamIds[0],
+    finalistTeamIds[1]
+  );
+  return {
+    round: {
+      ...round,
+      label: 'Play-off Final',
+      entrantTeamIds: finalistTeamIds,
+      fixtureIds: [fixture.id],
+    },
+    fixtures: { [fixture.id]: fixture },
+    nextCounter: fixtureCounterStart + 1,
+  };
+};
+
+const resolveLeaguePlayoffProgression = (
+  competition: CompetitionState,
+  fixtures: Record<string, Fixture>,
+  teams: Record<string, Team>,
+  fixtureCounterStart: number,
+  rng?: RandomGenerator
+) => {
+  if (!competition.leagueDivision || !PLAYOFF_DIVISIONS.includes(competition.leagueDivision)) {
+    return null;
+  }
+  let fixtureCounter = fixtureCounterStart;
+  const nextFixtures: Record<string, Fixture> = {};
+  const generatedNews: string[] = [];
+  const rounds = [...competition.rounds];
+  const leagueRoundIndex = rounds.findIndex(round => round.key === 'league');
+  const semiRoundIndex = rounds.findIndex(round => round.key === 'semi_final');
+  const finalRoundIndex = rounds.findIndex(round => round.key === 'final');
+  const leagueRound = leagueRoundIndex >= 0 ? rounds[leagueRoundIndex] : undefined;
+
+  if (leagueRound && semiRoundIndex < 0) {
+    if (leagueRound.fixtureIds.some(fixtureId => !fixtures[fixtureId]?.isPlayed)) return null;
+    const scheduledSemis = scheduleLeaguePlayoffSemiFinals(competition, fixtures, teams, fixtureCounter);
+    if (!scheduledSemis) return null;
+    fixtureCounter = scheduledSemis.nextCounter;
+    Object.assign(nextFixtures, scheduledSemis.fixtures);
+    rounds[leagueRoundIndex] = { ...leagueRound, completed: true };
+    rounds.push(scheduledSemis.round);
+    rounds.push({
+      ...createRoundState('final', PLAYOFF_FINAL_ORDINAL),
+      label: 'Play-off Final',
+    });
+    const updatedCompetition = {
+      ...competition,
+      rounds,
+      currentRound: 'semi_final' as const,
+    };
+    generatedNews.push(describeRoundDraw(updatedCompetition.name, scheduledSemis.round, scheduledSemis.fixtures, teams));
+    return { competition: updatedCompetition, fixtures: nextFixtures, nextCounter: fixtureCounter, generatedNews };
+  }
+
+  const semiRound = semiRoundIndex >= 0 ? rounds[semiRoundIndex] : undefined;
+  if (semiRound && !semiRound.completed && semiRound.fixtureIds.length > 0) {
+    if (semiRound.fixtureIds.some(fixtureId => !fixtures[fixtureId]?.isPlayed)) return null;
+    const pairIds = [semiRound.fixtureIds.slice(0, 2), semiRound.fixtureIds.slice(2, 4)];
+    const finalistTeamIds = pairIds
+      .map(ids => getAggregateWinner(ids, fixtures, teams, rng))
+      .filter((teamId): teamId is string => Boolean(teamId));
+    if (finalistTeamIds.length < 2) return null;
+    const loserTeamIds = pairIds
+      .map((ids, index) => getAggregateLoser(ids, fixtures, finalistTeamIds[index]))
+      .filter((teamId): teamId is string => Boolean(teamId));
+    const scheduledFinal = scheduleLeaguePlayoffFinal(competition, finalistTeamIds, fixtureCounter);
+    if (!scheduledFinal) return null;
+    fixtureCounter = scheduledFinal.nextCounter;
+    Object.assign(nextFixtures, scheduledFinal.fixtures);
+    rounds[semiRoundIndex] = {
+      ...semiRound,
+      completed: true,
+      winnerTeamIds: finalistTeamIds,
+    };
+    if (finalRoundIndex >= 0) rounds[finalRoundIndex] = scheduledFinal.round;
+    else rounds.push(scheduledFinal.round);
+    const updatedCompetition = {
+      ...competition,
+      rounds,
+      currentRound: 'final' as const,
+      eliminatedTeamIds: Array.from(new Set([...competition.eliminatedTeamIds, ...loserTeamIds])),
+    };
+    generatedNews.push(describeRoundDraw(updatedCompetition.name, scheduledFinal.round, scheduledFinal.fixtures, teams));
+    return { competition: updatedCompetition, fixtures: nextFixtures, nextCounter: fixtureCounter, generatedNews };
+  }
+
+  const finalRound = finalRoundIndex >= 0 ? rounds[finalRoundIndex] : undefined;
+  if (finalRound && !finalRound.completed && finalRound.fixtureIds.length > 0) {
+    if (finalRound.fixtureIds.some(fixtureId => !fixtures[fixtureId]?.isPlayed)) return null;
+    const finalFixtureId = finalRound.fixtureIds[0];
+    const winnerTeamId = resolveAndCacheFixtureWinner(fixtures, finalFixtureId);
+    if (!winnerTeamId) return null;
+    const runnerUpTeamId = resolveFixtureLoserIds(fixtures[finalFixtureId])[0];
+    rounds[finalRoundIndex] = {
+      ...finalRound,
+      completed: true,
+      winnerTeamIds: [winnerTeamId],
+    };
+    const updatedCompetition = {
+      ...competition,
+      rounds,
+      currentRound: 'final' as const,
+      playoffWinnerTeamId: winnerTeamId,
+      runnerUpTeamId,
+      eliminatedTeamIds: Array.from(new Set([
+        ...competition.eliminatedTeamIds,
+        ...(runnerUpTeamId ? [runnerUpTeamId] : []),
+      ])),
+    };
+    const winner = teams[winnerTeamId];
+    if (winner) generatedNews.push(`${winner.name} win the ${updatedCompetition.name} play-offs.`);
+    return { competition: updatedCompetition, fixtures: nextFixtures, nextCounter: fixtureCounter, generatedNews };
+  }
+
+  return null;
 };
 
 export const resolveCompetitionProgression = (
@@ -633,6 +916,17 @@ export const resolveCompetitionProgression = (
       updatedCompetition.currentRound = scheduledRound.round.key;
       nextCompetitions[competition.id] = updatedCompetition;
       generatedNews.push(describeRoundDraw(updatedCompetition.name, scheduledRound.round, scheduledRound.fixtures, teams));
+    });
+
+  Object.values(nextCompetitions)
+    .filter(competition => competition.type === 'league')
+    .forEach(competition => {
+      const progression = resolveLeaguePlayoffProgression(competition, nextFixtures, teams, fixtureCounter, rng);
+      if (!progression) return;
+      fixtureCounter = progression.nextCounter;
+      Object.assign(nextFixtures, progression.fixtures);
+      nextCompetitions[competition.id] = progression.competition;
+      generatedNews.push(...progression.generatedNews);
     });
 
   return {

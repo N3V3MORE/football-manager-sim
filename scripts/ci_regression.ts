@@ -1666,10 +1666,9 @@ const runSeason = (seed: number) => {
   const tacticalChangeCounts = Object.fromEntries(
     Object.values(state.teams).map(team => [team.id, 0])
   ) as Record<string, number>;
-  const seasonWeekLimit = getSeasonWeekLimit(state.fixtures, state.competitions);
   const formationUsage = { back3: 0, back4: 0, back5: 0 };
 
-  for (let week = 1; week <= seasonWeekLimit; week++) {
+  for (let week = 1; week <= getSeasonWeekLimit(state.fixtures, state.competitions); week++) {
     const weekStartSetups = Object.fromEntries(
       Object.values(state.teams).map(team => [team.id, buildTacticalSetupKey(team)])
     ) as Record<string, string>;

@@ -1,6 +1,7 @@
 import { BoardObjective, CompetitionState, Division, Fixture, LeagueDivision, Player, Team } from '../models/types';
 import {
   DIVISION_ORDER,
+  LEAGUE_COMPETITION_BY_DIVISION,
   PROMOTION_COUNT,
   RELEGATION_COUNT,
   sortTeamsByTable,
@@ -62,6 +63,22 @@ const getNextSeasonFinance = (team: Team, nextClubClass: string) => {
 const getDivisionTeams = (teams: Record<string, Team>, division: LeagueDivision) => (
   sortTeamsByTable(Object.values(teams).filter(team => isPlayableClub(team) && team.division === division))
 );
+
+const getPromotionTeams = (
+  division: LeagueDivision,
+  divisionTeams: Team[],
+  competitions: Record<string, CompetitionState>
+) => {
+  const competition = competitions[LEAGUE_COMPETITION_BY_DIVISION[division]];
+  if (division !== 'Premier League' && competition?.playoffWinnerTeamId) {
+    const automatic = divisionTeams.slice(0, 2);
+    const playoffWinner = divisionTeams.find(team => team.id === competition.playoffWinnerTeamId);
+    return playoffWinner && !automatic.some(team => team.id === playoffWinner.id)
+      ? [...automatic, playoffWinner]
+      : automatic;
+  }
+  return divisionTeams.slice(0, PROMOTION_COUNT);
+};
 
 const formatTeamList = (teams: Team[]) => teams.map(team => team.name).join(', ');
 
@@ -306,10 +323,10 @@ export const advanceSeason = (
     const divisionTeams = divisionTables[division] || [];
     const upperDivision = DIVISION_ORDER[index - 1];
     const lowerDivision = DIVISION_ORDER[index + 1];
-    const promotedCount = upperDivision ? Math.min(PROMOTION_COUNT, divisionTeams.length) : 0;
+    const promoted = upperDivision ? getPromotionTeams(division, divisionTeams, competitions) : [];
+    const promotedCount = promoted.length;
 
     if (upperDivision) {
-      const promoted = divisionTeams.slice(0, promotedCount);
       promoted.forEach(team => {
         nextDivisionByTeamId[team.id] = upperDivision;
       });

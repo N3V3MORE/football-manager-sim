@@ -1,4 +1,4 @@
-import { Formation, advanceWeekState, assert, createSeededRandom, finishLiveMatchState, initGameData, makeLiveSubstitutionsState, processLiveMatchMinuteState, sanitizePersistedState, setLiveMatchFormationState, useGameStore } from './shared';
+import { Fixture, Formation, advanceWeekState, assert, createSeededRandom, finishLiveMatchState, initGameData, makeLiveSubstitutionsState, processLiveMatchMinuteState, sanitizePersistedState, setLiveMatchFormationState, useGameStore } from './shared';
 
 const getUserLiveFixture = (state: any) => {
   const fixture = Object.values(state.fixtures)
@@ -286,6 +286,95 @@ export const checkLiveMatchSummaryIncludesStatsAndRatings = () => {
   assert(summary.awayTeamStats.shotsOnTarget >= (current.fixtures[fixture.id].awayScore || 0), 'Away SOT should cover away goals');
   assert(summary.playerRows.length >= 22, 'Live match summary should include player rating rows for both teams');
   assert(summary.manOfTheMatchPlayerId, 'Live match summary should select a man of the match');
+};
+
+export const checkLiveKnockoutExtraTimeTransition = () => {
+  const data = initGameData('Arsenal');
+  const fixture = Object.values(data.fixtures).find(item => item.isKnockout);
+  assert(fixture, 'Expected a knockout fixture for live extra-time regression');
+
+  let current: any = {
+    currentWeek: fixture!.week,
+    userTeamId: fixture!.homeTeamId,
+    teams: data.teams,
+    players: data.players,
+    fixtures: {
+      ...data.fixtures,
+      [fixture!.id]: {
+        ...fixture!,
+        homeScore: null,
+        awayScore: null,
+        isPlayed: false,
+        winnerTeamId: undefined,
+        resolution: undefined,
+      } as Fixture,
+    },
+    competitions: data.competitions,
+    news: [],
+    inboxMessages: [],
+    boardObjectives: [],
+    boardReviewAppliedWeek: 0,
+    transfersAppliedWeek: 0,
+    liveMatches: {},
+  };
+  current = processLiveFixtureThroughMinute(current, fixture!.id, 90, 20260634);
+  current = {
+    ...current,
+    fixtures: {
+      ...current.fixtures,
+      [fixture!.id]: {
+        ...current.fixtures[fixture!.id],
+        homeScore: 0,
+        awayScore: 0,
+      },
+    },
+  };
+  const userKeys = getLiveSideKeys(current.fixtures[fixture!.id], current.userTeamId);
+  const replacement = chooseOutfieldReplacement(current, current.liveMatches[fixture!.id], userKeys);
+  const liveAtEndOfRegulation = current.liveMatches[fixture!.id] as any;
+  current = {
+    ...current,
+    liveMatches: {
+      ...current.liveMatches,
+      [fixture!.id]: {
+        ...liveAtEndOfRegulation,
+        [userKeys.substitutionStateKey]: {
+          ...liveAtEndOfRegulation[userKeys.substitutionStateKey],
+          substitutesUsed: 3,
+          substitutionWindowsUsed: 3,
+          maxSubstitutes: 5,
+          maxWindows: 3,
+        },
+      },
+    },
+  };
+
+  const extraTimeSub = makeLiveSubstitutionsState(current, fixture!.id, [replacement]);
+  assert(extraTimeSub.result.success, 'Tied knockout should allow the extra substitution window at the 90-minute pause');
+  current = { ...current, ...extraTimeSub.patch };
+  const liveAfterExtraTimeSub = current.liveMatches[fixture!.id] as any;
+  assert(liveAfterExtraTimeSub[userKeys.substitutionStateKey].maxWindows === 4, 'Extra-time substitution should expose the fourth window');
+  assert(liveAfterExtraTimeSub[userKeys.substitutionStateKey].substitutionWindowsUsed === 4, 'Extra-time substitution should spend the fourth window');
+  assert(liveAfterExtraTimeSub[userKeys.minuteMapKey][replacement.onPlayerId] === 30, 'Extra-time substitute should be credited for the 30-minute remainder');
+
+  const extraTime = processLiveMatchMinuteState(current, fixture!.id, 91, { next: createSeededRandom(20260635) });
+  current = { ...current, ...extraTime.patch };
+  const liveAfterExtraTimeStart = current.liveMatches[fixture!.id] as any;
+  assert(extraTime.event === 'EXTRA TIME.', 'Minute 91 should announce extra time for tied knockout fixtures');
+  assert(liveAfterExtraTimeStart.extraTimeStarted, 'Live match should mark extra time as started');
+  assert(liveAfterExtraTimeStart.regulationHomeScore === 0 && liveAfterExtraTimeStart.regulationAwayScore === 0, 'Live extra time should preserve regulation score');
+  assert(liveAfterExtraTimeStart.homeSubstitutionState.maxWindows === 4, 'Home side should gain one extra-time substitution window');
+  assert(liveAfterExtraTimeStart.awaySubstitutionState.maxWindows === 4, 'Away side should gain one extra-time substitution window');
+
+  const finished: any = finishLiveMatchState(current, fixture!.id, { next: createSeededRandom(20260636) });
+  const finishedFixture = finished.fixtures[fixture!.id];
+  assert(finishedFixture.isPlayed, 'Live extra-time fixture should finish through minute 120');
+  assert(finishedFixture.scoreBreakdown?.regulationHomeScore === 0, 'Finished fixture should store regulation home score');
+  assert(finishedFixture.scoreBreakdown?.regulationAwayScore === 0, 'Finished fixture should store regulation away score');
+  assert(['extra_time', 'penalties'].includes(finishedFixture.resolution), 'Tied knockout should be resolved after extra time or penalties');
+  if (finishedFixture.resolution === 'penalties') {
+    assert(finishedFixture.penaltyShootout?.kicks.length > 0, 'Penalty resolution should include individual shootout kicks');
+  }
 };
 
 export const checkActiveLiveMatchBlocksWeekAdvance = () => {

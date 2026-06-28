@@ -5,7 +5,7 @@ import { buildSquadPlan } from './squadPlanningEngine';
 import { isTransferWindowOpen } from '../utils/calendar';
 import { getSquadPolicy } from './squadPolicy';
 import { getMinimumAcceptedWage } from './transferFinance';
-import { isPlayableClub } from './freeAgentPool';
+import { FREE_AGENT_TEAM_ID, isPlayableClub } from './freeAgentPool';
 import { movePlayerToTeam } from './playerMovement';
 
 type PositionKey = Player['position'];
@@ -519,6 +519,88 @@ export const computeWeeklyTransfers = (
   });
 
   // Phase 3: AI Teams evaluate user-listed players for purchase
+  const freeAgentPlayers = Object.values(updatedPlayers).filter(player => player.teamId === FREE_AGENT_TEAM_ID);
+  if (freeAgentPlayers.length > 0) {
+    aiTeams.forEach(team => {
+      const squadPlan = buildSquadPlan(team, updatedPlayers);
+      const priorityNeed = [...squadPlan.needs]
+        .filter(need => NEED_SEVERITY_VALUE[need.severity] >= NEED_SEVERITY_VALUE.need)
+        .sort((a, b) => {
+          const severityDelta = NEED_SEVERITY_VALUE[b.severity] - NEED_SEVERITY_VALUE[a.severity];
+          if (severityDelta !== 0) return severityDelta;
+          return (b.targetDepth - b.currentDepth) - (a.targetDepth - a.currentDepth);
+        })[0];
+
+      if (!priorityNeed) return;
+
+      const buyer = updatedTeams[team.id];
+      const buyerSquad = Object.values(updatedPlayers).filter(p => p.teamId === team.id);
+      const buyerSquadAvgRating = buyerSquad.length > 0
+        ? buyerSquad.reduce((sum, p) => sum + p.overallRating, 0) / buyerSquad.length
+        : 70;
+      const identityProfile = getManagerIdentityProfile(team.manager.transferIdentity);
+      const targets = freeAgentPlayers.filter(player => (
+        updatedPlayers[player.id]?.teamId === FREE_AGENT_TEAM_ID &&
+        player.position === priorityNeed.position
+      ));
+      if (targets.length === 0) return;
+
+      const bestTarget = targets
+        .map(target => {
+          const newWage = calculateDestinationWage(target, buyer, updatedPlayers, priorityNeed.severity);
+          const ageScore = getAgeScore(target.age, identityProfile.agePreference);
+          const value = target.overallRating * 3 * identityProfile.ratingWeight
+            - ageScore * identityProfile.ageSensitivity
+            - newWage * 0.015 * identityProfile.priceSensitivity;
+          return { target, newWage, value };
+        })
+        .filter(candidate => isValidPurchase({
+          buyer,
+          target: candidate.target,
+          allPlayers: updatedPlayers,
+          newWage: candidate.newWage,
+          buyerSquadAvgRating,
+          severity: priorityNeed.severity,
+        }))
+        .sort((a, b) => b.value - a.value)[0];
+
+      if (!bestTarget) return;
+      const buyChanceBase = priorityNeed.severity === 'urgent' ? 0.72 : 0.46;
+      const buyChance = getBuyChance(team, priorityNeed.severity, buyChanceBase);
+      if (random() >= buyChance) return;
+
+      const rolePromise = determineRolePromise(priorityNeed.severity, bestTarget.target.overallRating, buyerSquadAvgRating);
+      const moraleBase = rolePromise === 'starter' ? 75 : rolePromise === 'rotation' ? 65 : 55;
+      const moved = movePlayerToTeam(
+        updatedPlayers,
+        updatedTeams,
+        bestTarget.target.id,
+        team.id,
+        {
+          wage: bestTarget.newWage,
+          contractLeft: Math.max(updatedPlayers[bestTarget.target.id].contractLeft, bestTarget.target.age <= 23 ? 3 : bestTarget.target.age <= 30 ? 2 : 1),
+          morale: Math.max(moraleBase, updatedPlayers[bestTarget.target.id].morale),
+        }
+      );
+      updatedPlayers = moved.players;
+      updatedTeams = moved.teams;
+      decisions.push({
+        week: currentWeek,
+        action: 'bought',
+        teamId: team.id,
+        playerId: bestTarget.target.id,
+        fromTeamId: FREE_AGENT_TEAM_ID,
+        position: bestTarget.target.position,
+        reason: `${team.name} signed free agent ${bestTarget.target.name} (${rolePromise}) because ${priorityNeed.reason}`,
+        squadNeed: summarizeNeed(priorityNeed),
+        boardContext: getBoardContext(team),
+        rolePromise,
+        newWage: bestTarget.newWage,
+      });
+    });
+  }
+
+  // Phase 4: AI Teams evaluate user-listed players for purchase
   if (userTeamId) {
     const userListedPlayers = Object.values(updatedPlayers).filter(
       p => p.isTransferListed && p.teamId === userTeamId

@@ -1,5 +1,5 @@
-import type { Division, Formation, LeagueDivision, TeamTactics } from './player';
-import type { MatchSummary } from './live-match';
+import type { Division, Formation, LeagueDivision, PlayerRole, TeamTactics } from './player';
+import type { MatchSummary, PenaltyShootout } from './live-match';
 
 export type CompetitionId =
   | 'premier-league'
@@ -96,6 +96,7 @@ export interface Team {
   lastStartingXI?: string[]; // player IDs
   lastTacticalAdaptationPlayed?: number;
   formationMap?: Record<string, string>; // Maps slot coordinate 'row-col' to playerId
+  playerRoles?: Record<string, PlayerRole>; // Maps slot coordinate 'row-col' to tactical role
 }
 
 export interface Fixture {
@@ -114,7 +115,16 @@ export interface Fixture {
   awayScore: number | null;
   isPlayed: boolean;
   winnerTeamId?: string;
-  resolution?: 'regular' | 'penalties' | 'forfeit' | 'void';
+  resolution?: 'regular' | 'extra_time' | 'penalties' | 'forfeit' | 'void';
+  scoreBreakdown?: {
+    regulationHomeScore: number;
+    regulationAwayScore: number;
+    extraTimeHomeScore: number;
+    extraTimeAwayScore: number;
+    penaltyHomeScore?: number;
+    penaltyAwayScore?: number;
+  };
+  penaltyShootout?: PenaltyShootout;
   matchSummary?: MatchSummary;
 }
 
@@ -143,6 +153,7 @@ export interface CompetitionState {
   eliminatedTeamIds: string[];
   championTeamId?: string;
   runnerUpTeamId?: string;
+  playoffWinnerTeamId?: string;
 }
 
 export interface CompetitionResultSummary {

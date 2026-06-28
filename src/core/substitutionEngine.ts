@@ -9,6 +9,7 @@ type SubstitutionOptions = {
   minuteOverride?: number;
   onSubstitution?: (offPlayer: Player, onPlayer: Player, minute: number) => void;
   playerEntryMinutes?: Record<string, number>;
+  matchEndMinute?: number;
   substitutionState?: {
     substitutesUsed: number;
     substitutionWindowsUsed: number;
@@ -47,6 +48,7 @@ export const applySubstitutions = (
   )) return;
 
   const scoreDiff = goalsFor - goalsAgainst;
+  const matchEndMinute = options?.matchEndMinute ?? 90;
   const isChasing = scoreDiff < 0;
   const isProtectingLead = scoreDiff > 0;
   let maxSubs = ENGINE_CONFIG.SUBS_BASE_MAX;
@@ -101,14 +103,14 @@ export const applySubstitutions = (
     const offPool = starters.filter(player =>
       !usedOff.has(player.id) &&
       !sentOffPlayers.has(player.id) &&
-      (playerMinutes[player.id] ?? 90) > 0 &&
+      (playerMinutes[player.id] ?? matchEndMinute) > 0 &&
       !(player.position === 'GK' && !hasBenchGK)
     );
     if (offPool.length === 0) break;
     const offPlayer = offPool
       .map(player => {
         const role = inferRoleTag(player);
-        let priority = (100 - player.energy) + (Math.min(90, playerMinutes[player.id] || 90) / 90) * 20;
+        let priority = (100 - player.energy) + (Math.min(matchEndMinute, playerMinutes[player.id] || matchEndMinute) / 90) * 20;
         if (isChasing && defensiveRoles.includes(role)) priority += 10;
         if (isProtectingLead && attackingRoles.includes(role)) priority += 10;
         if (isProtectingLead && defensiveRoles.includes(role)) priority -= 8;
@@ -146,13 +148,13 @@ export const applySubstitutions = (
 
     const subMinute = options?.minuteOverride ?? (minMinute + Math.floor(random() * Math.max(1, maxMinute - minMinute + 1)));
     const offPlayerEntryMinute = playerEntryMinutes?.[offPlayer.id];
-    const offPlayerMinutes = playerMinutes[offPlayer.id] ?? 90;
+    const offPlayerMinutes = playerMinutes[offPlayer.id] ?? matchEndMinute;
     playerMinutes[offPlayer.id] = offPlayerEntryMinute !== undefined
       ? Math.max(0, subMinute - offPlayerEntryMinute)
       : Math.min(offPlayerMinutes, subMinute);
     if (playerEntryMinutes && offPlayerEntryMinute !== undefined) delete playerEntryMinutes[offPlayer.id];
     if (playerEntryMinutes) playerEntryMinutes[onPlayer.id] = subMinute;
-    playerMinutes[onPlayer.id] = Math.max(playerMinutes[onPlayer.id] || 0, 90 - subMinute);
+    playerMinutes[onPlayer.id] = Math.max(playerMinutes[onPlayer.id] || 0, matchEndMinute - subMinute);
     usedOff.add(offPlayer.id);
     usedBench.add(onPlayer.id);
     substitutionsMade += 1;

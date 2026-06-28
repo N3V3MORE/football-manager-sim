@@ -1,4 +1,4 @@
-import { Player, applySharedPostMatchAccounting, applyWindowedCleanSheets, assert, createSeededRandom, didConcedeInWindow, initGameData, qualifiesForWindowedCleanSheet, quickSimMatch, readSource } from './shared';
+import { Fixture, Player, applySharedPostMatchAccounting, applyWindowedCleanSheets, assert, createSeededRandom, didConcedeInWindow, initGameData, qualifiesForWindowedCleanSheet, quickSimMatch, readSource, simulatePenaltyShootout } from './shared';
 
 export const checkCleanSheetWindows = () => {
   assert(!didConcedeInWindow([], 0, 90, 0), 'Empty conceded-minute list with 0 conceded should be clean');
@@ -138,6 +138,113 @@ export const checkQuickSimMatchSummaryIncludesStatsAndRatings = () => {
       !/playMatch\(myNextMatch\.id\);\s*advanceWeek\(\);/.test(hubScreen),
     'Hub Quick Sim should navigate to the match result screen instead of immediately advancing week'
   );
+};
+
+export const checkPenaltyShootoutUsesIndividualKicks = () => {
+  const data = initGameData();
+  const homeTeam = Object.values(data.teams).find(team => team.division === 'Premier League');
+  const awayTeam = Object.values(data.teams).find(team => team.division === 'Premier League' && team.id !== homeTeam?.id);
+  assert(homeTeam && awayTeam, 'Expected two Premier League teams for shootout regression');
+
+  const homePlayers = Object.values(data.players)
+    .filter(player => player.teamId === homeTeam!.id && player.isStarting)
+    .slice(0, 11);
+  const awayPlayers = Object.values(data.players)
+    .filter(player => player.teamId === awayTeam!.id && player.isStarting)
+    .slice(0, 11);
+  assert(homePlayers.length >= 5 && awayPlayers.length >= 5, 'Shootout regression needs at least five takers per side');
+
+  const shootout = simulatePenaltyShootout(homeTeam!, awayTeam!, homePlayers, awayPlayers, {
+    next: createSeededRandom(2026062801),
+  });
+
+  assert(shootout.winnerTeamId === homeTeam!.id || shootout.winnerTeamId === awayTeam!.id, 'Shootout should return a valid winner');
+  assert(shootout.homeScore !== shootout.awayScore, 'Shootout score should not finish tied');
+  assert(shootout.kicks.length >= 10, 'Shootout should record the five-kick phase for both teams');
+  assert(
+    shootout.kicks.every(kick => kick.takerPlayerId && kick.teamId && ['goal', 'save', 'miss'].includes(kick.outcome)),
+    'Every shootout kick should identify taker, team, and outcome'
+  );
+  assert(
+    shootout.kicks.some(kick => kick.homeScore !== undefined && kick.awayScore !== undefined),
+    'Shootout kicks should carry running scores'
+  );
+};
+
+export const checkQuickSimKnockoutUsesExtraTimeBeforePenalties = () => {
+  const data = initGameData();
+  const cupFixture = Object.values(data.fixtures).find(fixture => fixture.isKnockout);
+  assert(cupFixture, 'Expected a knockout fixture for extra-time regression');
+  const fixture: Fixture = {
+    ...cupFixture!,
+    id: 'regression-extra-time-knockout',
+    homeScore: null,
+    awayScore: null,
+    isPlayed: false,
+    winnerTeamId: undefined,
+    resolution: undefined,
+  };
+  const fixtures = { ...data.fixtures, [fixture.id]: fixture };
+  const quietThenShootout = {
+    next: (() => {
+      const random = createSeededRandom(2026062802);
+      let calls = 0;
+      return () => {
+        calls += 1;
+        return calls < 220 ? 0.99 : random();
+      };
+    })(),
+  };
+
+  const result = quickSimMatch(fixture.id, data.players, data.teams, fixtures, null, { rng: quietThenShootout });
+
+  assert(result.fixture.isPlayed, 'Quick-sim knockout should be played');
+  assert(result.fixture.winnerTeamId, 'Quick-sim knockout should always produce a winner');
+  assert(result.fixture.scoreBreakdown, 'Knockout fixture should store regulation and extra-time score breakdown');
+  assert(result.fixture.scoreBreakdown!.regulationHomeScore === 0, 'Score breakdown should preserve the 90-minute home score');
+  assert(result.fixture.scoreBreakdown!.regulationAwayScore === 0, 'Score breakdown should preserve the 90-minute away score');
+  assert(result.fixture.resolution === 'penalties', 'A tie after extra time should be resolved by penalties');
+  assert(result.fixture.penaltyShootout?.kicks.length, 'Penalty resolution should store individual kick rows');
+  assert(
+    result.events.some(event => /extra time/i.test(event)) && result.events.some(event => /penalt/i.test(event)),
+    'Quick-sim event log should mention extra time and penalties'
+  );
+};
+
+export const checkLeaguePlayoffFixtureDoesNotChangeTableStats = () => {
+  const data = initGameData();
+  const teams = { ...data.teams };
+  const championshipTeams = Object.values(teams).filter(team => team.division === 'Championship');
+  assert(championshipTeams.length >= 2, 'Expected Championship teams for play-off fixture regression');
+  const [homeTeam, awayTeam] = championshipTeams;
+  const beforeHome = { ...homeTeam };
+  const beforeAway = { ...awayTeam };
+  const fixture: Fixture = {
+    id: 'regression-playoff-semi',
+    week: 48,
+    dateOrdinal: 295,
+    division: 'Championship',
+    competitionId: 'championship',
+    competitionType: 'league',
+    round: 'semi_final',
+    isKnockout: false,
+    homeTeamId: homeTeam.id,
+    awayTeamId: awayTeam.id,
+    homeScore: null,
+    awayScore: null,
+    isPlayed: false,
+  };
+
+  const result = quickSimMatch(fixture.id, data.players, teams, { ...data.fixtures, [fixture.id]: fixture }, null, {
+    rng: { next: createSeededRandom(2026062803) },
+  });
+  const nextHome = result.teams[homeTeam.id];
+  const nextAway = result.teams[awayTeam.id];
+
+  (['played', 'points', 'wins', 'draws', 'losses', 'goalsFor', 'goalsAgainst'] as const).forEach(key => {
+    assert(nextHome[key] === beforeHome[key], `League play-off should not alter home table ${key}`);
+    assert(nextAway[key] === beforeAway[key], `League play-off should not alter away table ${key}`);
+  });
 };
 
 export const checkDisciplineRatesArePlausible = () => {

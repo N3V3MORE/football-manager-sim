@@ -2,6 +2,7 @@ import { Player, Position, Team } from '../models/types';
 import { computeMarketValue } from '../utils/calendar';
 import { getSquadPolicy } from './squadPolicy';
 import { isPlayableClub } from './freeAgentPool';
+import { createYouthPotential } from './trainingEngine';
 
 const YOUTH_FIRST_NAMES = ['Alex', 'Ben', 'Callum', 'Dan', 'Ethan', 'Finn', 'George', 'Harry', 'Isaac', 'Jack'];
 const YOUTH_LAST_NAMES = ['Adams', 'Brown', 'Clark', 'Davies', 'Evans', 'Fisher', 'Green', 'Harris', 'Irvine', 'Jones'];
@@ -41,7 +42,7 @@ const getNextIntakePosition = (counts: Record<Position, number>, team: Team, rng
   return POSITIONS[Math.floor(rng() * POSITIONS.length)];
 };
 
-const generateYouthPlayer = (
+export const generateYouthPlayer = (
   playerId: string,
   teamId: string,
   position: Position,
@@ -51,6 +52,7 @@ const generateYouthPlayer = (
   const lastName = YOUTH_LAST_NAMES[Math.floor(rng() * YOUTH_LAST_NAMES.length)];
   const age = 16 + Math.floor(rng() * 3);
   const rating = 40 + Math.floor(rng() * 16);
+  const potential = createYouthPotential(rating, rng);
   const marketValue = computeMarketValue(rating, age);
   const aroundRating = (offset = 0, spread = 8) => clampRating(rating + offset + Math.floor((rng() * spread * 2) - spread));
 
@@ -106,6 +108,11 @@ const generateYouthPlayer = (
     subPosition,
     altPositions,
     overallRating: rating,
+    potential,
+    trainingFocus: null,
+    trainingXp: 0,
+    trainingStatProgress: 0,
+    trainingStatGains: {},
     marketValue,
     age,
     morale: 70 + Math.floor(rng() * 21),

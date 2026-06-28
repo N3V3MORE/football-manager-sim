@@ -12,6 +12,7 @@ import {
   Manager,
   Player,
   Team,
+  TransferNegotiation,
   UserManagerIdentity,
 } from '../models/types';
 import { buildBoardProfile, clampBoardMetric } from '../core/boardEngine';
@@ -22,6 +23,7 @@ import { buildLegacyInboxMessages } from './inboxHelpers';
 import { LiveMatchState, pruneInvalidLiveMatches } from './liveMatchHelpers';
 import { buildManagedTeamObjectives } from './managedTeamObjectives';
 import { createFreeAgentTeam, FREE_AGENT_TEAM_ID } from '../core/freeAgentPool';
+import { sanitizePlayerRolesForTeam } from '../core/playerRoleEngine';
 
 export type PersistedStoreState = Partial<GameState & {
   liveMatches: Record<string, LiveMatchState>;
@@ -90,6 +92,7 @@ const VALID_FORMATIONS: readonly Formation[] = [
   '3-2-4-1',
 ];
 
+const VALID_TRAINING_FOCUS = new Set(['pace', 'shooting', 'passing', 'dribbling', 'defending', 'physical']);
 const VALID_COMPETITION_IDS: ReadonlySet<CompetitionId> = new Set([
   ...Object.values(LEAGUE_COMPETITION_BY_DIVISION),
   'carabao-cup',
@@ -151,6 +154,7 @@ export const DEFAULT_GAME_STATE: GameState = {
   userTeamId: null,
   teams: {},
   players: {},
+  pendingNegotiations: [],
   fixtures: {},
   competitions: {},
   news: [],
@@ -314,6 +318,13 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
               boardProfile
             );
         const manager = hydrateManagerContext(managerSource, boardProfile, division);
+        const activeFormation = VALID_FORMATIONS.includes(typedTeam.activeFormation as Formation)
+          ? typedTeam.activeFormation as Formation
+          : '4-3-3';
+        const playerRoles = sanitizePlayerRolesForTeam(
+          { ...(typedTeam as Team), id: typedTeam.id || teamId, activeFormation },
+          typedTeam.playerRoles as Record<string, unknown> | undefined
+        );
 
         return [
           teamId,
@@ -324,6 +335,7 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
             division,
             countryId: typedTeam.countryId || (typedTeam.isExternal ? 'continental' : 'england'),
             clubClass: typedTeam.clubClass || 'C',
+            activeFormation,
             boardProfile,
             manager,
             tactics: typedTeam.tactics && typeof typedTeam.tactics === 'object'
@@ -337,6 +349,7 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
             boardApproval: Number.isFinite(typedTeam.boardApproval)
               ? clampBoardMetric(typedTeam.boardApproval!)
               : deriveInitialBoardApproval(manager, boardProfile),
+            playerRoles,
           },
         ];
       })
@@ -350,6 +363,18 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
         const validStringId = typeof typedPlayer.id === 'string' && typedPlayer.id.trim() === playerId
           ? typedPlayer.id
           : '';
+        const trainingFocus = typedPlayer.trainingFocus === null || typedPlayer.trainingFocus === undefined
+          ? typedPlayer.trainingFocus ?? null
+          : VALID_TRAINING_FOCUS.has(typedPlayer.trainingFocus)
+            ? typedPlayer.trainingFocus
+            : null;
+        const trainingStatGains = typedPlayer.trainingStatGains && typeof typedPlayer.trainingStatGains === 'object'
+          ? Object.fromEntries(
+              Object.entries(typedPlayer.trainingStatGains)
+                .filter(([key, value]) => VALID_TRAINING_FOCUS.has(key) && typeof value === 'number' && Number.isFinite(value))
+                .map(([key, value]) => [key, clampInt(value, 0, 99, 0)])
+            )
+          : undefined;
         return [
           playerId,
           {
@@ -360,6 +385,13 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
             marketValue: clampNumber(typedPlayer.marketValue, 0, 500, 1),
             wage: clampNumber(typedPlayer.wage, 0, 1000, 5),
             contractLeft: clampInt(typedPlayer.contractLeft, 0, 10, 1),
+            potential: Number.isFinite(typedPlayer.potential)
+              ? clampInt(typedPlayer.potential, 40, 99, clampInt(typedPlayer.overallRating, 1, 99, 50))
+              : undefined,
+            trainingFocus,
+            trainingXp: clampInt(typedPlayer.trainingXp, 0, 99, 0),
+            trainingStatProgress: clampInt(typedPlayer.trainingStatProgress, 0, 2, 0),
+            trainingStatGains,
             morale: clampInt(typedPlayer.morale, 0, 100, 50),
             energy: clampInt(typedPlayer.energy, 0, 100, 100),
             injuryWeeks: clampInt(typedPlayer.injuryWeeks, 0, 52, 0),
@@ -446,6 +478,27 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
   const userTeamId = typeof state.userTeamId === 'string' && validatedTeams[state.userTeamId]
     ? state.userTeamId
     : null;
+  const currentWeek = Number.isFinite(state.currentWeek) && (state.currentWeek || 0) > 0 ? state.currentWeek! : 1;
+  const pendingNegotiations = Array.isArray(state.pendingNegotiations)
+    ? state.pendingNegotiations
+        .filter((item): item is TransferNegotiation => (
+          Boolean(item) &&
+          typeof item === 'object' &&
+          typeof (item as TransferNegotiation).id === 'string' &&
+          Boolean(validatedPlayers[(item as TransferNegotiation).playerId]) &&
+          Boolean(validatedTeams[(item as TransferNegotiation).buyerTeamId]) &&
+          Boolean(validatedTeams[(item as TransferNegotiation).sellerTeamId])
+        ))
+        .map(item => ({
+          ...item,
+          currentBid: clampNumber(item.currentBid, 0, 500, 0),
+          currentWage: clampNumber(item.currentWage, 0, 1000, 0),
+          askingPrice: clampNumber(item.askingPrice, 0, 500, 0),
+          round: clampInt(item.round, 1, 4, 1),
+          createdWeek: clampInt(item.createdWeek, 1, 200, currentWeek),
+          expiresWeek: clampInt(item.expiresWeek, 1, 200, currentWeek + 1),
+        }))
+    : [];
   const rawCareer = state.careerRecord && typeof state.careerRecord === 'object'
     ? state.careerRecord as Partial<CareerRecord>
     : {};
@@ -579,7 +632,6 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
       )
     : [];
 
-  const currentWeek = Number.isFinite(state.currentWeek) && (state.currentWeek || 0) > 0 ? state.currentWeek! : 1;
   const liveMatches = state.liveMatches && typeof state.liveMatches === 'object'
     ? pruneInvalidLiveMatches(
         Object.fromEntries(
@@ -605,6 +657,7 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
     userTeamId,
     teams: validatedTeams,
     players: validatedPlayers,
+    pendingNegotiations,
     fixtures,
     competitions,
     news: Array.isArray(state.news) ? state.news : [],

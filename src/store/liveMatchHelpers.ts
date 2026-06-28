@@ -3,17 +3,28 @@ import { ENGINE_CONFIG } from '../config/engineConfig';
 import { autoAssignLineup } from '../core/lineupEngine';
 import { applyMatchResult } from '../core/teamUtils';
 import { isPlayerUnavailable } from '../core/playerStatusUtils';
+import { getCompatiblePlayerRoleForTeamSlot, getRoleEnergyDrainMultiplier } from '../core/playerRoleEngine';
 
 // `LiveMatchState` now lives in the model layer (`models/types/live-match.ts`).
 // Re-exported here so existing `from '../store/liveMatchHelpers'` imports keep working.
 export type { LiveMatchState } from '../models/types';
 
-const LIVE_MATCH_MINUTES = 90;
+export const LIVE_MATCH_MINUTES = 90;
+export const LIVE_MATCH_EXTRA_TIME_MINUTES = 120;
 
 export const getPossessionIndexForMinute = (minute: number) => {
-  const current = Math.floor((minute * ENGINE_CONFIG.TOTAL_POSSESSIONS) / LIVE_MATCH_MINUTES);
-  const previous = Math.floor(((minute - 1) * ENGINE_CONFIG.TOTAL_POSSESSIONS) / LIVE_MATCH_MINUTES);
-  return current > previous ? current - 1 : null;
+  if (minute <= LIVE_MATCH_MINUTES) {
+    const current = Math.floor((minute * ENGINE_CONFIG.TOTAL_POSSESSIONS) / LIVE_MATCH_MINUTES);
+    const previous = Math.floor(((minute - 1) * ENGINE_CONFIG.TOTAL_POSSESSIONS) / LIVE_MATCH_MINUTES);
+    return current > previous ? current - 1 : null;
+  }
+  if (minute <= LIVE_MATCH_EXTRA_TIME_MINUTES) {
+    const extraMinute = minute - LIVE_MATCH_MINUTES;
+    const current = Math.floor((extraMinute * ENGINE_CONFIG.EXTRA_TIME_POSSESSIONS) / 30);
+    const previous = Math.floor(((extraMinute - 1) * ENGINE_CONFIG.EXTRA_TIME_POSSESSIONS) / 30);
+    return current > previous ? ENGINE_CONFIG.TOTAL_POSSESSIONS + current - 1 : null;
+  }
+  return null;
 };
 
 export const getPlayersByIds = (players: Record<string, Player>, ids: string[]) => (
@@ -58,16 +69,26 @@ const getLiveEnergyDrainPerMinute = (teamTactics: TeamTactics) => {
   return (ENGINE_CONFIG.BASE_POST_MATCH_ENERGY_DRAIN / 90) * drainMultiplier;
 };
 
+const isTeamWithTactics = (value: Team | TeamTactics): value is Team => (
+  'tactics' in value
+);
+
 export const drainLiveMatchEnergy = (
   players: Record<string, Player>,
   starters: Player[],
-  teamTactics: TeamTactics
+  teamOrTactics: Team | TeamTactics,
+  multiplier = 1
 ) => {
-  const drain = getLiveEnergyDrainPerMinute(teamTactics);
+  const team = isTeamWithTactics(teamOrTactics) ? teamOrTactics : undefined;
+  const teamTactics: TeamTactics = team ? team.tactics : teamOrTactics as TeamTactics;
+  const baseDrain = getLiveEnergyDrainPerMinute(teamTactics) * multiplier;
   starters.forEach(player => {
+    const roleDrainMultiplier = team
+      ? getRoleEnergyDrainMultiplier(getCompatiblePlayerRoleForTeamSlot(team, player))
+      : 1;
     players[player.id] = {
       ...players[player.id],
-      energy: Math.max(0, players[player.id].energy - drain),
+      energy: Math.max(0, players[player.id].energy - baseDrain * roleDrainMultiplier),
     };
   });
 };
@@ -102,7 +123,7 @@ const hasContiguousProcessedMinutes = (processedMinutes: unknown) => {
   if (processedMinutes === undefined) return true;
   if (!Array.isArray(processedMinutes)) return false;
   const sorted = [...new Set(processedMinutes)]
-    .filter((minute): minute is number => Number.isInteger(minute) && minute >= 1 && minute <= 90)
+    .filter((minute): minute is number => Number.isInteger(minute) && minute >= 1 && minute <= LIVE_MATCH_EXTRA_TIME_MINUTES)
     .sort((left, right) => left - right);
   if (sorted.length !== processedMinutes.length) return false;
   return sorted.every((minute, index) => minute === index + 1);
