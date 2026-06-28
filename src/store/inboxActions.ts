@@ -3,12 +3,8 @@ import { moveUserManagerToTeam } from '../core/careerEngine';
 import { renewPlayerContractState } from './contractActions';
 import { applyLineupSuggestionToTeam } from './lineupActions';
 import { acceptTransferCounterState, withdrawTransferNegotiationState } from './transferActions';
-import {
-  generateAssistantWeekMessages,
-  getInboxSeason,
-  mergeInboxMessages,
-  pruneInboxMessagesForManagedTeam,
-} from './inboxHelpers';
+import { generateAssistantWeekMessages } from './inboxAssistant';
+import { getInboxSeason, mergeInboxMessages, pruneInboxMessagesForManagedTeam } from './inboxCore';
 import { buildManagedTeamObjectives } from './managedTeamObjectives';
 
 type InboxActionState = Pick<

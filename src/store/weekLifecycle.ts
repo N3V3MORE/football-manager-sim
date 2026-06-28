@@ -2,12 +2,8 @@ import { computeWeeklyProgression, computeWeeklyTransfers } from '../core/progre
 import { getSeasonWeekLimit } from '../core/leagueUtils';
 import { FREE_AGENT_TEAM_ID, ensureFreeAgentTeam } from '../core/freeAgentPool';
 import { pruneInvalidLiveMatches } from './liveMatchHelpers';
-import {
-  generateAssistantWeekMessages,
-  generateSystemInboxMessages,
-  getInboxSeason,
-  mergeInboxMessages,
-} from './inboxHelpers';
+import { generateAssistantWeekMessages } from './inboxAssistant';
+import { generateSystemInboxMessages, getInboxSeason, mergeInboxMessages } from './inboxCore';
 import { playCurrentWeekFixtures } from './fixtureResolution';
 import type { WeeklyLifecycleState } from './fixtureResolution';
 import {

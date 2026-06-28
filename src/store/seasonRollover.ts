@@ -8,14 +8,9 @@ import {
   generateJobOfferCandidates,
   getSackingImminentWeek,
 } from '../core/careerEngine';
-import {
-  generateAssistantWeekMessages,
-  generateCareerInboxMessages,
-  generateSystemInboxMessages,
-  getInboxSeason,
-  mergeInboxMessages,
-  pruneInboxMessagesForManagedTeam,
-} from './inboxHelpers';
+import { generateAssistantWeekMessages } from './inboxAssistant';
+import { generateCareerInboxMessages } from './inboxCareerBoard';
+import { generateSystemInboxMessages, getInboxSeason, mergeInboxMessages, pruneInboxMessagesForManagedTeam } from './inboxCore';
 import type { WeeklyLifecycleState } from './fixtureResolution';
 
 export const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(

@@ -14,6 +14,7 @@ import { checkRelentlessTraitReducesFatiguePenalty, checkSeededPlayersNormalizeT
 import { checkWeeklyProgressionAppliesRevenueBreakdown, checkWeeklyRevenueUsesDivisionAndSponsorRates } from './finance';
 import { checkPlayerRatingUtilsPreserveSharedCurves } from './playerRatingUtils';
 import { checkAppendFixtureResultToStatePreservesPostMatchPatch, checkQuickSimActionLivesWithFixtureResolution } from './fixtureResolution';
+import { checkInboxHelpersUseConcreteModules } from './storeStructure';
 
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
@@ -53,6 +54,8 @@ const runRegressionChecks = () => {
   console.log('[OK] User team tactical adaptation guard passed');
   checkDeadStoreActionsAreRemoved();
   console.log('[OK] Dead public store action cleanup passed');
+  checkInboxHelpersUseConcreteModules();
+  console.log('[OK] Inbox helper file merge passed');
   checkManagerProfilesLoaded();
   console.log('[OK] Manager profile loading passed');
   checkDivisionBootstrap();

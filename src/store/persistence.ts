@@ -19,7 +19,7 @@ import { buildBoardProfile, clampBoardMetric } from '../core/boardEngine';
 import { DIVISION_ORDER, LEAGUE_COMPETITION_BY_DIVISION } from '../core/leagueUtils';
 import { buildUserManagerIdentity } from '../core/careerEngine';
 import { buildGenericManager, deriveInitialBoardApproval, hydrateManagerContext } from '../core/managerUtils';
-import { buildLegacyInboxMessages } from './inboxHelpers';
+import { buildLegacyInboxMessages } from './inboxCore';
 import { LiveMatchState, pruneInvalidLiveMatches } from './liveMatchHelpers';
 import { buildManagedTeamObjectives } from './managedTeamObjectives';
 import { createFreeAgentTeam, FREE_AGENT_TEAM_ID } from '../core/freeAgentPool';

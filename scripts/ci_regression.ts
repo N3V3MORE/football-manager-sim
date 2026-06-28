@@ -37,10 +37,12 @@ import { useGameStore } from '../src/store/gameStore';
 import {
   generateAssistantWeekMessages,
   generatePostMatchReportMessage,
+} from '../src/store/inboxAssistant';
+import {
   generateSystemInboxMessages,
   MAX_INBOX_MESSAGES,
   mergeInboxMessages,
-} from '../src/store/inboxHelpers';
+} from '../src/store/inboxCore';
 import { sanitizePersistedState } from '../src/store/persistence';
 import { getSquadPolicy } from '../src/core/squadPolicy';
 import { FREE_AGENT_TEAM_ID } from '../src/core/freeAgentPool';

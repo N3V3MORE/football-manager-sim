@@ -10,12 +10,12 @@ import {
   evaluateSackingRisk,
   generateJobOfferCandidates,
 } from '../core/careerEngine';
+import { mergeInboxMessages } from './inboxCore';
 import {
   generateBoardInboxMessages,
   generateCareerInboxMessages,
   generateSackWarningMessage,
-  mergeInboxMessages,
-} from './inboxHelpers';
+} from './inboxCareerBoard';
 import type { WeeklyLifecycleState } from './fixtureResolution';
 
 export const sanitizeFormationMaps = <TState extends WeeklyLifecycleState>(state: TState): TState => {

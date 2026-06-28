@@ -1,13 +1,8 @@
 import {
   moveUserManagerToTeam,
 } from '../core/careerEngine';
-import {
-  generateAssistantWeekMessages,
-  generateTeamSwitchMessage,
-  getInboxSeason,
-  mergeInboxMessages,
-  pruneInboxMessagesForManagedTeam,
-} from './inboxHelpers';
+import { generateAssistantWeekMessages } from './inboxAssistant';
+import { generateTeamSwitchMessage, getInboxSeason, mergeInboxMessages, pruneInboxMessagesForManagedTeam } from './inboxCore';
 import { buildManagedTeamObjectives } from './managedTeamObjectives';
 import type { WeeklyLifecycleState } from './fixtureResolution';
 

@@ -4,12 +4,8 @@ import { quickSimMatch } from '../core/matchEngine';
 import { compareFixturesChronologically } from '../core/fixtureLifecycle';
 import { createFixtureEventRandomGenerator } from '../core/random';
 import { LiveMatchState, removeLiveMatchFixture } from './liveMatchHelpers';
-import {
-  generatePostMatchReportMessage,
-  generateSystemInboxMessages,
-  getInboxSeason,
-  mergeInboxMessages,
-} from './inboxHelpers';
+import { generatePostMatchReportMessage } from './inboxAssistant';
+import { generateSystemInboxMessages, getInboxSeason, mergeInboxMessages } from './inboxCore';
 
 export type WeeklyLifecycleState = GameState & {
   liveMatches: Record<string, LiveMatchState>;

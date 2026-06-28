@@ -15,11 +15,8 @@ import {
   LiveMatchState,
   pruneInvalidLiveMatches,
 } from './liveMatchHelpers';
-import {
-  generateAssistantWeekMessages,
-  generateSystemInboxMessages,
-  mergeInboxMessages,
-} from './inboxHelpers';
+import { generateAssistantWeekMessages } from './inboxAssistant';
+import { generateSystemInboxMessages, mergeInboxMessages } from './inboxCore';
 import {
   renewPlayerContractState,
   StoreActionResult,

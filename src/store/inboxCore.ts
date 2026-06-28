@@ -159,6 +159,48 @@ export const getMessageTitleForNews = (news: string) => {
   return 'League update';
 };
 
+export const buildLegacyInboxMessages = (news: string[], week = 1) => (
+  news
+    .filter(item => getSystemMessageCategory(item) !== 'system_news')
+    .map(item => buildMessage({
+      week,
+      source: 'system',
+      category: getSystemMessageCategory(item),
+      title: getMessageTitleForNews(item),
+      body: item,
+      isRead: true,
+    }))
+);
+
+export const generateSystemInboxMessages = (week: number, news: string[], season?: number) => (
+  news
+    .filter(item => getSystemMessageCategory(item) !== 'system_news')
+    .map(item => buildMessage({
+      week,
+      season,
+      source: 'system',
+      category: getSystemMessageCategory(item),
+      title: getMessageTitleForNews(item),
+      body: item,
+      isRead: false,
+    }))
+);
+
+export const generateTeamSwitchMessage = (
+  week: number,
+  previousTeamName: string,
+  newTeamName: string,
+  newDivision: string,
+): InboxMessage =>
+  buildMessage({
+    week,
+    source: 'system',
+    category: 'career_milestone',
+    title: `Took charge of ${newTeamName}`,
+    body: `You have left ${previousTeamName} and taken control of ${newTeamName} (${newDivision}). This move was initiated from the Settings screen.`,
+    isRead: true,
+  });
+
 export const formatCompetitionFinish = (finish: SeasonSummary['competitionResults'][number]['finish']) => {
   if (finish === 'winner') return 'won it';
   if (finish === 'runner_up') return 'finished runner-up';
