@@ -226,6 +226,59 @@ const determineRolePromise = (
   return 'squad';
 };
 
+export type AITransferTargetScore = {
+  target: Player;
+  value: number;
+  newWage: number;
+  rolePromise: 'starter' | 'rotation' | 'squad';
+  isValid: boolean;
+};
+
+export const scoreAiTransferTarget = ({
+  buyer,
+  seller,
+  target,
+  allPlayers,
+  severity,
+  buyerSquadAvgRating,
+  price = target.askingPrice,
+  freeAgent = false,
+}: {
+  buyer: Team;
+  seller?: Team;
+  target: Player;
+  allPlayers: Record<string, Player>;
+  severity: PlanningSeverity;
+  buyerSquadAvgRating: number;
+  price?: number;
+  freeAgent?: boolean;
+}): AITransferTargetScore => {
+  const identityProfile = getManagerIdentityProfile(buyer.manager.transferIdentity);
+  const ageScore = getAgeScore(target.age, identityProfile.agePreference);
+  const newWage = calculateDestinationWage(target, buyer, allPlayers, severity);
+  const rolePromise = determineRolePromise(severity, target.overallRating, buyerSquadAvgRating);
+  const pricePenalty = freeAgent ? newWage * 0.015 : price;
+  const value = target.overallRating * 3 * identityProfile.ratingWeight
+    - pricePenalty * identityProfile.priceSensitivity
+    - ageScore * identityProfile.ageSensitivity;
+
+  return {
+    target,
+    value,
+    newWage,
+    rolePromise,
+    isValid: isValidPurchase({
+      buyer,
+      seller,
+      target,
+      allPlayers,
+      newWage,
+      buyerSquadAvgRating,
+      severity,
+    }),
+  };
+};
+
 const getBoardContext = (team: Team): AITransferDecision['boardContext'] => ({
   ambition: team.boardProfile.ambition,
   transferDiscipline: team.boardProfile.transferDiscipline,

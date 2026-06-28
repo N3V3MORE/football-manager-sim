@@ -1,4 +1,4 @@
-import { Fixture, Formation, TeamTactics } from '../models/types';
+import { Fixture, Formation, Player, Team, TeamTactics } from '../models/types';
 import { BASE_FORMATION_SLOTS } from '../constants/formations';
 import { compareFixturesChronologically, getNextDueFixture } from '../core/fixtureLifecycle';
 import { getSeasonWeekLimit } from '../core/leagueUtils';
@@ -6,6 +6,17 @@ import { isPlayerUnavailable } from '../core/playerStatusUtils';
 import { hashStringToSeed } from '../core/random';
 import { useGameStore } from '../store/gameStore';
 import { initGameData } from '../utils/initGame';
+import {
+  AIPlayConfig,
+  AIPlayReport,
+  AIPolicyMode,
+  AIPlayVerbosity,
+  BalanceFlag,
+  BugReport,
+  AIPolicyGameState,
+  runAiPostWeekPolicy,
+  runAiPreWeekPolicy,
+} from './aiPolicy';
 
 type AgentCommand =
   | 'help'
@@ -33,6 +44,7 @@ type AgentCommand =
   | 'buyPlayer'
   | 'renewContract'
   | 'playSeason'
+  | 'playWithAI'
   | 'smokeCheck';
 
 type AgentPayload = Record<string, unknown> | undefined;
@@ -138,6 +150,7 @@ const listAgentCommands = () => ([
   { command: 'buyPlayer', payload: { playerId: 'player-id', fee: 10, wageOffered: 50 }, description: 'Attempt a transfer purchase.' },
   { command: 'renewContract', payload: { playerId: 'player-id', years: 3, wage: 50 }, description: 'Renew an owned player contract.' },
   { command: 'playSeason', payload: { reset: true, teamId: 'optional', applyAssistantActions: true }, description: 'Play through a full season with weekly validation and return a compact report.' },
+  { command: 'playWithAI', payload: { seasons: 3, seed: 12091, teamId: 'T1', policy: 'balanced', stopOnError: true, reportBalanceFlags: true, verbosity: 'summary' }, description: 'Run active AI autoplay with weekly decisions, validation, and balance reporting.' },
   { command: 'smokeCheck', payload: null, description: 'Reset and run a live in-app smoke test across core game flows.' },
 ]);
 
@@ -607,6 +620,261 @@ const playSeason = (payload: AgentPayload) => {
   };
 };
 
+const AI_POLICIES: AIPolicyMode[] = ['aggressive', 'balanced', 'passive'];
+const AI_VERBOSITIES: AIPlayVerbosity[] = ['quiet', 'summary', 'detailed'];
+
+const readAiPolicy = (payload: AgentPayload): AIPolicyMode => {
+  const value = readString(payload, 'policy');
+  return AI_POLICIES.includes(value as AIPolicyMode) ? value as AIPolicyMode : 'balanced';
+};
+
+const readAiVerbosity = (payload: AgentPayload): AIPlayVerbosity => {
+  const value = readString(payload, 'verbosity');
+  return AI_VERBOSITIES.includes(value as AIPlayVerbosity) ? value as AIPlayVerbosity : 'summary';
+};
+
+const buildAiPlayConfig = (payload: AgentPayload): AIPlayConfig => ({
+  seasons: Math.max(1, Math.min(20, readPositiveInteger(payload, 'seasons') ?? 1)),
+  seed: readPositiveInteger(payload, 'seed') ?? 12091,
+  teamId: readString(payload, 'teamId') || getInitialTeamId(),
+  policy: readAiPolicy(payload),
+  stopOnError: readBoolean(payload, 'stopOnError', true),
+  reportBalanceFlags: readBoolean(payload, 'reportBalanceFlags', true),
+  verbosity: readAiVerbosity(payload),
+});
+
+const getPlayerTeamChanges = (
+  beforePlayers: Record<string, Player>,
+  afterPlayers: Record<string, Player>
+) => Object.values(afterPlayers).filter(player => (
+  beforePlayers[player.id] && beforePlayers[player.id].teamId !== player.teamId
+)).length;
+
+const getTeamFinancialHealth = (teams: Record<string, Team>): AIPlayReport['summary']['financialHealth'] => {
+  const playableTeams = Object.values(teams).filter(team => !team.isExternal);
+  if (playableTeams.some(team => team.budget < 0 || (team.operatingBudget ?? team.budget) < 0)) return 'bankrupt';
+  if (playableTeams.some(team => team.budget < 2 || (team.operatingBudget ?? team.budget) < 2)) return 'strained';
+  return 'healthy';
+};
+
+const buildBugReport = (
+  type: BugReport['type'],
+  message: string,
+  error?: unknown,
+  validation?: AgentValidationReport
+): BugReport => ({
+  week: state().currentWeek,
+  type,
+  message,
+  stack: error instanceof Error ? error.stack : undefined,
+  stateHash: getStateHash(),
+  stateSnapshot: buildAgentGameSummary(),
+  issues: validation?.issues,
+});
+
+const collectBalanceFlags = ({
+  playedFixtureIdsBefore,
+  seasonStartRatings,
+  checkProgression,
+}: {
+  playedFixtureIdsBefore: Set<string>;
+  seasonStartRatings: Record<string, number>;
+  checkProgression: boolean;
+}): BalanceFlag[] => {
+  const current = state();
+  const flags: BalanceFlag[] = [];
+
+  Object.values(current.fixtures)
+    .filter(fixture => fixture.isPlayed && !playedFixtureIdsBefore.has(fixture.id))
+    .forEach(fixture => {
+      const totalGoals = (fixture.homeScore ?? 0) + (fixture.awayScore ?? 0);
+      if (totalGoals > 8) {
+        flags.push({
+          week: current.currentWeek,
+          type: 'scoreline',
+          entity: fixture.id,
+          message: `High-scoring fixture finished with ${totalGoals} total goals.`,
+          context: { homeScore: fixture.homeScore, awayScore: fixture.awayScore },
+        });
+      }
+
+      const homeStats = fixture.matchSummary?.homeTeamStats;
+      const awayStats = fixture.matchSummary?.awayTeamStats;
+      if (homeStats && homeStats.goals > homeStats.shotsOnTarget) {
+        flags.push({
+          week: current.currentWeek,
+          type: 'match_stats',
+          entity: fixture.id,
+          message: 'Home goals exceeded shots on target.',
+          context: homeStats,
+        });
+      }
+      if (awayStats && awayStats.goals > awayStats.shotsOnTarget) {
+        flags.push({
+          week: current.currentWeek,
+          type: 'match_stats',
+          entity: fixture.id,
+          message: 'Away goals exceeded shots on target.',
+          context: awayStats,
+        });
+      }
+    });
+
+  Object.values(current.teams).forEach(team => {
+    const operatingBudget = team.operatingBudget ?? team.budget;
+    if (team.budget < -0.01 || operatingBudget < -0.01) {
+      flags.push({
+        week: current.currentWeek,
+        type: 'finances',
+        entity: team.id,
+        message: `${team.name} has negative financial reserves.`,
+        context: { budget: team.budget, operatingBudget },
+      });
+    }
+    if (team.played !== team.wins + team.draws + team.losses) {
+      flags.push({
+        week: current.currentWeek,
+        type: 'league_table',
+        entity: team.id,
+        message: `${team.name} table record does not add up.`,
+        context: { played: team.played, wins: team.wins, draws: team.draws, losses: team.losses },
+      });
+    }
+    if (team.points !== team.wins * 3 + team.draws) {
+      flags.push({
+        week: current.currentWeek,
+        type: 'league_table',
+        entity: team.id,
+        message: `${team.name} points do not match the 3-1-0 formula.`,
+        context: { points: team.points, wins: team.wins, draws: team.draws },
+      });
+    }
+  });
+
+  if (checkProgression) {
+    Object.values(current.players).forEach(player => {
+      const startRating = seasonStartRatings[player.id];
+      if (startRating !== undefined && player.overallRating - startRating > 10) {
+        flags.push({
+          week: current.currentWeek,
+          type: 'progression',
+          entity: player.id,
+          message: `${player.name} gained more than 10 OVR in one season.`,
+          context: { startRating, currentRating: player.overallRating },
+        });
+      }
+    });
+  }
+
+  return flags;
+};
+
+const buildSeasonStartRatings = () => Object.fromEntries(
+  Object.values(state().players).map(player => [player.id, player.overallRating])
+);
+
+const getAiPolicyGameState = (): AIPolicyGameState => ({
+  ...state(),
+  getAiState: getAiPolicyGameState,
+});
+
+const buildAiPlaySummary = (
+  initialSeasonHistoryLength: number,
+  transfersMade: number,
+  matchTotals: { played: number; goals: number }
+): AIPlayReport['summary'] => {
+  const current = state();
+  const newSeasonSummaries = current.careerRecord.seasonHistory.slice(initialSeasonHistoryLength);
+
+  return {
+    avgGoalsPerMatch: matchTotals.played > 0 ? Number((matchTotals.goals / matchTotals.played).toFixed(2)) : 0,
+    promotions: newSeasonSummaries.filter(summary => summary.outcome === 'promoted').length,
+    relegations: newSeasonSummaries.filter(summary => summary.outcome === 'relegated').length,
+    sackings: newSeasonSummaries.filter(summary => summary.outcome === 'sacked').length,
+    transfersMade,
+    financialHealth: getTeamFinancialHealth(current.teams),
+  };
+};
+
+const playWithAI = (payload: AgentPayload): AIPlayReport => {
+  const config = buildAiPlayConfig(payload);
+  state().initializeGame(config.teamId, config.seed);
+
+  const bugs: BugReport[] = [];
+  const balanceFlags: BalanceFlag[] = [];
+  const initialSeasonHistoryLength = state().careerRecord.seasonHistory.length;
+  const startingSeasonsManaged = state().careerRecord.seasonsManaged;
+  const maxWeeks = config.seasons * 120;
+  let seasonStartRatings = buildSeasonStartRatings();
+  let lastSeasonMarker = state().careerRecord.seasonsManaged;
+  let weeksPlayed = 0;
+  let transfersMade = 0;
+  let playedMatches = 0;
+  let totalGoals = 0;
+
+  while (
+    weeksPlayed < maxWeeks &&
+    state().careerRecord.seasonsManaged - startingSeasonsManaged < config.seasons
+  ) {
+    const beforePlayers = state().players;
+    const playedFixtureIdsBefore = new Set(
+      Object.values(state().fixtures).filter(fixture => fixture.isPlayed).map(fixture => fixture.id)
+    );
+
+    try {
+      applyAssistantActions(undefined);
+      runAiPreWeekPolicy(getAiPolicyGameState(), config);
+      state().advanceWeek();
+      weeksPlayed += 1;
+      runAiPostWeekPolicy(getAiPolicyGameState(), config);
+    } catch (error) {
+      bugs.push(buildBugReport('exception', errorMessage(error), error));
+      if (config.stopOnError) break;
+    }
+
+    transfersMade += getPlayerTeamChanges(beforePlayers, state().players);
+
+    const validation = validateAgentGameState();
+    if (validation.status === 'fail') {
+      bugs.push(buildBugReport('validation', 'Agent validation failed during AI autoplay.', undefined, validation));
+      if (config.stopOnError) break;
+    }
+
+    const seasonAdvanced = state().careerRecord.seasonsManaged > lastSeasonMarker;
+    const newlyPlayedFixtures = Object.values(state().fixtures).filter(fixture => (
+      fixture.isPlayed && !playedFixtureIdsBefore.has(fixture.id)
+    ));
+    playedMatches += newlyPlayedFixtures.length;
+    totalGoals += newlyPlayedFixtures.reduce((sum, fixture) => (
+      sum + (fixture.homeScore ?? 0) + (fixture.awayScore ?? 0)
+    ), 0);
+
+    if (config.reportBalanceFlags) {
+      balanceFlags.push(...collectBalanceFlags({
+        playedFixtureIdsBefore,
+        seasonStartRatings,
+        checkProgression: seasonAdvanced,
+      }));
+    }
+
+    if (seasonAdvanced) {
+      seasonStartRatings = buildSeasonStartRatings();
+      lastSeasonMarker = state().careerRecord.seasonsManaged;
+    }
+  }
+
+  return {
+    seasons: config.seasons,
+    weeksPlayed,
+    bugs,
+    balanceFlags,
+    summary: buildAiPlaySummary(initialSeasonHistoryLength, transfersMade, {
+      played: playedMatches,
+      goals: totalGoals,
+    }),
+  };
+};
+
 const runAgentCommand = (command: AgentCommand, payload?: AgentPayload): AgentCommandResult => {
   const before = buildAgentGameSummary();
   try {
@@ -680,6 +948,7 @@ const runAgentCommand = (command: AgentCommand, payload?: AgentPayload): AgentCo
       assertManagedTeam(state().players[playerId]?.teamId);
       data = state().renewPlayerContract(playerId, readNumber(payload, 'years', 1), readNumber(payload, 'wage', 1));
     } else if (command === 'playSeason') data = playSeason(payload);
+    else if (command === 'playWithAI') data = playWithAI(payload);
     else if (command === 'smokeCheck') data = runSmokeCheck();
     else throw new Error(`Unknown agent command ${command}`);
 
