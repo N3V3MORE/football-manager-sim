@@ -50,7 +50,7 @@ import { DEFAULT_GAME_STATE, PERSIST_STORAGE_KEY, ensureReferentialIntegrity, sa
 import { createSeededRandomGenerator } from '../core/random';
 import { advanceWeekState, skipToEndOfSeasonState } from './weekLifecycle';
 import { finishLiveMatchState, makeLiveSubstitutionsState, processLiveMatchMinuteState, setLiveMatchFormationState } from './liveMatchActions';
-import { playMatchState } from './matchActions';
+import { playMatchState } from './fixtureResolution';
 import { checkBoardObjectivesState } from './boardActions';
 import { changeTeamState } from './careerActions';
 

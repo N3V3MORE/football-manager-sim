@@ -1,5 +1,7 @@
 import { appendFixtureResultToState } from '../../src/store/fixtureResolution';
-import { assert, createSeededRandom, initGameData, quickSimMatch } from './shared';
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { assert, createSeededRandom, initGameData, quickSimMatch, readSource } from './shared';
 
 export const checkAppendFixtureResultToStatePreservesPostMatchPatch = () => {
   const data = initGameData('Arsenal');
@@ -42,4 +44,13 @@ export const checkAppendFixtureResultToStatePreservesPostMatchPatch = () => {
   assert(patch.news?.[0] === 'FA Cup draw complete', 'Append helper should prepend generated news');
   assert(patch.news?.includes('Existing headline'), 'Append helper should keep existing news');
   assert((patch.inboxMessages?.length || 0) >= 2, 'Append helper should merge post-match and system inbox messages');
+};
+
+export const checkQuickSimActionLivesWithFixtureResolution = () => {
+  const fixtureResolutionSource = readSource('src/store/fixtureResolution.ts');
+  const gameStoreSource = readSource('src/store/gameStore.ts');
+
+  assert(fixtureResolutionSource.includes('export const playMatchState'), 'fixtureResolution should own quick-sim match state action');
+  assert(gameStoreSource.includes("from './fixtureResolution'"), 'gameStore should import quick-sim state action from fixtureResolution');
+  assert(!existsSync(join(process.cwd(), 'src/store/matchActions.ts')), 'matchActions shim should be deleted after merge');
 };
