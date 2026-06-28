@@ -8,17 +8,11 @@ import { isPlayerUnavailable } from './playerStatusUtils';
 import { FREE_AGENT_TEAM_ID, isPlayableClub } from './freeAgentPool';
 import { computeWeeklyTraining } from './trainingEngine';
 import { getWeeklyRevenueBreakdown } from './financeEngine';
+import { calculateImpactCoefficient, clampRating } from './playerRatingUtils';
 
 export { computeWeeklyTransfers } from './transferEngine';
 
-const clampRating = (value: number) => Math.max(1, Math.min(99, Math.round(value)));
 const MAX_ACTIVE_SUBS = 7;
-
-const calculateImpactCoefficient = (overallRating: number) => {
-  if (overallRating >= 88) return 1.5 + ((overallRating - 88) * 0.15);
-  if (overallRating >= 84) return 1.1 + ((overallRating - 84) * 0.08);
-  return 0.9 + ((overallRating - 70) * 0.01);
-};
 
 const applyRatingDeltaToMatchStats = (player: Player, ratingDelta: number, rng: () => number): Player['stats'] => {
   if (ratingDelta === 0) return player.stats;

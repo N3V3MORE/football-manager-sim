@@ -8,6 +8,7 @@ import { buildSeasonCompetitionBundle, getContinentalClubNames } from '../core/c
 import { buildBoardObjectives, buildBoardProfile } from '../core/boardEngine';
 import { RandomGenerator, resolveRandom } from '../core/random';
 import { normalizePlayerTraits } from '../core/traitEngine';
+import { calculateImpactCoefficient } from '../core/playerRatingUtils';
 
 const REAL_TEAMS = [
   { name: 'Arsenal',            class: 'A' },
@@ -142,12 +143,6 @@ const buildGeneratedSquadRows = (
       physic: 68 + random() * 14,
     },
   }));
-};
-
-const calculateImpactCoefficient = (overallRating: number) => {
-  if (overallRating >= 88) return 1.5 + ((overallRating - 88) * 0.15);
-  if (overallRating >= 84) return 1.1 + ((overallRating - 84) * 0.08);
-  return 0.9 + ((overallRating - 70) * 0.01);
 };
 
 const buildPlayerRecord = (

@@ -44,16 +44,6 @@ export const getNextDueFixture = (
     .find(fixture => !fixture.isPlayed && fixture.week <= currentWeek) || null;
 };
 
-export const getNextFixtureForTeam = (
-  fixtures: Record<string, Fixture>,
-  teamId: string | null | undefined,
-  currentWeek = 1
-) => {
-  if (!teamId) return null;
-  return getTeamFixturesChronologically(fixtures, teamId)
-    .find(fixture => !fixture.isPlayed && fixture.week >= currentWeek) || null;
-};
-
 export const getFixtureRestViolations = (
   fixtures: Fixture[],
   minimumRestDays: number

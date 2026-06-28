@@ -11,14 +11,6 @@ export const LEAGUE_COMPETITION_BY_DIVISION: Record<LeagueDivision, CompetitionI
   'League Two': 'league-two',
 };
 
-const DIVISION_MAX_WEEKS: Record<LeagueDivision, number> = {
-  'Premier League': 38,
-  'Championship': 46,
-  'League One': 46,
-  'League Two': 46,
-};
-export const getDivisionMaxWeeks = (division: LeagueDivision) => DIVISION_MAX_WEEKS[division] || 38;
-
 const DIVISION_TEAM_COUNTS: Record<LeagueDivision, number> = {
   'Premier League': 20,
   'Championship': 24,

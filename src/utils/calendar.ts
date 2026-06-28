@@ -54,17 +54,6 @@ export const fixtureToDate = (fixture: Pick<Fixture, 'week' | 'dateOrdinal'>, se
 );
 
 /**
- * Returns a short human-readable date string e.g. "Sat 10 Aug"
- */
-export const formatMatchDate = (week: number, season = 1): string => {
-  return weekToDate(week, season).toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  });
-};
-
-/**
  * Returns just the date portion e.g. "10 Aug"
  */
 export const formatShortDate = (week: number, season = 1): string => {
@@ -78,16 +67,6 @@ export const formatFixtureShortDate = (fixture: Pick<Fixture, 'week' | 'dateOrdi
   return fixtureToDate(fixture, season).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
-  });
-};
-
-/**
- * Returns the full month/year for section headers e.g. "August 2024"
- */
-export const formatMonthYear = (week: number, season = 1): string => {
-  return weekToDate(week, season).toLocaleDateString('en-GB', {
-    month: 'long',
-    year: 'numeric',
   });
 };
 

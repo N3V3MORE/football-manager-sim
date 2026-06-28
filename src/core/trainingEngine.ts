@@ -1,5 +1,6 @@
 import { Player, StatKey, Team } from '../models/types';
 import { computeMarketValue } from '../utils/calendar';
+import { calculateImpactCoefficient, clampRating } from './playerRatingUtils';
 import { getTrainingTraitXpMultiplier } from './traitEngine';
 
 const statKeys: StatKey[] = ['pace', 'shooting', 'passing', 'dribbling', 'defending', 'physical'];
@@ -9,14 +10,7 @@ type TrainingOptions = {
   focusOverride?: StatKey | null;
 };
 
-const clampRating = (value: number) => Math.max(1, Math.min(99, Math.round(value)));
 const clampPotential = (value: number) => Math.max(40, Math.min(99, Math.round(value)));
-
-const calculateImpactCoefficient = (overallRating: number) => {
-  if (overallRating >= 88) return 1.5 + ((overallRating - 88) * 0.15);
-  if (overallRating >= 84) return 1.1 + ((overallRating - 84) * 0.08);
-  return 0.9 + ((overallRating - 70) * 0.01);
-};
 
 const derivePotential = (player: Player) => {
   if (typeof player.potential === 'number' && Number.isFinite(player.potential)) {

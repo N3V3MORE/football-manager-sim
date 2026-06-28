@@ -32,7 +32,7 @@ import { advanceSeason } from '../src/core/seasonTransition';
 import { appointReplacementManager } from '../src/core/managerUtils';
 import { LeagueDivision, Player, Team, UserManagerIdentity } from '../src/models/types';
 import { isPlayerUnavailable } from '../src/core/playerStatusUtils';
-import { evaluateBoardObjectives } from '../src/store/boardObjectiveHelpers';
+import { evaluateBoardObjectives } from '../src/core/boardEngine';
 import { useGameStore } from '../src/store/gameStore';
 import {
   generateAssistantWeekMessages,

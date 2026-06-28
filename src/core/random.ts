@@ -2,10 +2,6 @@ export interface RandomGenerator {
   next: () => number;
 }
 
-export const defaultRandomGenerator: RandomGenerator = {
-  next: () => Math.random(),
-};
-
 export const createSeededRandomGenerator = (seed: number): RandomGenerator => {
   let state = seed >>> 0;
   return {

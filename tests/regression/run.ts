@@ -12,6 +12,7 @@ import { checkWeeklyTrainingFocusRaisesFocusedStat, checkTrainingRespectsPotenti
 import { checkPlayerRoleCompatibilityMatrix, checkPlayerRoleEnergyDrainModifiers, checkRolePickerShowsRoleEffects, checkSlotKeyedPlayerRoleLookup, checkPlayerRolesAdjustShapeProfile, checkMatchRuntimeUsesPlayerRoles } from './roles';
 import { checkRelentlessTraitReducesFatiguePenalty, checkSeededPlayersNormalizeTraits, checkTraitBonusesExposeMechanicalEffects, checkTraitRegistryCoversSeededTraits, checkTraitTrainingFocusAddsXp } from './traits';
 import { checkWeeklyProgressionAppliesRevenueBreakdown, checkWeeklyRevenueUsesDivisionAndSponsorRates } from './finance';
+import { checkPlayerRatingUtilsPreserveSharedCurves } from './playerRatingUtils';
 
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
@@ -167,6 +168,8 @@ const runRegressionChecks = () => {
   console.log('[OK] Season-end potential cap passed');
   checkYouthIntakeAssignsHiddenPotential();
   console.log('[OK] Youth hidden potential assignment passed');
+  checkPlayerRatingUtilsPreserveSharedCurves();
+  console.log('[OK] Shared player rating utility curves passed');
   checkSeededPlayersNormalizeTraits();
   console.log('[OK] Seeded trait normalization passed');
   checkTraitRegistryCoversSeededTraits();

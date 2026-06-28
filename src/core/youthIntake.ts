@@ -3,6 +3,7 @@ import { computeMarketValue } from '../utils/calendar';
 import { getSquadPolicy } from './squadPolicy';
 import { isPlayableClub } from './freeAgentPool';
 import { createYouthPotential } from './trainingEngine';
+import { calculateImpactCoefficient, clampRating } from './playerRatingUtils';
 
 const YOUTH_FIRST_NAMES = ['Alex', 'Ben', 'Callum', 'Dan', 'Ethan', 'Finn', 'George', 'Harry', 'Isaac', 'Jack'];
 const YOUTH_LAST_NAMES = ['Adams', 'Brown', 'Clark', 'Davies', 'Evans', 'Fisher', 'Green', 'Harris', 'Irvine', 'Jones'];
@@ -12,14 +13,6 @@ const YOUTH_TRAITS_BY_POSITION: Record<Position, string[]> = {
   DEF: ['Anticipate', 'Block', 'Bruiser', 'Intercept', 'Jockey', 'Slide Tackle', 'Aerial Fortress'],
   MID: ['First Touch', 'Incisive Pass', 'Long Ball Pass', 'Pinged Pass', 'Press Proven', 'Technical', 'Tiki Taka'],
   FWD: ['Acrobatic', 'Chip Shot', 'Finesse Shot', 'Low Driven Shot', 'Power Shot', 'Quick Step', 'Rapid'],
-};
-
-const clampRating = (value: number) => Math.max(1, Math.min(99, Math.round(value)));
-
-const calculateImpactCoefficient = (overallRating: number) => {
-  if (overallRating >= 88) return 1.5 + ((overallRating - 88) * 0.15);
-  if (overallRating >= 84) return 1.1 + ((overallRating - 84) * 0.08);
-  return 0.9 + ((overallRating - 70) * 0.01);
 };
 
 const getNextPlayerId = (players: Record<string, Player>): string => {
