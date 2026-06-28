@@ -1,4 +1,15 @@
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { FREE_AGENT_TEAM_ID, Player, Team, acceptTransferCounterState, addSquadPlayers, advanceSeason, approachPlayerState, assert, buildTestPlayer, buildTestTeam, buyPlayerState, computeWeeklyTransfers, createFreeAgentTeam, createSeededRandom, getSquadPolicy, initGameData, readSource, resolveWeeklyNegotiationsState, signFreeAgentState } from './shared';
+
+export const checkTransferFinanceHelpersLiveInTransferEngine = () => {
+  const transferEngineSource = readSource('src/core/transferEngine.ts');
+  const transferActionsSource = readSource('src/store/transferActions.ts');
+
+  assert(transferEngineSource.includes('export const isWageOfferAccepted'), 'transferEngine should own wage acceptance helper');
+  assert(transferActionsSource.includes("from '../core/transferEngine'"), 'transfer actions should import wage helper from transferEngine');
+  assert(!existsSync(join(process.cwd(), 'src/core/transferFinance.ts')), 'transferFinance helper file should be deleted after merge');
+};
 
 export const checkManualTransfersRespectWindow = () => {
   const data = initGameData();

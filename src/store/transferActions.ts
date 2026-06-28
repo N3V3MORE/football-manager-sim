@@ -1,7 +1,7 @@
 import { GameState, InboxMessage, Player, Team, TransferNegotiation } from '../models/types';
 import { StoreActionResult } from './contractActions';
 import { isTransferWindowOpen } from '../utils/calendar';
-import { isWageOfferAccepted } from '../core/transferFinance';
+import { isWageOfferAccepted } from '../core/transferEngine';
 import { movePlayerToTeam } from '../core/playerMovement';
 import { getSquadPolicy } from '../core/squadPolicy';
 import { FREE_AGENT_TEAM_ID } from '../core/freeAgentPool';

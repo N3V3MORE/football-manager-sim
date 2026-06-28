@@ -4,12 +4,21 @@ import { RandomGenerator, resolveRandom } from './random';
 import { buildSquadPlan } from './squadPlanningEngine';
 import { isTransferWindowOpen } from '../utils/calendar';
 import { getSquadPolicy } from './squadPolicy';
-import { getMinimumAcceptedWage } from './transferFinance';
 import { FREE_AGENT_TEAM_ID, isPlayableClub } from './freeAgentPool';
 import { movePlayerToTeam } from './playerMovement';
 
 type PositionKey = Player['position'];
 type PlanningSeverity = 'none' | 'watch' | 'need' | 'urgent';
+
+const MIN_WAGE_ACCEPTANCE_RATIO = 0.9;
+
+const getMinimumAcceptedWage = (player: Player): number => (
+  Math.max(1, Math.ceil(player.wage * MIN_WAGE_ACCEPTANCE_RATIO))
+);
+
+export const isWageOfferAccepted = (player: Player, wage: number): boolean => (
+  Number.isFinite(wage) && wage >= getMinimumAcceptedWage(player)
+);
 
 export type AITransferDecision = {
   week?: number;
