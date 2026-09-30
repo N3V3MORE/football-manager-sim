@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Player, PlayerRole } from '@/src/models/types';
 import { Slot } from '@/src/constants/formations';
 import { getPositionColor } from '@/src/constants/positionColors';
@@ -56,6 +56,10 @@ export function PlayerPickerModal({
                 <TouchableOpacity
                   key={option.value}
                   accessibilityHint={option.description}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${slot?.label ?? 'Player'} role: ${option.label}`}
+                  accessibilityState={{ selected: active }}
+                  {...(Platform.OS === 'web' ? { 'aria-pressed': active } : {})}
                   style={[styles.roleButton, active && styles.roleButtonActive]}
                   onPress={() => onRoleSelect(option.value)}
                 >
@@ -110,7 +114,7 @@ const styles = StyleSheet.create({
   roleSection: { marginBottom: space.sm },
   roleOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   roleButton: {
-    minHeight: 32,
+    minHeight: 44,
     borderWidth: 1,
     borderColor: color.border.default,
     paddingHorizontal: 9,

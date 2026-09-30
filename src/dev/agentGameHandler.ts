@@ -1,9 +1,13 @@
-import { Fixture, Formation, Player, Team, TeamTactics } from '../models/types';
-import { BASE_FORMATION_SLOTS } from '../constants/formations';
+import { Fixture, Formation, Player, PlayerRole, StatKey, Team, TeamTactics } from '../models/types';
+import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../constants/formations';
+import { getCompatiblePlayerRolesForSlot } from '../core/playerRoleEngine';
+import { getDecisiveTieScore } from '../core/matchTieResolution';
+import { getRenewalOffer } from '../core/contractUtils';
+import { FREE_AGENT_TEAM_ID } from '../core/freeAgentPool';
 import { compareFixturesChronologically, getNextDueFixture } from '../core/fixtureLifecycle';
 import { getSeasonWeekLimit } from '../core/leagueUtils';
 import { isPlayerUnavailable } from '../core/playerStatusUtils';
-import { hashStringToSeed } from '../core/random';
+import { createSeededRandomGenerator, hashStringToSeed } from '../core/random';
 import { useGameStore } from '../store/gameStore';
 import { initGameData } from '../utils/initGame';
 import { getInboxSeason } from '../store/inboxCore';
@@ -25,6 +29,8 @@ type AgentCommand =
   | 'validate'
   | 'snapshot'
   | 'rawState'
+  | 'players'
+  | 'teams'
   | 'initialize'
   | 'changeTeam'
   | 'applyAssistantActions'
@@ -40,6 +46,19 @@ type AgentCommand =
   | 'finishLiveMatch'
   | 'setFormation'
   | 'setTactics'
+  | 'toggleStarting'
+  | 'markAsSub'
+  | 'setTrainingFocus'
+  | 'setPlayerRole'
+  | 'swapPlayer'
+  | 'swapStartingSlots'
+  | 'approachPlayer'
+  | 'submitTransferBid'
+  | 'acceptTransferCounter'
+  | 'withdrawTransferNegotiation'
+  | 'signFreeAgent'
+  | 'makeLiveSubstitutions'
+  | 'setLiveMatchFormation'
   | 'listPlayer'
   | 'unlistPlayer'
   | 'buyPlayer'
@@ -58,6 +77,7 @@ type AgentCommandResult = {
   before?: AgentGameSummary;
   after?: AgentGameSummary;
   stateHash?: string;
+  changed?: boolean;
 };
 
 type AgentIssueSeverity = 'error' | 'warning';
@@ -106,7 +126,7 @@ type AgentValidationReport = {
 };
 
 export type AgentGameHandler = {
-  version: 1;
+  version: 2;
   help: () => ReturnType<typeof listAgentCommands>;
   summary: () => AgentGameSummary;
   validate: () => AgentValidationReport;
@@ -131,21 +151,38 @@ const VALID_TACTICS: Record<keyof TeamTactics, readonly string[]> = {
 const listAgentCommands = () => ([
   { command: 'summary', payload: null, description: 'Return compact live game state.' },
   { command: 'validate', payload: null, description: 'Find broken references, invalid fixtures, and lineup warnings.' },
-  { command: 'snapshot', payload: { teamId: 'optional', limit: 20 }, description: 'Return focused data for inbox, squad, fixtures, and news.' },
-  { command: 'rawState', payload: null, description: 'Return the full Zustand state for deep local inspection.' },
+  { command: 'snapshot', payload: { teamId: 'optional', fixtureId: 'optional', limit: 20, offset: 0 }, description: 'Detached squad, upcoming fixtures/results, live management, inbox actions, negotiations, board and career data.' },
+  { command: 'rawState', payload: null, description: 'Return detached JSON game data. Store functions are excluded.' },
+  { command: 'players', payload: { category: 'squad', search: '', position: 'optional', limit: 20, offset: 0 }, description: 'Page squad, market, external or free-agent players with IDs, attributes, training and contract offers.' },
+  { command: 'teams', payload: { search: '', limit: 20, offset: 0 }, description: 'Page club IDs, divisions, budgets and league records.' },
   { command: 'initialize', payload: { teamId: 'optional', seed: 12091 }, description: 'Reset/initialize a save for a team and optional deterministic seed.' },
   { command: 'changeTeam', payload: { teamId: 'T1' }, description: 'Switch managed team.' },
   { command: 'applyAssistantActions', payload: { types: ['apply_lineup', 'apply_tactics'] }, description: 'Apply assistant inbox setup actions.' },
   { command: 'applyInboxAction', payload: { messageId: 'message-id' }, description: 'Apply one inbox action.' },
-  { command: 'advanceWeek', payload: { count: 1 }, description: 'Advance one or more weeks. Counts over 26 require allowLargeCount.' },
+  { command: 'markInboxRead', payload: { messageId: 'message-id' }, description: 'Mark an existing inbox message read.' },
+  { command: 'dismissInbox', payload: { messageId: 'message-id' }, description: 'Dismiss an existing inbox message.' },
+  { command: 'advanceWeek', payload: { count: 1 }, description: 'Advance 1–100 weeks. Over 26 requires allowLargeCount; report actual progress and live-match blockers.' },
   { command: 'skipSeason', payload: null, description: 'Advance to season rollover with failure warning in development.' },
   { command: 'clearStuckLiveMatch', payload: null, description: 'Clear invalid persisted live-match recovery blockers.' },
   { command: 'quickSimNext', payload: { fixtureId: 'optional' }, description: 'Quick sim a fixture, defaulting to the next managed-team fixture.' },
-  { command: 'liveSimNext', payload: { fixtureId: 'optional', finish: true }, description: 'Run a full 90-minute live sim and optionally finish it.' },
+  { command: 'liveSimNext', payload: { fixtureId: 'optional', finish: true }, description: 'Resume remaining live minutes through regulation/extra time, returning events; optionally finalize.' },
   { command: 'processLiveMinute', payload: { fixtureId: 'fixture-id', minute: 15 }, description: 'Run a specific live-match minute.' },
   { command: 'finishLiveMatch', payload: { fixtureId: 'fixture-id' }, description: 'Finalize live match accounting.' },
   { command: 'setFormation', payload: { teamId: 'optional', formation: '4-3-3' }, description: 'Set a team formation through store action.' },
   { command: 'setTactics', payload: { teamId: 'optional', tactics: {} }, description: 'Patch team tactics through store action.' },
+  { command: 'toggleStarting', payload: { playerId: 'player-id' }, description: 'Toggle an owned player in the starting XI.' },
+  { command: 'markAsSub', payload: { playerId: 'player-id' }, description: 'Toggle an owned player on the bench.' },
+  { command: 'setTrainingFocus', payload: { playerId: 'player-id', focus: 'passing' }, description: 'Set pace/shooting/passing/dribbling/defending/physical, or null to clear training focus.' },
+  { command: 'setPlayerRole', payload: { slotKey: '0-1', role: 'default' }, description: 'Set a compatible role for a managed formation slot; options appear in snapshot.' },
+  { command: 'swapPlayer', payload: { removeId: 'optional', addId: 'player-id', slotKey: 'optional' }, description: 'Replace a starter with another owned player, using an optional formation slot.' },
+  { command: 'swapStartingSlots', payload: { slotA: '0-0', slotB: '0-1' }, description: 'Swap two occupied, compatible managed formation slots.' },
+  { command: 'approachPlayer', payload: { playerId: 'player-id' }, description: 'Open transfer negotiations for an external player.' },
+  { command: 'submitTransferBid', payload: { negotiationId: 'negotiation-id', fee: 10, wageOffered: 50 }, description: 'Submit terms to an active negotiation.' },
+  { command: 'acceptTransferCounter', payload: { negotiationId: 'negotiation-id' }, description: 'Accept an existing transfer counter offer.' },
+  { command: 'withdrawTransferNegotiation', payload: { negotiationId: 'negotiation-id' }, description: 'Withdraw from an active negotiation.' },
+  { command: 'signFreeAgent', payload: { playerId: 'player-id', wageOffered: 50 }, description: 'Offer wages to a free agent.' },
+  { command: 'makeLiveSubstitutions', payload: { fixtureId: 'fixture-id', replacements: [{ offPlayerId: 'player-id', onPlayerId: 'player-id' }] }, description: 'Make managed live substitutions using normal eligibility and window rules.' },
+  { command: 'setLiveMatchFormation', payload: { fixtureId: 'fixture-id', formation: '4-4-2' }, description: 'Change the managed live shape without changing the saved default formation.' },
   { command: 'listPlayer', payload: { playerId: 'player-id', askingPrice: 10 }, description: 'Transfer-list a player.' },
   { command: 'unlistPlayer', payload: { playerId: 'player-id' }, description: 'Remove a player from the transfer list.' },
   { command: 'buyPlayer', payload: { playerId: 'player-id', fee: 10, wageOffered: 50 }, description: 'Attempt a transfer purchase.' },
@@ -161,43 +198,37 @@ const errorMessage = (error: unknown) => (
 
 const readString = (payload: AgentPayload, key: string) => {
   const value = payload?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${key} must be a nonempty string`);
+  return value;
 };
 
 const readNumber = (payload: AgentPayload, key: string, fallback: number) => {
   const value = payload?.[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  if (value === undefined) return fallback;
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${key} must be a finite number`);
+  return value;
 };
 
 const readPositiveInteger = (payload: AgentPayload, key: string) => {
   const value = payload?.[key];
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) throw new Error(`${key} must be a positive safe integer`);
+  return value;
 };
 
 const readBoolean = (payload: AgentPayload, key: string, fallback: boolean) => {
   const value = payload?.[key];
-  return typeof value === 'boolean' ? value : fallback;
+  if (value === undefined) return fallback;
+  if (typeof value !== 'boolean') throw new Error(`${key} must be a boolean`);
+  return value;
 };
 
 const getTeamName = (teamId: string) => state().teams[teamId]?.name || teamId;
 
 const getStateHash = () => {
   const current = state();
-  const compact = {
-    currentWeek: current.currentWeek,
-    userTeamId: current.userTeamId,
-    rngState: current.rngState,
-    teams: Object.values(current.teams)
-      .map(team => [team.id, team.division, team.points, team.played, team.goalsFor, team.goalsAgainst, team.budget, team.operatingBudget])
-      .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
-    fixtures: Object.values(current.fixtures)
-      .map(fixture => [fixture.id, fixture.week, fixture.dateOrdinal, fixture.isPlayed, fixture.homeScore, fixture.awayScore, fixture.winnerTeamId, fixture.resolution])
-      .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
-    players: Object.values(current.players)
-      .map(player => [player.id, player.teamId, player.energy, player.morale, player.matchesSuspended, player.injuryWeeks, player.contractLeft, player.isStarting, player.isSub])
-      .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
-  };
-  return hashStringToSeed(JSON.stringify(compact)).toString(16).padStart(8, '0');
+  return hashStringToSeed(JSON.stringify(current)).toString(16).padStart(8, '0');
 };
 
 function assertManagedTeam(teamId?: string | null): asserts teamId is string {
@@ -235,6 +266,96 @@ const readTactics = (payload: AgentPayload) => {
     tactics[key as keyof TeamTactics] = value as never;
   });
   return tactics;
+};
+
+const detach = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
+const requiredString = (payload: AgentPayload, key: string) => {
+  const value = readString(payload, key);
+  if (!value) throw new Error(`${key} is required`);
+  return value;
+};
+const ownedPlayer = (payload: AgentPayload, key = 'playerId') => {
+  const id = requiredString(payload, key);
+  const player = state().players[id];
+  if (!player) throw new Error(`Unknown player ${id}`);
+  assertManagedTeam(player.teamId);
+  return player;
+};
+const playableTeamId = (teamId: string) => {
+  const teams = Object.keys(state().teams).length ? state().teams : initGameData().teams;
+  if (!teams[teamId] || teams[teamId].isExternal) throw new Error(`Unknown or unmanageable club ${teamId}`);
+  return teamId;
+};
+const formationSlot = (payload: AgentPayload, key: string, teamId: string) => {
+  const slotKey = requiredString(payload, key);
+  const [row, column] = slotKey.split('-').map(Number);
+  const slot = getSlotsForFormation(state().teams[teamId].activeFormation)[row]?.[column];
+  if (!slot || slotKey !== `${row}-${column}`) throw new Error(`Invalid formation slot ${slotKey}`);
+  return { slotKey, slot };
+};
+const pagination = (payload: AgentPayload) => {
+  const limit = readPositiveInteger(payload, 'limit') ?? 20;
+  const offset = readNumber(payload, 'offset', 0);
+  if (limit > 100 || !Number.isSafeInteger(offset) || offset < 0) throw new Error('limit must be 1–100 and offset a nonnegative safe integer');
+  return { limit, offset };
+};
+const searchText = (payload: AgentPayload) => {
+  const search = payload?.search ?? '';
+  if (typeof search !== 'string') throw new Error('search must be a string');
+  return search.trim().toLowerCase();
+};
+const describePlayer = (player: Player) => ({
+  ...player, rating: player.overallRating, unavailable: isPlayerUnavailable(player),
+  renewalOffer: getRenewalOffer(player),
+});
+const queryPlayers = (payload: AgentPayload) => {
+  const current = state();
+  const { limit, offset } = pagination(payload);
+  const category = readString(payload, 'category') ?? 'squad';
+  if (!['squad', 'market', 'external', 'freeAgents', 'all'].includes(category)) throw new Error('Unknown player category');
+  const teamId = readString(payload, 'teamId') ?? current.userTeamId;
+  if (teamId && !current.teams[teamId]) throw new Error(`Unknown club ${teamId}`);
+  const position = readString(payload, 'position');
+  if (position && !['GK', 'DEF', 'MID', 'FWD'].includes(position)) throw new Error('position must be GK, DEF, MID or FWD');
+  const search = searchText(payload);
+  const players = Object.values(current.players).filter(player => (
+    (category !== 'squad' || player.teamId === teamId) &&
+    (category !== 'market' || (player.isTransferListed && player.teamId !== current.userTeamId)) &&
+    (category !== 'external' || (player.teamId !== current.userTeamId && player.teamId !== FREE_AGENT_TEAM_ID)) &&
+    (category !== 'freeAgents' || player.teamId === FREE_AGENT_TEAM_ID) &&
+    (!position || player.position === position) &&
+    (!search || `${player.name} ${player.id} ${current.teams[player.teamId]?.name ?? ''}`.toLowerCase().includes(search))
+  )).sort((a, b) => b.overallRating - a.overallRating);
+  return { category, total: players.length, offset, limit, players: players.slice(offset, offset + limit).map(describePlayer) };
+};
+const queryTeams = (payload: AgentPayload) => {
+  const { limit, offset } = pagination(payload);
+  const search = searchText(payload);
+  const teams = Object.values(state().teams).filter(team => !team.isExternal && (!search || `${team.id} ${team.name} ${team.division}`.toLowerCase().includes(search)));
+  return { total: teams.length, offset, limit, teams: teams.slice(offset, offset + limit) };
+};
+const liveProgress = (fixture: Fixture) => {
+  const current = state();
+  const live = current.liveMatches[fixture.id];
+  const completedMinute = fixture.scoreBreakdown ? 120 : 90;
+  const minute = fixture.isPlayed && ['regular', 'extra_time', 'penalties'].includes(fixture.resolution ?? 'regular')
+    ? completedMinute : Math.max(0, ...(live?.processedMinutes ?? []));
+  const tie = getDecisiveTieScore(fixture, current.fixtures);
+  const maxMinute = fixture.scoreBreakdown || live?.extraTimeStarted || (minute >= 90 && tie.isDecisive && tie.homeScore === tie.awayScore) ? 120 : 90;
+  return {
+    fixture, minute, nextMinute: fixture.isPlayed || minute >= maxMinute ? null : minute + 1, maxMinute,
+    aggregate: tie, live: live ?? null,
+  };
+};
+const liveDetails = (fixture: Fixture) => ({
+  ...liveProgress(fixture),
+  players: Object.values(state().players).filter(player => player.teamId === fixture.homeTeamId || player.teamId === fixture.awayTeamId).map(describePlayer),
+});
+const advanceOneWeek = () => {
+  const week = state().currentWeek;
+  const season = getInboxSeason(state().competitions);
+  state().advanceWeek();
+  return state().currentWeek !== week || getInboxSeason(state().competitions) !== season;
 };
 
 const fixtureSummary = (fixture: Fixture): AgentFixtureSummary => ({
@@ -304,6 +425,7 @@ export const validateAgentGameState = (): AgentValidationReport => {
 
   Object.values(current.players).forEach(player => {
     if (!current.teams[player.teamId]) addIssue('error', `Player references missing team ${player.teamId}`, player.id);
+    if (!Number.isFinite(player.energy) || !Number.isFinite(player.morale)) addIssue('error', 'Player energy or morale is not finite', player.id);
     if (player.energy < 0 || player.energy > 100) addIssue('warning', `Player energy outside 0-100: ${player.energy}`, player.id);
     if (player.morale < 0 || player.morale > 100) addIssue('warning', `Player morale outside 0-100: ${player.morale}`, player.id);
   });
@@ -311,6 +433,7 @@ export const validateAgentGameState = (): AgentValidationReport => {
   Object.values(current.teams).forEach(team => {
     if (!Number.isFinite(team.budget)) addIssue('error', `Team budget is not finite: ${team.budget}`, team.id);
     if (!Number.isFinite(team.transferSpend)) addIssue('error', `Team transfer spend is not finite: ${team.transferSpend}`, team.id);
+    if (!Number.isFinite(team.boardApproval)) addIssue('error', 'Board approval is not finite', team.id);
     if (team.boardApproval < 0 || team.boardApproval > 100) {
       addIssue('warning', `Board approval outside 0-100: ${team.boardApproval}`, team.id);
     }
@@ -354,8 +477,8 @@ export const validateAgentGameState = (): AgentValidationReport => {
       addIssue('error', 'Fixture from a past week is still unplayed', fixture.id);
     }
     if (fixture.isPlayed && fixture.resolution !== 'void') {
-      if (typeof fixture.homeScore !== 'number') addIssue('error', 'Played fixture is missing home score', fixture.id);
-      if (typeof fixture.awayScore !== 'number') addIssue('error', 'Played fixture is missing away score', fixture.id);
+      if (typeof fixture.homeScore !== 'number' || !Number.isFinite(fixture.homeScore)) addIssue('error', 'Played fixture has a missing or nonfinite home score', fixture.id);
+      if (typeof fixture.awayScore !== 'number' || !Number.isFinite(fixture.awayScore)) addIssue('error', 'Played fixture has a missing or nonfinite away score', fixture.id);
       if (fixture.isKnockout && !fixture.winnerTeamId) addIssue('error', 'Played knockout fixture is missing winner', fixture.id);
     }
   });
@@ -395,67 +518,33 @@ export const validateAgentGameState = (): AgentValidationReport => {
 
 const buildSnapshot = (payload: AgentPayload = {}) => {
   const current = state();
-  const limit = Math.max(1, Math.min(100, Math.floor(readNumber(payload, 'limit', 20))));
+  const { limit, offset } = pagination(payload);
   const teamId = readString(payload, 'teamId') || current.userTeamId || Object.keys(current.teams)[0];
   const team = teamId ? current.teams[teamId] : undefined;
-  const squad = teamId
-    ? Object.values(current.players)
-      .filter(player => player.teamId === teamId)
-      .sort((a, b) => b.overallRating - a.overallRating)
-      .slice(0, limit)
-      .map(player => ({
-        id: player.id,
-        name: player.name,
-        position: player.position,
-        subPosition: player.subPosition,
-        rating: player.overallRating,
-        energy: player.energy,
-        morale: player.morale,
-        isStarting: player.isStarting,
-        isSub: player.isSub,
-        unavailable: isPlayerUnavailable(player),
-        injuryWeeks: player.injuryWeeks,
-        matchesSuspended: player.matchesSuspended,
-        contractLeft: player.contractLeft,
-        wage: player.wage,
-      }))
-    : [];
-  const fixtures = Object.values(current.fixtures)
-    .filter(fixture => !teamId || fixture.homeTeamId === teamId || fixture.awayTeamId === teamId)
-    .sort(compareFixturesChronologically)
-    .slice(0, limit)
-    .map(fixtureSummary);
-
-  return {
-    summary: buildAgentGameSummary(),
-    validation: validateAgentGameState(),
-    team: team ? {
-      id: team.id,
-      name: team.name,
-      division: team.division,
-      formation: team.activeFormation,
-      tactics: team.tactics,
-      record: `${team.wins}-${team.draws}-${team.losses}`,
-      points: team.points,
-      budget: team.budget,
-      boardApproval: team.boardApproval,
-    } : null,
-    squad,
-    fixtures,
-    inboxMessages: current.inboxMessages.slice(0, limit).map(message => ({
-      id: message.id,
-      week: message.week,
-      source: message.source,
-      category: message.category,
-      title: message.title,
-      isRead: message.isRead,
-      actionType: message.action?.type,
-      fixtureId: message.fixtureId,
-      playerId: message.playerId,
-      teamId: message.teamId,
-    })),
-    news: current.news.slice(0, limit),
-  };
+  if (teamId && !team) throw new Error('Unknown club ' + teamId);
+  const roster = queryPlayers({ ...payload, category: 'squad', teamId });
+  const teamFixtures = Object.values(current.fixtures).filter(fixture => !teamId || fixture.homeTeamId === teamId || fixture.awayTeamId === teamId).sort(compareFixturesChronologically);
+  const fixtureId = readString(payload, 'fixtureId');
+  const fixture = fixtureId ? current.fixtures[fixtureId] : teamFixtures.find(item => !item.isPlayed);
+  if (fixtureId && !fixture) throw new Error('Unknown fixture ' + fixtureId);
+  const upcoming = teamFixtures.filter(item => !item.isPlayed);
+  return detach({
+    summary: buildAgentGameSummary(), validation: validateAgentGameState(),
+    team: team ? { ...team, formation: team.activeFormation, record: team.wins + '-' + team.draws + '-' + team.losses } : null,
+    formationSlots: team ? getSlotsForFormation(team.activeFormation).flatMap((row, rowIndex) => row.map((slot, column) => ({
+      ...slot, slotKey: rowIndex + '-' + column, playerId: team.formationMap?.[rowIndex + '-' + column] ?? null,
+      role: team.playerRoles?.[rowIndex + '-' + column] ?? 'default', roles: getCompatiblePlayerRolesForSlot(slot.label),
+    }))) : [],
+    squad: roster.players, squadTotal: roster.total, offset, limit,
+    fixtures: upcoming.slice(offset, offset + limit).map(fixtureSummary), fixturesTotal: upcoming.length,
+    recentResults: teamFixtures.filter(item => item.isPlayed).reverse().slice(offset, offset + limit).map(fixtureSummary),
+    recentResultsTotal: teamFixtures.filter(item => item.isPlayed).length,
+    match: fixture ? liveDetails(fixture) : null,
+    inboxMessages: current.inboxMessages.slice(offset, offset + limit).map(message => ({ ...message, actionType: message.action?.type })), inboxTotal: current.inboxMessages.length,
+    pendingNegotiations: current.pendingNegotiations ?? [],
+    boardObjectives: current.boardObjectives, careerRecord: current.careerRecord,
+    competitions: current.competitions, news: current.news.slice(0, limit),
+  });
 };
 
 const getInitialTeamId = () => Object.keys(initGameData().teams)[0];
@@ -463,6 +552,9 @@ const getInitialTeamId = () => Object.keys(initGameData().teams)[0];
 const applyAssistantActions = (payload: AgentPayload) => {
   const current = state();
   const userTeamId = current.userTeamId;
+  if (payload?.types !== undefined && (!Array.isArray(payload.types) || !payload.types.every(type => typeof type === 'string' && ['apply_lineup', 'apply_tactics', 'renew_contract', 'accept_job_offer', 'accept_transfer_counter', 'withdraw_transfer_negotiation'].includes(type)))) {
+    throw new Error('types must be an array of known inbox action types');
+  }
   const requestedTypes = Array.isArray(payload?.types)
     ? payload.types.filter((type): type is string => typeof type === 'string')
     : ['apply_lineup', 'apply_tactics'];
@@ -486,21 +578,29 @@ const applyAssistantActions = (payload: AgentPayload) => {
 const quickSimNext = (payload: AgentPayload) => {
   const fixture = getNextFixture(readString(payload, 'fixtureId'));
   if (fixture.isPlayed) throw new Error(`Fixture ${fixture.id} is already played`);
+  if (state().liveMatches[fixture.id]?.initialized) throw new Error('This fixture has an active live match. Resume it or use finishLiveMatch.');
   state().playMatch(fixture.id);
   return fixtureSummary(state().fixtures[fixture.id]);
 };
 
 const liveSimNext = (payload: AgentPayload) => {
   const fixture = getNextFixture(readString(payload, 'fixtureId'));
+  const finish = readBoolean(payload, 'finish', true);
   if (fixture.isPlayed) throw new Error(`Fixture ${fixture.id} is already played`);
 
   const events: { minute: number; event: string }[] = [];
-  for (let minute = 1; minute <= 90; minute += 1) {
+  const progress = liveProgress(fixture);
+  const nextMinute = progress.nextMinute ?? 121;
+  let completedMinute = progress.minute;
+  for (let minute = nextMinute; minute <= 120; minute += 1) {
+    const latest = state().fixtures[fixture.id];
+    if (latest.isPlayed || minute > liveProgress(latest).maxMinute) break;
     const result = state().processMatchMinute(fixture.id, minute);
+    completedMinute = minute;
     if (result.event) events.push({ minute, event: result.event });
   }
 
-  if (readBoolean(payload, 'finish', true)) {
+  if (finish && !state().fixtures[fixture.id].isPlayed) {
     state().finishLiveMatch(fixture.id);
   }
 
@@ -508,6 +608,7 @@ const liveSimNext = (payload: AgentPayload) => {
     fixture: fixtureSummary(state().fixtures[fixture.id]),
     events,
     liveMatchActive: Boolean(state().liveMatches[fixture.id]),
+    minute: completedMinute,
   };
 };
 
@@ -551,12 +652,13 @@ const playSeason = (payload: AgentPayload) => {
   const applyAssistantBeforeWeeks = readBoolean(payload, 'applyAssistantActions', true);
   const continueOnError = readBoolean(payload, 'continueOnError', false);
   const requestedTeamId = readString(payload, 'teamId');
-  const maxWeeks = Math.max(1, Math.min(100, Math.floor(readNumber(payload, 'maxWeeks', 80))));
+  const maxWeeks = readPositiveInteger(payload, 'maxWeeks') ?? 80;
+  if (maxWeeks > 100) throw new Error('maxWeeks must be at most 100');
 
   if (reset || Object.keys(state().teams).length === 0) {
-    state().initializeGame(requestedTeamId || getInitialTeamId(), readPositiveInteger(payload, 'seed'));
+    state().initializeGame(playableTeamId(requestedTeamId || getInitialTeamId()), readPositiveInteger(payload, 'seed'));
   } else if (requestedTeamId) {
-    state().changeTeam(requestedTeamId);
+    state().changeTeam(playableTeamId(requestedTeamId));
   }
 
   const startedAt = buildAgentGameSummary();
@@ -573,12 +675,13 @@ const playSeason = (payload: AgentPayload) => {
   let weeksPlayed = 0;
   let completedSeason = false;
   let firstFailure: AgentValidationReport | null = null;
+  let blocked = false;
 
   while (weeksPlayed < maxWeeks) {
     if (applyAssistantBeforeWeeks) applyAssistantActions(undefined);
 
     const before = buildAgentGameSummary();
-    state().advanceWeek();
+    if (!advanceOneWeek()) { blocked = true; break; }
     weeksPlayed += 1;
 
     const validation = validateAgentGameState();
@@ -606,7 +709,7 @@ const playSeason = (payload: AgentPayload) => {
   const finalValidation = validateAgentGameState();
 
   return {
-    status: firstFailure ? 'fail' : completedSeason ? 'pass' : 'incomplete',
+    status: firstFailure ? 'fail' : blocked ? 'blocked' : completedSeason ? 'pass' : 'incomplete',
     completedSeason,
     weeksPlayed,
     maxWeeks,
@@ -614,6 +717,7 @@ const playSeason = (payload: AgentPayload) => {
     finishedAt: buildAgentGameSummary(),
     weeklyReports,
     firstFailure,
+    blocked,
     finalValidation,
   };
 };
@@ -623,18 +727,20 @@ const AI_VERBOSITIES: AIPlayVerbosity[] = ['quiet', 'summary', 'detailed'];
 
 const readAiPolicy = (payload: AgentPayload): AIPolicyMode => {
   const value = readString(payload, 'policy');
-  return AI_POLICIES.includes(value as AIPolicyMode) ? value as AIPolicyMode : 'balanced';
+  if (value && !AI_POLICIES.includes(value as AIPolicyMode)) throw new Error('Unknown AI policy');
+  return (value ?? 'balanced') as AIPolicyMode;
 };
 
 const readAiVerbosity = (payload: AgentPayload): AIPlayVerbosity => {
   const value = readString(payload, 'verbosity');
-  return AI_VERBOSITIES.includes(value as AIPlayVerbosity) ? value as AIPlayVerbosity : 'summary';
+  if (value && !AI_VERBOSITIES.includes(value as AIPlayVerbosity)) throw new Error('Unknown AI verbosity');
+  return (value ?? 'summary') as AIPlayVerbosity;
 };
 
 const buildAiPlayConfig = (payload: AgentPayload): AIPlayConfig => ({
-  seasons: Math.max(1, Math.min(20, readPositiveInteger(payload, 'seasons') ?? 1)),
+  seasons: readPositiveInteger(payload, 'seasons') ?? 1,
   seed: readPositiveInteger(payload, 'seed') ?? 12091,
-  teamId: readString(payload, 'teamId') || getInitialTeamId(),
+  teamId: playableTeamId(readString(payload, 'teamId') || getInitialTeamId()),
   policy: readAiPolicy(payload),
   stopOnError: readBoolean(payload, 'stopOnError', true),
   reportBalanceFlags: readBoolean(payload, 'reportBalanceFlags', true),
@@ -794,15 +900,13 @@ const buildAiPlaySummary = (
   };
 };
 
-const playWithAI = (payload: AgentPayload): AIPlayReport => {
-  const config = buildAiPlayConfig(payload);
+const playWithAIState = (config: AIPlayConfig, maxWeeks: number): AIPlayReport => {
   state().initializeGame(config.teamId, config.seed);
 
   const bugs: BugReport[] = [];
   const balanceFlags: BalanceFlag[] = [];
   const initialSeasonHistoryLength = state().careerRecord.seasonHistory.length;
   const startingSeason = getInboxSeason(state().competitions);
-  const maxWeeks = config.seasons * 120;
   let seasonStartRatings = buildSeasonStartRatings();
   let lastSeasonMarker = startingSeason;
   let attempts = 0;
@@ -825,7 +929,7 @@ const playWithAI = (payload: AgentPayload): AIPlayReport => {
     try {
       applyAssistantActions(undefined);
       runAiPreWeekPolicy(getAiPolicyGameState(), config);
-      state().advanceWeek();
+      if (!advanceOneWeek()) throw new Error('Week advancement is blocked by an active live match.');
       weeksPlayed += 1;
       runAiPostWeekPolicy(getAiPolicyGameState(), config);
       consecutiveErrors = 0;
@@ -882,29 +986,56 @@ const playWithAI = (payload: AgentPayload): AIPlayReport => {
   };
 };
 
+const playWithAI = (payload: AgentPayload): AIPlayReport => {
+  const config = buildAiPlayConfig(payload);
+  if (config.seasons > 20) throw new Error('seasons must be at most 20');
+  const maxWeeks = readPositiveInteger(payload, 'maxWeeks') ?? config.seasons * 120;
+  if (maxWeeks > config.seasons * 120) throw new Error('maxWeeks exceeds the requested season bound');
+  const originalRandom = Math.random;
+  try {
+    Math.random = createSeededRandomGenerator(config.seed).next;
+    return playWithAIState(config, maxWeeks);
+  } finally { Math.random = originalRandom; }
+};
+
 const runAgentCommand = (command: AgentCommand, payload?: AgentPayload): AgentCommandResult => {
   const before = buildAgentGameSummary();
+  const beforeHash = getStateHash();
   try {
+    if (payload !== undefined && (!payload || typeof payload !== 'object' || Array.isArray(payload))) throw new Error('payload must be an object');
     let data: unknown;
 
     if (command === 'help') data = listAgentCommands();
     else if (command === 'summary') data = buildAgentGameSummary();
     else if (command === 'validate') data = validateAgentGameState();
     else if (command === 'snapshot') data = buildSnapshot(payload);
-    else if (command === 'rawState') data = state();
-    else if (command === 'initialize') state().initializeGame(readString(payload, 'teamId') || getInitialTeamId(), readPositiveInteger(payload, 'seed'));
-    else if (command === 'changeTeam') state().changeTeam(readString(payload, 'teamId') || '');
+    else if (command === 'rawState') data = detach(state());
+    else if (command === 'players') data = queryPlayers(payload);
+    else if (command === 'teams') data = queryTeams(payload);
+    else if (command === 'initialize') state().initializeGame(playableTeamId(readString(payload, 'teamId') ?? getInitialTeamId()), readPositiveInteger(payload, 'seed'));
+    else if (command === 'changeTeam') state().changeTeam(playableTeamId(requiredString(payload, 'teamId')));
     else if (command === 'applyAssistantActions') data = applyAssistantActions(payload);
-    else if (command === 'applyInboxAction') state().applyInboxAction(readString(payload, 'messageId') || '');
-    else if (command === 'markInboxRead') state().markInboxMessageRead(readString(payload, 'messageId') || '');
-    else if (command === 'dismissInbox') state().dismissInboxMessage(readString(payload, 'messageId') || '');
+    else if (command === 'applyInboxAction' || command === 'markInboxRead' || command === 'dismissInbox') {
+      const messageId = requiredString(payload, 'messageId');
+      const message = state().inboxMessages.find(item => item.id === messageId);
+      if (!message) throw new Error(`Unknown inbox message ${messageId}`);
+      if (command === 'applyInboxAction') {
+        if (!message.action) throw new Error('This inbox message has no action');
+        state().applyInboxAction(messageId);
+      } else if (command === 'markInboxRead') state().markInboxMessageRead(messageId);
+      else state().dismissInboxMessage(messageId);
+    }
     else if (command === 'advanceWeek') {
-      const count = Math.max(1, Math.floor(readNumber(payload, 'count', 1)));
-      if (count > 26 && !readBoolean(payload, 'allowLargeCount', false)) {
+      const count = readPositiveInteger(payload, 'count') ?? 1;
+      const allowLargeCount = readBoolean(payload, 'allowLargeCount', false);
+      if (count > 100) throw new Error('advanceWeek count must be at most 100');
+      if (count > 26 && !allowLargeCount) {
         throw new Error('advanceWeek count over 26 requires allowLargeCount: true');
       }
-      for (let i = 0; i < count; i += 1) state().advanceWeek();
-      data = { advancedWeeks: count };
+      let advancedWeeks = 0;
+      while (advancedWeeks < count && advanceOneWeek()) advancedWeeks += 1;
+      data = { advancedWeeks, requestedWeeks: count, success: advancedWeeks === count,
+        message: advancedWeeks === count ? 'Weeks advanced.' : 'Finish the active live match before advancing.' };
     } else if (command === 'skipSeason') state().skipToEndOfSeason();
     else if (command === 'clearStuckLiveMatch') data = { cleared: state().clearStuckLiveMatches() };
     else if (command === 'quickSimNext') data = quickSimNext(payload);
@@ -915,8 +1046,10 @@ const runAgentCommand = (command: AgentCommand, payload?: AgentPayload): AgentCo
       const fixture = state().fixtures[fixtureId];
       if (!fixture) throw new Error(`Unknown fixture ${fixtureId}`);
       assertManagedDueFixture(fixture);
-      const minute = readNumber(payload, 'minute', 1);
-      if (!Number.isInteger(minute) || minute < 1 || minute > 90) throw new Error('processLiveMinute minute must be an integer from 1 to 90');
+      const minute = readPositiveInteger(payload, 'minute') ?? 1;
+      const progress = liveProgress(fixture);
+      if (minute > progress.maxMinute) throw new Error(`processLiveMinute minute must be from 1 to ${progress.maxMinute}`);
+      if (minute !== progress.nextMinute && !progress.live?.processedMinutes?.includes(minute)) throw new Error(`Process the next minute (${progress.nextMinute}) first`);
       data = state().processMatchMinute(fixtureId, minute);
     } else if (command === 'finishLiveMatch') {
       const fixtureId = readString(payload, 'fixtureId');
@@ -935,11 +1068,75 @@ const runAgentCommand = (command: AgentCommand, payload?: AgentPayload): AgentCo
       assertManagedTeam(teamId);
       const tactics = readTactics(payload);
       state().setTactics(teamId, tactics);
+    } else if (command === 'toggleStarting' || command === 'markAsSub') {
+      const player = ownedPlayer(payload);
+      if (command === 'toggleStarting') state().toggleStarting(player.id);
+      else state().markAsSub(player.id);
+    } else if (command === 'setTrainingFocus') {
+      const player = ownedPlayer(payload);
+      const focus = payload?.focus;
+      if (focus !== null && !['pace', 'shooting', 'passing', 'dribbling', 'defending', 'physical'].includes(focus as string)) throw new Error('focus must be a training attribute or null');
+      state().setTrainingFocus(player.id, focus as StatKey | null);
+    } else if (command === 'setPlayerRole') {
+      const teamId = readString(payload, 'teamId') ?? state().userTeamId;
+      assertManagedTeam(teamId);
+      const { slotKey, slot } = formationSlot(payload, 'slotKey', teamId);
+      const role = requiredString(payload, 'role') as PlayerRole;
+      if (!getCompatiblePlayerRolesForSlot(slot.label).includes(role)) throw new Error(`Incompatible role for ${slot.label}`);
+      state().setPlayerRole(teamId, slotKey, role);
+    } else if (command === 'swapPlayer') {
+      const player = ownedPlayer(payload, 'addId');
+      const removeId = payload?.removeId == null ? null : ownedPlayer(payload, 'removeId').id;
+      if (removeId === player.id) throw new Error('A player cannot replace himself');
+      const map = state().teams[player.teamId].formationMap;
+      const slotKey = payload?.slotKey === undefined
+        ? Object.entries(map ?? {}).find(([, id]) => id === removeId)?.[0]
+        : formationSlot(payload, 'slotKey', player.teamId).slotKey;
+      if (player.isStarting && !slotKey) throw new Error('Replacing another starter requires a mapped formation slot');
+      if (slotKey && (state().teams[player.teamId].formationMap?.[slotKey] ?? null) !== removeId) throw new Error('removeId must match the player currently in slotKey');
+      state().swapPlayer(removeId, player.id, slotKey);
+    } else if (command === 'swapStartingSlots') {
+      const teamId = readString(payload, 'teamId') ?? state().userTeamId;
+      assertManagedTeam(teamId);
+      const slotA = formationSlot(payload, 'slotA', teamId);
+      const slotB = formationSlot(payload, 'slotB', teamId);
+      const map = state().teams[teamId].formationMap;
+      const playerA = state().players[map?.[slotA.slotKey] ?? ''];
+      const playerB = state().players[map?.[slotB.slotKey] ?? ''];
+      if (!playerA || !playerB || playerA.teamId !== teamId || playerB.teamId !== teamId) throw new Error('Both slots must contain managed players');
+      if ((playerA.position === 'GK') !== (slotB.slot.pos === 'GK') || (playerB.position === 'GK') !== (slotA.slot.pos === 'GK')) throw new Error('Goalkeepers must remain in goalkeeper slots');
+      state().swapStartingSlots(teamId, slotA.slotKey, slotB.slotKey);
+    } else if (command === 'approachPlayer' || command === 'signFreeAgent') {
+      const playerId = requiredString(payload, 'playerId');
+      if (!state().players[playerId]) throw new Error(`Unknown player ${playerId}`);
+      data = command === 'approachPlayer' ? state().approachPlayer(playerId)
+        : state().signFreeAgent(playerId, readNumber(payload, 'wageOffered', 0));
+    } else if (command === 'submitTransferBid' || command === 'acceptTransferCounter' || command === 'withdrawTransferNegotiation') {
+      const negotiationId = requiredString(payload, 'negotiationId');
+      const negotiation = state().pendingNegotiations?.find(item => item.id === negotiationId);
+      if (!negotiation || !['pending', 'countered'].includes(negotiation.status)) throw new Error('No active negotiation with that ID');
+      if (command === 'submitTransferBid') data = state().submitTransferBid(negotiationId, readNumber(payload, 'fee', 0), readNumber(payload, 'wageOffered', 0));
+      else if (command === 'acceptTransferCounter') data = state().acceptTransferCounter(negotiationId);
+      else state().withdrawTransferNegotiation(negotiationId);
+    } else if (command === 'makeLiveSubstitutions' || command === 'setLiveMatchFormation') {
+      const fixture = getNextFixture(requiredString(payload, 'fixtureId'));
+      const teamId = readString(payload, 'teamId') ?? state().userTeamId;
+      assertManagedTeam(teamId);
+      if (command === 'setLiveMatchFormation') data = state().setLiveMatchFormation(fixture.id, teamId, readFormation(payload));
+      else {
+        const replacements = payload?.replacements;
+        if (!Array.isArray(replacements) || replacements.length < 1 || replacements.length > 5) throw new Error('replacements must contain 1–5 player pairs');
+        const pairs = replacements.map(pair => {
+          if (!pair || typeof pair !== 'object' || Array.isArray(pair)) throw new Error('Invalid substitution pair');
+          return { offPlayerId: ownedPlayer(pair, 'offPlayerId').id, onPlayerId: ownedPlayer(pair, 'onPlayerId').id };
+        });
+        data = state().makeLiveSubstitutions(fixture.id, pairs);
+      }
     } else if (command === 'listPlayer') {
-      const playerId = readString(payload, 'playerId');
-      if (!playerId) throw new Error('listPlayer requires playerId');
-      assertManagedTeam(state().players[playerId]?.teamId);
-      state().listPlayerForSale(playerId, readNumber(payload, 'askingPrice', 1));
+      const player = ownedPlayer(payload);
+      const askingPrice = readNumber(payload, 'askingPrice', 1);
+      if (askingPrice <= 0) throw new Error('askingPrice must be positive');
+      state().listPlayerForSale(player.id, askingPrice);
     } else if (command === 'unlistPlayer') {
       const playerId = readString(payload, 'playerId');
       if (!playerId) throw new Error('unlistPlayer requires playerId');
@@ -950,24 +1147,28 @@ const runAgentCommand = (command: AgentCommand, payload?: AgentPayload): AgentCo
       if (!playerId) throw new Error('buyPlayer requires playerId');
       data = state().buyPlayer(playerId, readNumber(payload, 'fee', 0), readNumber(payload, 'wageOffered', 0));
     } else if (command === 'renewContract') {
-      const playerId = readString(payload, 'playerId');
-      if (!playerId) throw new Error('renewContract requires playerId');
-      assertManagedTeam(state().players[playerId]?.teamId);
-      data = state().renewPlayerContract(playerId, readNumber(payload, 'years', 1), readNumber(payload, 'wage', 1));
+      const player = ownedPlayer(payload);
+      data = state().renewPlayerContract(player.id, readNumber(payload, 'years', 1), readNumber(payload, 'wage', 1));
     } else if (command === 'playSeason') data = playSeason(payload);
     else if (command === 'playWithAI') data = playWithAI(payload);
     else if (command === 'smokeCheck') data = runSmokeCheck();
     else throw new Error(`Unknown agent command ${command}`);
 
-    return { ok: true, command, data, before, after: buildAgentGameSummary(), stateHash: getStateHash() };
+    const stateHash = getStateHash();
+    const changed = stateHash !== beforeHash;
+    if (!changed && ['toggleStarting', 'markAsSub', 'swapPlayer'].includes(command)) throw new Error('Action rejected by lineup eligibility or capacity rules');
+    const result = data as { success?: boolean; message?: string } | undefined;
+    const ok = result?.success !== false;
+    return { ok, command, data: data === undefined ? undefined : detach(data), error: ok ? undefined : result?.message, before, after: buildAgentGameSummary(), stateHash, changed };
   } catch (error) {
-    return { ok: false, command, error: errorMessage(error), before, after: buildAgentGameSummary(), stateHash: getStateHash() };
+    const stateHash = getStateHash();
+    return { ok: false, command, error: errorMessage(error), before, after: buildAgentGameSummary(), stateHash, changed: stateHash !== beforeHash };
   }
 };
 
 export const installAgentGameHandler = () => {
   const handler: AgentGameHandler = {
-    version: 1,
+    version: 2,
     help: listAgentCommands,
     summary: buildAgentGameSummary,
     validate: validateAgentGameState,

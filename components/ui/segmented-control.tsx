@@ -29,6 +29,7 @@ export function SegmentedControl<T extends string>({ segments, value, onChange, 
             onPress={() => onChange(segment.value)}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
+            aria-selected={active}
             accessibilityLabel={segment.label}
             activeOpacity={0.85}
             style={[styles.option, active && styles.optionActive]}

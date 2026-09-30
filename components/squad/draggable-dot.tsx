@@ -89,6 +89,8 @@ export function DraggableDot({
           delayPressIn={50}
           disabled={dragging}
           hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={`${slot.label} position: ${assigned?.name ?? 'empty'}`}
         >
           <View
             style={[

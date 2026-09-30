@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { color } from '@/src/design/tokens';
 
 type TacticSectionProps = {
@@ -30,7 +30,9 @@ export function TacticSection({
               style={[styles.tacticsOptBtn, isActive && styles.tacticsOptBtnActive]}
               onPress={() => onSelect(option)}
               accessibilityRole="button"
+              accessibilityLabel={`${title}: ${option}`}
               accessibilityState={{ selected: isActive }}
+              {...(Platform.OS === 'web' ? { 'aria-pressed': isActive } : {})}
             >
               <Text style={[styles.tacticsOptText, isActive && styles.tacticsOptTextActive]}>{option}</Text>
             </TouchableOpacity>
@@ -46,9 +48,9 @@ const styles = StyleSheet.create({
   tacticsSection: { gap: 10 },
   tacticsSectionTitle: { color: color.text.muted, fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1.5 },
   tacticsOptionsRow: { flexDirection: 'row', backgroundColor: color.bg.card, borderRadius: 0, padding: 4, borderWidth: 1, borderColor: color.border.default },
-  tacticsOptBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 0 },
+  tacticsOptBtn: { flex: 1, minHeight: 44, justifyContent: 'center', paddingVertical: 10, alignItems: 'center', borderRadius: 0 },
   tacticsOptBtnActive: { backgroundColor: color.accent.primary },
   tacticsOptText: { color: color.text.muted, fontSize: 13, fontWeight: '800' },
   tacticsOptTextActive: { color: color.accent.onPrimary },
-  tacticsHintText: { color: color.text.disabled, fontSize: 11, fontStyle: 'italic', paddingHorizontal: 4, lineHeight: 16 },
+  tacticsHintText: { color: color.text.muted, fontSize: 12, paddingHorizontal: 4, lineHeight: 18 },
 });

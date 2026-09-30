@@ -456,6 +456,7 @@ const styles = StyleSheet.create({
   // Pitch
   pitchWrapper:      { paddingHorizontal: 10, paddingVertical: 10 },
   pitch: {
+    width: '100%', maxWidth: 540, alignSelf: 'center',
     backgroundColor: color.success.bgStrong, borderRadius: 0,
     height: 480,
     borderWidth: 2, borderColor: color.success.bgStrongBorder, overflow: 'hidden', position: 'relative',

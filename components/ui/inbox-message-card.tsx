@@ -70,16 +70,16 @@ export function InboxMessageCard({
 
       <View style={styles.actionsRow}>
         {!message.isRead ? (
-          <TouchableOpacity style={styles.secondaryButton} onPress={() => onMarkRead(message.id)}>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => onMarkRead(message.id)} accessibilityRole="button" accessibilityLabel={`Mark Read: ${message.title}`}>
             <Text style={styles.secondaryText}>Mark Read</Text>
           </TouchableOpacity>
         ) : null}
         {actionLabel ? (
-          <TouchableOpacity style={styles.primaryButton} onPress={() => onApply(message.id)}>
+          <TouchableOpacity style={styles.primaryButton} onPress={() => onApply(message.id)} accessibilityRole="button" accessibilityLabel={`${actionLabel}: ${message.title}`}>
             <Text style={styles.primaryText}>{actionLabel}</Text>
           </TouchableOpacity>
         ) : null}
-        <TouchableOpacity style={styles.dismissButton} onPress={() => onDismiss(message.id)}>
+        <TouchableOpacity style={styles.dismissButton} onPress={() => onDismiss(message.id)} accessibilityRole="button" accessibilityLabel={`Dismiss: ${message.title}`}>
           <Text style={styles.dismissText}>Dismiss</Text>
         </TouchableOpacity>
       </View>
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   categoryText: { color: '#cbd5e1', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
-  weekLabel: { color: '#64748b', fontSize: 11, fontWeight: '900' },
+  weekLabel: { color: '#94a3b8', fontSize: 11, fontWeight: '900' },
   title: { color: '#f8fafc', fontSize: 16, fontWeight: '900' },
   body: { color: '#cbd5e1', fontSize: 14, lineHeight: 22 },
   actionsRow: {
@@ -135,6 +135,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   primaryButton: {
+    minHeight: 44,
+    justifyContent: 'center',
     backgroundColor: '#38bdf8',
     borderRadius: 0,
     paddingHorizontal: 12,
@@ -142,6 +144,8 @@ const styles = StyleSheet.create({
   },
   primaryText: { color: '#082f49', fontSize: 12, fontWeight: '900' },
   secondaryButton: {
+    minHeight: 44,
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#475569',
     borderRadius: 0,
@@ -150,6 +154,8 @@ const styles = StyleSheet.create({
   },
   secondaryText: { color: '#e2e8f0', fontSize: 12, fontWeight: '800' },
   dismissButton: {
+    minHeight: 44,
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#7f1d1d',
     borderRadius: 0,

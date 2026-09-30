@@ -39,10 +39,10 @@ export function NextFixtureCard({ homeTeam, awayTeam, userTeamId, subLabel, onPr
             </View>
           </View>
           <View style={styles.playBtnRow}>
-            <TouchableOpacity style={styles.primaryPlayBtn} onPress={onPress} activeOpacity={0.85}>
+            <TouchableOpacity style={styles.primaryPlayBtn} onPress={onPress} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel="Play Live">
               <Text style={styles.primaryPlayText}>Play Live</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryPlayBtn} onPress={onQuickSim || onPress} activeOpacity={0.85}>
+            <TouchableOpacity style={styles.secondaryPlayBtn} onPress={onQuickSim || onPress} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel="Quick Sim">
               <Text style={styles.secondaryPlayText}>Quick Sim</Text>
             </TouchableOpacity>
           </View>
@@ -50,7 +50,7 @@ export function NextFixtureCard({ homeTeam, awayTeam, userTeamId, subLabel, onPr
       ) : (
         <View style={styles.emptyState}>
           <Text style={styles.matchupSubtext}>No fixture this week.</Text>
-          <TouchableOpacity style={[styles.primaryPlayBtn, styles.emptyPlayBtn]} onPress={onPress} activeOpacity={0.85}>
+          <TouchableOpacity style={[styles.primaryPlayBtn, styles.emptyPlayBtn]} onPress={onPress} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel="Advance Week">
             <Text style={styles.primaryPlayText}>Advance Week</Text>
           </TouchableOpacity>
         </View>
@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   heroMatchTitle: { fontSize: 10, fontWeight: '900', color: '#38bdf8', letterSpacing: 2.5, marginBottom: 4 },
-  heroStadium: { fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 16 },
+  heroStadium: { fontSize: 12, color: '#94a3b8', fontWeight: '600', marginBottom: 16 },
   matchupRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   matchupTeam: { flex: 1, gap: 6 },
   awayTeam: { alignItems: 'flex-end' },
@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
   awayTagText: { color: '#f87171' },
   matchupVsBlock: { paddingHorizontal: 16, alignItems: 'center' },
   matchupVs: { fontSize: 22, fontWeight: '900', color: '#334155' },
-  matchupSubtext: { fontSize: 14, color: '#64748b', marginBottom: 8 },
+  matchupSubtext: { fontSize: 14, color: '#94a3b8', marginBottom: 8 },
   playBtnRow: {
     borderTopWidth: 1,
     borderTopColor: '#1e293b',
@@ -95,12 +95,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   primaryPlayBtn: {
+    minHeight: 44,
     flex: 1,
     backgroundColor: '#38bdf8',
     paddingVertical: 12,
     alignItems: 'center',
   },
   secondaryPlayBtn: {
+    minHeight: 44,
     flex: 1,
     borderWidth: 1,
     borderColor: '#38bdf8',

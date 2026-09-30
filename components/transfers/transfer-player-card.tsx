@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { color } from '@/src/design/tokens';
 import { Player } from '@/src/models/types';
 
@@ -24,16 +24,17 @@ export function TransferPlayerCard({
   secondaryActionVariant = 'primary',
   onSecondaryAction,
 }: TransferPlayerCardProps) {
+  const compact = useWindowDimensions().width < 600;
   return (
-    <View style={styles.card}>
-      <View style={styles.cardLeft}>
+    <View style={[styles.card, compact && styles.compactCard]}>
+      <View style={[styles.cardLeft, compact && styles.compactLeft]}>
         <Text style={styles.pos}>{player.subPosition || player.position}</Text>
         <View style={styles.playerTextBlock}>
-          <Text style={styles.name} numberOfLines={1}>{player.name}</Text>
-          <Text style={styles.club} numberOfLines={1}>{subLabel}</Text>
+          <Text style={styles.name} numberOfLines={compact ? 2 : 1}>{player.name}</Text>
+          <Text style={styles.club} numberOfLines={compact ? 2 : 1}>{subLabel}</Text>
         </View>
       </View>
-      <View style={styles.cardRight}>
+      <View style={[styles.cardRight, compact && styles.compactRight]}>
         <View style={styles.ratingBox}>
           <Text style={styles.rating}>{player.overallRating}</Text>
         </View>
@@ -66,6 +67,9 @@ export function TransferPlayerCard({
 
 const styles = StyleSheet.create({
   card: { backgroundColor: color.bg.card, padding: 12, borderRadius: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  compactCard: { flexDirection: 'column', alignItems: 'stretch' },
+  compactLeft: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', width: '100%' },
+  compactRight: { justifyContent: 'space-between', flexWrap: 'wrap' },
   cardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   playerTextBlock: { flex: 1, minWidth: 0 },
   pos: { width: 34, textAlign: 'center', backgroundColor: color.bg.elevated, color: color.text.primary, paddingVertical: 4, borderRadius: 0, fontSize: 10, fontWeight: '900' },
@@ -74,7 +78,7 @@ const styles = StyleSheet.create({
   cardRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   ratingBox: { backgroundColor: color.text.secondary, width: 28, height: 28, borderRadius: 0, justifyContent: 'center', alignItems: 'center' },
   rating: { color: color.bg.screen, fontWeight: '900', fontSize: 12 },
-  actionBtn: { backgroundColor: color.accent.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 0 },
+  actionBtn: { minHeight: 44, justifyContent: 'center', backgroundColor: color.accent.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 0 },
   actionBtnDanger: { backgroundColor: color.danger.base },
   secondaryActionBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: color.text.faint },
   actionText: { color: color.accent.onPrimary, fontWeight: '900', fontSize: 12 },

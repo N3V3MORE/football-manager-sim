@@ -487,11 +487,18 @@ const runLiveMatchPolicy = (game: AIPolicyGameState, team: Team, decisions: AIPo
       ? liveMatch.currentHomePlayerIds || liveMatch.homeStarterIds
       : liveMatch.currentAwayPlayerIds || liveMatch.awayStarterIds;
     const benchIds = isHome ? liveMatch.homeBenchIds || [] : liveMatch.awayBenchIds || [];
+    const usedIds = new Set([
+      ...currentIds, ...(isHome ? liveMatch.homeStarterIds : liveMatch.awayStarterIds),
+      ...(liveMatch.sentOffPlayerIds || []),
+      ...Object.keys(isHome ? liveMatch.homeSubEntryMinutes || {} : liveMatch.awaySubEntryMinutes || {}),
+    ]);
+    const minuteMap = isHome ? liveMatch.homeMinuteMap : liveMatch.awayMinuteMap;
     const offPlayer = currentIds
       .map(playerId => game.players[playerId])
       .filter(Boolean)
       .sort((a, b) => (a.energy + a.overallRating * 0.4) - (b.energy + b.overallRating * 0.4))[0];
     const onPlayer = benchIds
+      .filter(playerId => !usedIds.has(playerId) && !((minuteMap?.[playerId] ?? 0) > 0))
       .map(playerId => game.players[playerId])
       .filter(player => player && !isPlayerUnavailable(player) && player.position === offPlayer?.position)
       .sort((a, b) => playerSelectionScore(b) - playerSelectionScore(a))[0];

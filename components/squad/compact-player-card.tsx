@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Player, StatKey, TrainingStatKey } from '@/src/models/types';
 import { GOALKEEPER_TRAINING_STATS } from '@/src/core/trainingEngine';
 import { getPositionColor } from '@/src/constants/positionColors';
@@ -47,44 +47,63 @@ export function CompactPlayerCard({
   const isInjured = isPlayerInjured(item);
   const isExhausted = item.energy < 70;
   const isExpiring = isContractExpiringSoon(item);
-  const warningColor = (isSuspended || isInjured || isExhausted || isExpiring) ? '#ef4444' : undefined;
+  const warningColor = isSuspended || isInjured ? '#ef4444' : isExhausted || isExpiring ? '#f59e0b' : undefined;
   const statusLine = `${getPlayerAvailabilityStatus(item)} | ${formatContractLength(item)}`;
+  const primaryAction = isBench ? 'Details and training' : item.isSub && (isSuspended || isInjured) ? 'Remove from bench' : 'Add to bench';
   const trainingXp = Math.max(0, Math.min(99, item.trainingXp || 0));
   const trainingGains = Object.entries(item.trainingStatGains || {})
     .filter((entry): entry is [TrainingStatKey, number] => Number(entry[1]) > 0);
 
   return (
     <View>
-      <TouchableOpacity
-        style={[styles.playerRow, isExpanded && styles.playerRowExpanded, warningColor && { borderColor: warningColor }]}
-        onPress={onPress}
-        onLongPress={onLongPress}
-        delayLongPress={400}
-        activeOpacity={0.7}
-      >
-        <View style={[styles.posTag, { backgroundColor: getPositionColor(item.position) }]}>
-          <Text style={styles.posText}>{item.subPosition || item.position}</Text>
-        </View>
-        <View style={styles.playerMeta}>
-          <Text style={[styles.playerName, warningColor && { color: warningColor }]} numberOfLines={1}>
-            {item.name} {isSuspended && <Text style={styles.suspensionTag}>[SUSP]</Text>}
-            {isInjured && <Text style={styles.suspensionTag}>[INJ]</Text>}
-            {isExpiring && <Text style={styles.contractTag}>[EXP]</Text>}
-          </Text>
-          <Text style={styles.nationality}>{item.nationality} | {Math.floor(item.energy)}% Energy</Text>
-          <Text style={styles.statusMeta}>{statusLine}</Text>
-        </View>
-        <View style={styles.playerRowRight}>
-          <View style={styles.ratingBox}>
-            <Text style={styles.ratingText}>{item.overallRating}</Text>
+      <View style={styles.playerActions}>
+        <TouchableOpacity
+          style={[styles.playerRow, isExpanded && styles.playerRowExpanded, warningColor && { borderColor: warningColor }]}
+          onPress={onPress}
+          onLongPress={onLongPress}
+          delayLongPress={400}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`${primaryAction} ${item.name}`}
+          accessibilityHint={`Rating ${item.overallRating}. ${Math.floor(item.energy)} percent energy. ${statusLine}.`}
+          disabled={!isBench && !item.isSub && (isSuspended || isInjured)}
+          accessibilityState={isBench ? { expanded: isExpanded } : undefined}
+          aria-expanded={isBench ? isExpanded : undefined}
+        >
+          <View style={[styles.posTag, { backgroundColor: getPositionColor(item.position) }]}>
+            <Text style={styles.posText}>{item.subPosition || item.position}</Text>
           </View>
-          {isBench && (
-            <View style={styles.benchBadge}>
-              <Text style={styles.benchBadgeText}>SUB</Text>
+          <View style={styles.playerMeta}>
+            <Text style={[styles.playerName, warningColor && { color: warningColor }]} numberOfLines={1}>
+              {item.name} {isSuspended && <Text style={styles.suspensionTag}>[SUSP]</Text>}
+              {isInjured && <Text style={styles.suspensionTag}>[INJ]</Text>}
+              {isExpiring && <Text style={styles.contractTag}>[EXP]</Text>}
+            </Text>
+            <Text style={styles.nationality}>{item.nationality} | {Math.floor(item.energy)}% Energy</Text>
+            <Text style={styles.statusMeta}>{statusLine}</Text>
+          </View>
+          <View style={styles.playerRowRight}>
+            <View style={styles.ratingBox}>
+              <Text style={styles.ratingText}>{item.overallRating}</Text>
             </View>
-          )}
-        </View>
-      </TouchableOpacity>
+            {isBench && (
+              <View style={styles.benchBadge}>
+                <Text style={styles.benchBadgeText}>SUB</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryAction}
+          onPress={onLongPress}
+          accessibilityRole="button"
+          accessibilityLabel={`${isBench ? 'Remove from bench' : 'Details and training'} ${item.name}`}
+          accessibilityState={!isBench ? { expanded: isExpanded } : undefined}
+          aria-expanded={!isBench ? isExpanded : undefined}
+        >
+          <Text style={styles.secondaryActionText}>{isBench ? 'Remove' : isExpanded ? 'Hide details' : 'Details'}</Text>
+        </TouchableOpacity>
+      </View>
 
       {isExpanded && (
         <View style={styles.statsExpanded}>
@@ -146,7 +165,9 @@ export function CompactPlayerCard({
                       style={[styles.trainingOption, selected && styles.trainingOptionSelected]}
                       onPress={() => onTrainingFocusChange(item.id, option.value)}
                       accessibilityRole="button"
+                      accessibilityLabel={`Train ${item.name}: ${option.value ?? 'balanced'}`}
                       accessibilityState={{ selected }}
+                      {...(Platform.OS === 'web' ? { 'aria-pressed': selected } : {})}
                     >
                       <Text style={[styles.trainingOptionText, selected && styles.trainingOptionTextSelected]}>
                         {item.position === 'GK' && option.value ? STAT_LABELS[GOALKEEPER_TRAINING_STATS[option.value]] : option.label}
@@ -169,7 +190,12 @@ export function CompactPlayerCard({
 }
 
 const styles = StyleSheet.create({
+  playerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  secondaryAction: { width: 76, minHeight: 44, paddingHorizontal: 6, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#334155', backgroundColor: '#1e293b' },
+  secondaryActionText: { color: '#cbd5e1', fontSize: 11, fontWeight: '700', textAlign: 'center' },
   playerRow: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#1e293b',
@@ -183,11 +209,11 @@ const styles = StyleSheet.create({
   playerRowExpanded: { borderColor: '#38bdf8', borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
   posTag: { paddingVertical: 3, paddingHorizontal: 6, borderRadius: 0, marginRight: 10, minWidth: 38, alignItems: 'center' },
   posText: { color: '#fff', fontWeight: '900', fontSize: 10 },
-  playerMeta: { flex: 1 },
+  playerMeta: { flex: 1, minWidth: 0 },
   playerName: { fontSize: 14, fontWeight: '700', color: '#f1f5f9' },
   suspensionTag: { fontSize: 10, color: '#ef4444' },
   contractTag: { fontSize: 10, color: '#f59e0b' },
-  nationality: { fontSize: 10, color: '#64748b', fontWeight: '600' },
+  nationality: { fontSize: 11, color: '#94a3b8', fontWeight: '600' },
   statusMeta: { fontSize: 10, color: '#94a3b8', fontWeight: '600', marginTop: 2 },
   playerRowRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   ratingBox: { backgroundColor: '#cbd5e1', width: 30, height: 30, borderRadius: 0, justifyContent: 'center', alignItems: 'center' },
@@ -250,8 +276,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   trainingOption: {
-    minWidth: 38,
-    minHeight: 30,
+    minWidth: 44,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,

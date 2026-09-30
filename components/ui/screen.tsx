@@ -38,6 +38,6 @@ export function Screen({ children, scroll = true, style, contentContainerStyle, 
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: color.bg.screen },
-  fill: { flex: 1 },
-  scrollContent: { padding: space.lg, paddingBottom: space.xxl + space.lg },
+  fill: { flex: 1, width: '100%', maxWidth: 1120, alignSelf: 'center' },
+  scrollContent: { width: '100%', maxWidth: 1120, alignSelf: 'center', padding: space.lg, paddingBottom: space.xxl + space.lg },
 });

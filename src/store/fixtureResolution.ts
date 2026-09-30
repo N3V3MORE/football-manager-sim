@@ -70,7 +70,7 @@ export const playMatchState = (
 ): Partial<WeeklyLifecycleState> => {
   const previousPlayers = state.players;
   const seedFixture = state.fixtures[fixtureId];
-  if (seedFixture?.isPlayed) return state;
+  if (seedFixture?.isPlayed || state.liveMatches?.[fixtureId]?.initialized) return state;
   const season = seedFixture ? state.competitions[seedFixture.competitionId]?.season || 1 : 1;
   const rng = createFixtureEventRandomGenerator(fixtureId, 0, state.rngState ?? 1, season, 'quick');
   const { players, teams, fixture } = quickSimMatch(fixtureId, state.players, state.teams, state.fixtures, state.userTeamId, { rng });

@@ -15,7 +15,8 @@ export function PlayerPickerRow({ item, onPress }: PlayerPickerRowProps) {
   const warningColor = (isSuspended || isExhausted) ? color.danger.base : undefined;
 
   return (
-    <TouchableOpacity style={[styles.pickerRow, warningColor && { borderColor: warningColor }]} onPress={onPress}>
+    <TouchableOpacity style={[styles.pickerRow, warningColor && { borderColor: warningColor }]} onPress={onPress}
+      accessibilityRole="button" accessibilityLabel={`Select ${item.name}, ${item.subPosition || item.position}, rating ${item.overallRating}`}>
       <View style={[styles.modalPosPill, { backgroundColor: getPositionColor(item.position) }]}>
         <Text style={styles.modalPosText}>{item.subPosition || item.position}</Text>
       </View>
@@ -38,7 +39,7 @@ const styles = StyleSheet.create({
   modalPosText: { color: color.text.primary, fontSize: 10, fontWeight: '900' },
   playerMeta: { flex: 1 },
   pickerName: { flex: 1, fontSize: 14, fontWeight: '700', color: color.text.primary },
-  pickerNat: { fontSize: 10, color: color.text.faint, width: 60 },
+  pickerNat: { fontSize: 11, color: color.text.muted },
   pickerRating: { backgroundColor: color.text.secondary, width: 32, height: 32, borderRadius: 0, justifyContent: 'center', alignItems: 'center' },
   pickerRatingText: { color: color.bg.screen, fontWeight: '900', fontSize: 13 },
   pickerStarter: { fontSize: 10, color: color.accent.primary, fontWeight: '900' },
