@@ -89,8 +89,10 @@ export const buildQuickSimLineup = (
     // For GK slots, restrict to goalkeepers only — never fill with an outfield player.
     if (slot.pos === 'GK') {
       candidates = candidates.filter(player => player.position === 'GK');
-      if (candidates.length === 0) return;
+    } else {
+      candidates = candidates.filter(player => player.position !== 'GK');
     }
+    if (candidates.length === 0) return;
     const exact = candidates.filter(player => player.subPosition === slot.label || player.altPositions?.includes(slot.label));
     const positional = candidates.filter(player => player.position === slot.pos);
     const pool = exact.length > 0 ? exact : (positional.length > 0 ? positional : candidates);

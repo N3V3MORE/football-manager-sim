@@ -49,8 +49,16 @@ const buildNegotiationId = (
   currentWeek: number,
   buyerTeamId: string,
   sellerTeamId: string,
-  playerId: string
-) => `neg-${currentWeek}-${buyerTeamId}-${sellerTeamId}-${playerId}`;
+  playerId: string,
+  negotiations: TransferNegotiation[]
+) => {
+  const baseId = `neg-${currentWeek}-${buyerTeamId}-${sellerTeamId}-${playerId}`;
+  const existingIds = new Set(negotiations.map(negotiation => negotiation.id));
+  let id = baseId;
+  let attempt = 1;
+  while (existingIds.has(id)) id = `${baseId}-${attempt++}`;
+  return id;
+};
 
 const isActiveNegotiation = (negotiation: TransferNegotiation) => (
   ACTIVE_NEGOTIATION_STATUSES.has(negotiation.status)
@@ -220,7 +228,7 @@ const createCounterNegotiation = (
   }
 
   const negotiation: TransferNegotiation = {
-    id: buildNegotiationId(state.currentWeek, buyer.id, seller.id, player.id),
+    id: buildNegotiationId(state.currentWeek, buyer.id, seller.id, player.id, negotiations),
     playerId: player.id,
     buyerTeamId: buyer.id,
     sellerTeamId: seller.id,
@@ -266,12 +274,32 @@ const createCounterNegotiation = (
   };
 };
 
+const getNegotiationError = (state: TransferActionState, negotiation: TransferNegotiation): string | null => {
+  if (negotiation.buyerTeamId !== state.userTeamId) return 'You no longer manage the buying club.';
+  if (!isTransferWindowOpen(state.currentWeek)) return 'The transfer window is closed.';
+  if (!Number.isFinite(negotiation.expiresWeek) || state.currentWeek >= negotiation.expiresWeek) {
+    return 'This negotiation has expired.';
+  }
+  const buyer = state.teams[negotiation.buyerTeamId];
+  const seller = state.teams[negotiation.sellerTeamId];
+  const player = state.players[negotiation.playerId];
+  if (!buyer || !seller || !player || buyer.id === seller.id || player.teamId !== seller.id) {
+    return 'This transfer is no longer available.';
+  }
+  if (!sellerCanLosePlayer(seller, player, state.players)) return 'The selling club can no longer spare this player.';
+  if (!buyerHasCapacity(buyer, state.players)) return 'Your squad is already at the registration capacity.';
+  if (![buyer.budget, buyer.transferSpend, seller.budget].every(Number.isFinite)) return 'Invalid transfer finances.';
+  return null;
+};
+
 const completeNegotiation = (
   state: TransferActionState,
   negotiation: TransferNegotiation,
   fee: number,
   wage: number
 ): TransferActionUpdate => {
+  const negotiationError = getNegotiationError(state, negotiation);
+  if (negotiationError) return { patch: state, result: { success: false, message: negotiationError } };
   const buyer = state.teams[negotiation.buyerTeamId];
   const seller = state.teams[negotiation.sellerTeamId];
   const player = state.players[negotiation.playerId];
@@ -287,7 +315,8 @@ const completeNegotiation = (
       result: { success: false, message: 'Invalid transfer finances.' },
     };
   }
-  if (buyer.budget < fee) {
+  const finalFee = roundMoney(fee);
+  if (buyer.budget < finalFee) {
     return {
       patch: state,
       result: { success: false, message: 'Insufficient transfer funds.' },
@@ -306,7 +335,6 @@ const completeNegotiation = (
     };
   }
 
-  const finalFee = roundMoney(fee);
   const moved = movePlayerToTeam(
     state.players,
     state.teams,
@@ -385,7 +413,7 @@ export const approachPlayerState = (
   }
 
   const negotiation: TransferNegotiation = {
-    id: buildNegotiationId(state.currentWeek, userTeam.id, seller.id, player.id),
+    id: buildNegotiationId(state.currentWeek, userTeam.id, seller.id, player.id, negotiations),
     playerId: player.id,
     buyerTeamId: userTeam.id,
     sellerTeamId: seller.id,
@@ -513,7 +541,7 @@ export const buyPlayerState = (
   }
 
   const negotiation: TransferNegotiation = {
-    id: buildNegotiationId(state.currentWeek, userTeam.id, seller.id, player.id),
+    id: buildNegotiationId(state.currentWeek, userTeam.id, seller.id, player.id, getNegotiations(state)),
     playerId: player.id,
     buyerTeamId: userTeam.id,
     sellerTeamId: seller.id,
@@ -543,6 +571,9 @@ export const submitBidState = (
       result: { success: false, message: 'This negotiation is no longer active.' },
     };
   }
+
+  const negotiationError = getNegotiationError(state, negotiation);
+  if (negotiationError) return { patch: state, result: { success: false, message: negotiationError } };
 
   if (fee >= negotiation.askingPrice) {
     return completeNegotiation(state, negotiation, fee, wageOffered);
@@ -627,6 +658,12 @@ export const resolveWeeklyNegotiationsState = (state: TransferActionState): Tran
   let teams = state.teams;
   const pendingNegotiations = getNegotiations(state).map(negotiation => {
     if (!isActiveNegotiation(negotiation)) return negotiation;
+    if (
+      negotiation.buyerTeamId !== state.userTeamId ||
+      !isTransferWindowOpen(state.currentWeek) ||
+      !Number.isFinite(negotiation.expiresWeek) ||
+      state.currentWeek >= negotiation.expiresWeek
+    ) return { ...negotiation, status: 'expired' as const };
 
     const player = players[negotiation.playerId];
     if (!player || player.teamId !== negotiation.sellerTeamId) {
@@ -649,7 +686,13 @@ export const resolveWeeklyNegotiationsState = (state: TransferActionState): Tran
 
       const rival = teams[negotiation.rivalBid.teamId];
       const seller = teams[negotiation.sellerTeamId];
-      if (rival && seller && rival.budget >= negotiation.rivalBid.bid) {
+      if (
+        rival && seller && rival.id !== seller.id && rival.id !== negotiation.buyerTeamId &&
+        rival.id !== FREE_AGENT_TEAM_ID &&
+        [rival.budget, rival.transferSpend, seller.budget, negotiation.rivalBid.bid].every(Number.isFinite) &&
+        negotiation.rivalBid.bid > 0 && rival.budget >= negotiation.rivalBid.bid &&
+        buyerHasCapacity(rival, players) && sellerCanLosePlayer(seller, player, players)
+      ) {
         const moved = movePlayerToTeam(
           players,
           teams,

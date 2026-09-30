@@ -224,7 +224,7 @@ const assertMatchResolutionInvariants = () => {
   ]));
   const invalidResult = quickSimMatch(invalidFixture.id, invalidPlayers, data.teams, data.fixtures, null, { rng: createSeededRandomGenerator(2026062401) });
   assert.equal(invalidResult.fixture.resolution, 'void', 'Double-invalid fixtures should be void rather than random forfeits');
-  assert.equal(invalidResult.fixture.isPlayed, false, 'Double-invalid fixtures should remain unresolved for administrative handling');
+  assert.equal(invalidResult.fixture.isPlayed, true, 'Double-invalid fixtures must be terminal so the world can advance');
   assert.equal(invalidResult.fixture.winnerTeamId, undefined, 'Double-invalid fixtures should not pick a winner');
   assert.equal(invalidResult.teams[invalidFixture.homeTeamId].played, data.teams[invalidFixture.homeTeamId].played, 'Void league fixture should not add home table stats');
   assert.equal(invalidResult.teams[invalidFixture.awayTeamId].played, data.teams[invalidFixture.awayTeamId].played, 'Void league fixture should not add away table stats');
@@ -236,7 +236,7 @@ const assertMatchResolutionInvariants = () => {
     null,
     { rng: createSeededRandomGenerator(2026062403) }
   );
-  assert.equal(replayVoidResult.fixture.isPlayed, false, 'Quick sim must not replay void fixtures');
+  assert.equal(replayVoidResult.fixture.isPlayed, true, 'Quick sim must not replay void fixtures');
   assert.equal(replayVoidResult.fixture.homeScore, null, 'Quick sim must not score void fixtures');
   const voidLiveState = {
     ...state,
@@ -246,10 +246,10 @@ const assertMatchResolutionInvariants = () => {
   const voidMinute = processLiveMatchMinuteState(voidLiveState, invalidFixture.id, 1);
   const voidMinuteFixtures = voidMinute.patch.fixtures || voidLiveState.fixtures;
   assert.equal(voidMinute.event, null, 'Void fixtures should ignore live minute processing');
-  assert.equal(voidMinuteFixtures[invalidFixture.id].isPlayed, false, 'Live minute processing must not revive void fixtures');
+  assert.equal(voidMinuteFixtures[invalidFixture.id].isPlayed, true, 'Live minute processing must not revive void fixtures');
   const voidFinish = finishLiveMatchState(voidLiveState, invalidFixture.id);
   const voidFinishFixtures = voidFinish.fixtures || voidLiveState.fixtures;
-  assert.equal(voidFinishFixtures[invalidFixture.id].isPlayed, false, 'Live finish must not revive void fixtures');
+  assert.equal(voidFinishFixtures[invalidFixture.id].isPlayed, true, 'Live finish must not revive void fixtures');
 
   const cupRound = data.competitions['carabao-cup'].rounds[0];
   const voidCupFixtureId = cupRound.fixtureIds[0];
@@ -263,7 +263,7 @@ const assertMatchResolutionInvariants = () => {
   const cupProgression = resolveCompetitionProgression(cupFixtures, data.competitions, data.teams, createSeededRandomGenerator(2026062402));
   const completedCupRound = cupProgression.competitions['carabao-cup'].rounds[0];
   assert.equal(cupProgression.fixtures[voidCupFixtureId].resolution, 'void', 'Void knockout fixture must not be rewritten as penalties');
-  assert.equal(completedCupRound.completed, false, 'Void knockout fixture should block progression until administratively resolved');
+  assert.equal(completedCupRound.completed, true, 'Void knockout fixture must allow cup progression without a winner');
 };
 
 const assertSubstitutionAndShootoutInvariants = () => {
@@ -1650,7 +1650,7 @@ const runInvariantChecks = () => {
 
 const runSeason = (seed: number) => {
   const rng = createSeededRandomGenerator(seed);
-  const data = initGameData();
+  const data = initGameData(undefined, rng);
   let state = {
     players: data.players,
     teams: data.teams,
@@ -1706,7 +1706,8 @@ const runSeason = (seed: number) => {
     const competitionProgression = resolveCompetitionProgression(
       state.fixtures,
       state.competitions,
-      state.teams
+      state.teams,
+      rng
     );
     state.fixtures = competitionProgression.fixtures;
     state.competitions = competitionProgression.competitions;
@@ -1763,6 +1764,7 @@ const runSeason = (seed: number) => {
 const runThresholdChecks = () => {
   const seasons = [20260513, 20260514, 20260515].map(runSeason);
   const avgGoals = seasons.reduce((sum, season) => sum + season.avgGoalsPerMatch, 0) / seasons.length;
+  console.log(`Seeded seasonal average goals: ${avgGoals.toFixed(2)}`);
   const totalYellow = seasons.reduce((sum, season) => sum + season.yellowCards, 0);
   const totalRed = seasons.reduce((sum, season) => sum + season.redCards, 0);
   const redCardLogMismatches = seasons.reduce((sum, season) => sum + season.redCardLogMismatches, 0);

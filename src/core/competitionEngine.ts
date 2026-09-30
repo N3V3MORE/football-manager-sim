@@ -19,6 +19,7 @@ import {
 import { RandomGenerator, resolveRandom } from './random';
 import { isPlayableClub } from './freeAgentPool';
 import { dateOrdinalToWeek, LEAGUE_END_ORDINAL } from '../utils/calendar';
+import { buildVoidFixture } from './fixtureLifecycle';
 
 const PREMIER_LEAGUE_DATE_ORDINALS = Array.from({ length: 42 }, (_, index) => index * 7)
   .filter(dateOrdinal => ![21, 84, 126, 189].includes(dateOrdinal));
@@ -596,18 +597,13 @@ const createPlayoffFixture = (
   };
 };
 
-const getAggregateTiebreakEdge = (team?: Team, homeAdvantage = 1) => {
-  if (!team) return homeAdvantage;
-  const goalDifference = team.goalsFor - team.goalsAgainst;
-  return Math.max(1, team.points + goalDifference * 0.35 + team.goalsFor * 0.08) * homeAdvantage;
-};
-
 const getAggregateWinner = (
   fixtureIds: string[],
-  fixtures: Record<string, Fixture>,
-  teams: Record<string, Team>,
-  rng?: RandomGenerator
+  fixtures: Record<string, Fixture>
 ) => {
+  if (fixtureIds.some(id => fixtures[id]?.resolution === 'void')) return undefined;
+  const secondLeg = fixtures[fixtureIds[fixtureIds.length - 1]];
+  if (secondLeg?.winnerTeamId) return secondLeg.winnerTeamId;
   const goalsByTeam: Record<string, number> = {};
   fixtureIds.forEach(fixtureId => {
     const fixture = fixtures[fixtureId];
@@ -620,18 +616,7 @@ const getAggregateWinner = (
   const [leftId, rightId] = teamIds;
   if (goalsByTeam[leftId] > goalsByTeam[rightId]) return leftId;
   if (goalsByTeam[rightId] > goalsByTeam[leftId]) return rightId;
-  const secondLeg = fixtures[fixtureIds[fixtureIds.length - 1]];
-  if (!secondLeg) return undefined;
-  const random = resolveRandom(rng);
-  const leftEdge = getAggregateTiebreakEdge(teams[leftId], secondLeg.homeTeamId === leftId ? 1.03 : 1);
-  const rightEdge = getAggregateTiebreakEdge(teams[rightId], secondLeg.homeTeamId === rightId ? 1.03 : 1);
-  const winnerTeamId = (random() * Math.max(1, leftEdge + rightEdge)) < leftEdge ? leftId : rightId;
-  fixtures[secondLeg.id] = {
-    ...secondLeg,
-    winnerTeamId,
-    resolution: 'penalties',
-  };
-  return winnerTeamId;
+  return undefined;
 };
 
 const getAggregateLoser = (
@@ -639,7 +624,6 @@ const getAggregateLoser = (
   fixtures: Record<string, Fixture>,
   winnerTeamId?: string
 ) => {
-  if (!winnerTeamId) return undefined;
   const teamIds = new Set<string>();
   fixtureIds.forEach(fixtureId => {
     const fixture = fixtures[fixtureId];
@@ -647,7 +631,7 @@ const getAggregateLoser = (
     teamIds.add(fixture.homeTeamId);
     teamIds.add(fixture.awayTeamId);
   });
-  return Array.from(teamIds).find(teamId => teamId !== winnerTeamId);
+  return Array.from(teamIds).filter(teamId => teamId !== winnerTeamId);
 };
 
 const scheduleLeaguePlayoffSemiFinals = (
@@ -742,8 +726,7 @@ const resolveLeaguePlayoffProgression = (
   competition: CompetitionState,
   fixtures: Record<string, Fixture>,
   teams: Record<string, Team>,
-  fixtureCounterStart: number,
-  rng?: RandomGenerator
+  fixtureCounterStart: number
 ) => {
   if (!competition.leagueDivision || !PLAYOFF_DIVISIONS.includes(competition.leagueDivision)) {
     return null;
@@ -782,13 +765,27 @@ const resolveLeaguePlayoffProgression = (
   if (semiRound && !semiRound.completed && semiRound.fixtureIds.length > 0) {
     if (semiRound.fixtureIds.some(fixtureId => !fixtures[fixtureId]?.isPlayed)) return null;
     const pairIds = [semiRound.fixtureIds.slice(0, 2), semiRound.fixtureIds.slice(2, 4)];
-    const finalistTeamIds = pairIds
-      .map(ids => getAggregateWinner(ids, fixtures, teams, rng))
+    const pairWinners = pairIds.map(ids => getAggregateWinner(ids, fixtures));
+    if (pairIds.some((ids, index) => !pairWinners[index] && !ids.some(id => fixtures[id]?.resolution === 'void'))) return null;
+    const finalistTeamIds = pairWinners
       .filter((teamId): teamId is string => Boolean(teamId));
-    if (finalistTeamIds.length < 2) return null;
     const loserTeamIds = pairIds
-      .map((ids, index) => getAggregateLoser(ids, fixtures, finalistTeamIds[index]))
-      .filter((teamId): teamId is string => Boolean(teamId));
+      .flatMap((ids, index) => getAggregateLoser(ids, fixtures, pairWinners[index]));
+    if (finalistTeamIds.length < 2) {
+      rounds[semiRoundIndex] = { ...semiRound, completed: true, winnerTeamIds: finalistTeamIds };
+      const terminalFinal = {
+        ...createRoundState('final', PLAYOFF_FINAL_ORDINAL), label: 'Play-off Final',
+        entrantTeamIds: finalistTeamIds, byeTeamIds: finalistTeamIds, winnerTeamIds: finalistTeamIds, completed: true,
+      };
+      if (finalRoundIndex >= 0) rounds[finalRoundIndex] = terminalFinal;
+      else rounds.push(terminalFinal);
+      return {
+        competition: { ...competition, rounds, currentRound: 'final' as const,
+          playoffWinnerTeamId: finalistTeamIds[0], runnerUpTeamId: undefined,
+          eliminatedTeamIds: Array.from(new Set([...competition.eliminatedTeamIds, ...loserTeamIds])) },
+        fixtures: nextFixtures, nextCounter: fixtureCounter, generatedNews,
+      };
+    }
     const scheduledFinal = scheduleLeaguePlayoffFinal(competition, finalistTeamIds, fixtureCounter);
     if (!scheduledFinal) return null;
     fixtureCounter = scheduledFinal.nextCounter;
@@ -815,12 +812,13 @@ const resolveLeaguePlayoffProgression = (
     if (finalRound.fixtureIds.some(fixtureId => !fixtures[fixtureId]?.isPlayed)) return null;
     const finalFixtureId = finalRound.fixtureIds[0];
     const winnerTeamId = resolveAndCacheFixtureWinner(fixtures, finalFixtureId);
-    if (!winnerTeamId) return null;
-    const runnerUpTeamId = resolveFixtureLoserIds(fixtures[finalFixtureId])[0];
+    if (!winnerTeamId && fixtures[finalFixtureId].resolution !== 'void') return null;
+    const losers = resolveFixtureLoserIds(fixtures[finalFixtureId]);
+    const runnerUpTeamId = winnerTeamId ? losers[0] : undefined;
     rounds[finalRoundIndex] = {
       ...finalRound,
       completed: true,
-      winnerTeamIds: [winnerTeamId],
+      winnerTeamIds: winnerTeamId ? [winnerTeamId] : [],
     };
     const updatedCompetition = {
       ...competition,
@@ -830,10 +828,10 @@ const resolveLeaguePlayoffProgression = (
       runnerUpTeamId,
       eliminatedTeamIds: Array.from(new Set([
         ...competition.eliminatedTeamIds,
-        ...(runnerUpTeamId ? [runnerUpTeamId] : []),
+        ...losers,
       ])),
     };
-    const winner = teams[winnerTeamId];
+    const winner = winnerTeamId ? teams[winnerTeamId] : undefined;
     if (winner) generatedNews.push(`${winner.name} win the ${updatedCompetition.name} play-offs.`);
     return { competition: updatedCompetition, fixtures: nextFixtures, nextCounter: fixtureCounter, generatedNews };
   }
@@ -852,6 +850,18 @@ export const resolveCompetitionProgression = (
   generatedNews: string[];
 } => {
   const nextFixtures = { ...fixtures };
+  Object.values(nextFixtures).forEach(fixture => {
+    if (fixture.resolution !== 'void') return;
+    nextFixtures[fixture.id] = buildVoidFixture(fixture);
+    if (fixture.competitionType === 'league' && fixture.round === 'semi_final') {
+      Object.values(nextFixtures).forEach(other => {
+        if (!other.isPlayed && other.competitionId === fixture.competitionId && other.round === 'semi_final' &&
+          other.homeTeamId === fixture.awayTeamId && other.awayTeamId === fixture.homeTeamId) {
+          nextFixtures[other.id] = buildVoidFixture(other);
+        }
+      });
+    }
+  });
   const nextCompetitions = { ...competitions };
   const generatedNews: string[] = [];
   let fixtureCounter = getNextFixtureCounter(fixtures);
@@ -889,7 +899,8 @@ export const resolveCompetitionProgression = (
         if (advancingTeamIds.length > 0) {
           updatedCompetition.championTeamId = advancingTeamIds[0];
         }
-        updatedCompetition.runnerUpTeamId = finalFixture ? resolveFixtureLoserIds(nextFixtures[finalFixture], rng)[0] : undefined;
+        updatedCompetition.runnerUpTeamId = currentRound.key === 'final' && finalFixture && nextFixtures[finalFixture].resolution !== 'void'
+          ? resolveFixtureLoserIds(nextFixtures[finalFixture], rng)[0] : undefined;
         updatedCompetition.currentRound = currentRound.key;
         nextCompetitions[competition.id] = updatedCompetition;
         const champion = updatedCompetition.championTeamId ? teams[updatedCompetition.championTeamId] : null;
@@ -921,7 +932,7 @@ export const resolveCompetitionProgression = (
   Object.values(nextCompetitions)
     .filter(competition => competition.type === 'league')
     .forEach(competition => {
-      const progression = resolveLeaguePlayoffProgression(competition, nextFixtures, teams, fixtureCounter, rng);
+      const progression = resolveLeaguePlayoffProgression(competition, nextFixtures, teams, fixtureCounter);
       if (!progression) return;
       fixtureCounter = progression.nextCounter;
       Object.assign(nextFixtures, progression.fixtures);

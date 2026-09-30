@@ -48,14 +48,19 @@ async function runAutonomousQA() {
   });
 
   const fixtureId = Object.keys(state().fixtures)[0];
-  useGameStore.getState().processMatchMinute(fixtureId, 15);
+  for (let minute = 1; minute <= 15; minute += 1) {
+    useGameStore.getState().processMatchMinute(fixtureId, minute);
+  }
+  useGameStore.getState().finishLiveMatch(fixtureId);
   console.log('[OK] Empty user squad did not break processMatchMinute');
 
   const seasonWeeks = getSeasonWeekLimit(useGameStore.getState().fixtures);
   console.log(`--- TEST: RAPID SEASON ADVANCE (${seasonWeeks} WEEKS) ---`);
   try {
     for (let i = 0; i < seasonWeeks; i++) {
+      const previousWeek = state().currentWeek;
       useGameStore.getState().advanceWeek();
+      if (state().currentWeek === previousWeek) throw new Error(`Week ${previousWeek} did not advance`);
     }
     console.log('[OK] Rapid week advance survived');
   } catch (error) {

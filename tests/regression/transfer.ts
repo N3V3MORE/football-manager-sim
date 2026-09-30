@@ -1,5 +1,6 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { submitBidState, withdrawTransferNegotiationState } from '../../src/store/transferActions';
 import { FREE_AGENT_TEAM_ID, Player, Team, acceptTransferCounterState, addSquadPlayers, advanceSeason, approachPlayerState, assert, buildTestPlayer, buildTestTeam, buyPlayerState, computeWeeklyTransfers, createFreeAgentTeam, createSeededRandom, getSquadPolicy, initGameData, readSource, resolveWeeklyNegotiationsState, signFreeAgentState } from './shared';
 
 export const checkTransferFinanceHelpersLiveInTransferEngine = () => {
@@ -9,6 +10,50 @@ export const checkTransferFinanceHelpersLiveInTransferEngine = () => {
   assert(transferEngineSource.includes('export const isWageOfferAccepted'), 'transferEngine should own wage acceptance helper');
   assert(transferActionsSource.includes("from '../core/transferEngine'"), 'transfer actions should import wage helper from transferEngine');
   assert(!existsSync(join(process.cwd(), 'src/core/transferFinance.ts')), 'transferFinance helper file should be deleted after merge');
+};
+
+export const checkNegotiationsRevalidateCurrentState = () => {
+  const data = initGameData('T1', { next: createSeededRandom(9029) });
+  const target = Object.values(data.players).find(player => player.teamId === 'T2' && !player.isStarting)!;
+  const initial = {
+    ...data, currentWeek: 1, userTeamId: 'T1', inboxMessages: [], pendingNegotiations: [],
+    players: { ...data.players, [target.id]: { ...target, isTransferListed: true, askingPrice: 10 } },
+    teams: { ...data.teams, T1: { ...data.teams.T1, budget: 100 } },
+  };
+  const first = buyPlayerState(initial, target.id, 9, target.wage, { next: () => 1 });
+  assert(first.result.success, 'Expected a listed-player counter');
+  const opened = { ...initial, ...first.patch };
+  const oldId = opened.pendingNegotiations![0].id;
+  const withdrawn = { ...opened, ...withdrawTransferNegotiationState(opened, oldId) };
+  const restarted = buyPlayerState(withdrawn, target.id, 9, target.wage, { next: () => 1 });
+  const active = { ...withdrawn, ...restarted.patch };
+  const newId = active.pendingNegotiations![1].id;
+  assert(oldId !== newId, 'Restarted talks must have a unique identity');
+  assert(acceptTransferCounterState(active, newId).result.success, 'Restarted talks should be usable');
+  for (const stale of [
+    { ...active, currentWeek: 4 },
+    { ...active, currentWeek: 3 },
+    { ...active, userTeamId: 'T3' },
+    { ...active, userTeamId: null },
+    { ...active, players: { ...active.players, [target.id]: { ...target, teamId: 'T3' } } },
+    { ...active, players: { [target.id]: active.players[target.id] } },
+  ]) {
+    assert(!acceptTransferCounterState(stale, newId).result.success, 'Stale counter must not move a player');
+    assert(!submitBidState(stale, newId, 9, target.wage).result.success, 'Stale talks must not accept another round');
+  }
+  const rounded = buyPlayerState({ ...initial,
+    players: { ...initial.players, [target.id]: { ...initial.players[target.id], askingPrice: 9.96 } },
+    teams: { ...initial.teams, T1: { ...initial.teams.T1, budget: 9.96 } },
+  }, target.id, 9.96, target.wage);
+  assert(!rounded.result.success, 'Rounded fees must not overdraw the buying club');
+  const rivalState = {
+    ...opened, currentWeek: 4,
+    pendingNegotiations: opened.pendingNegotiations!.map(item => ({
+      ...item, expiresWeek: 5, rivalBid: { teamId: 'T3', bid: 10, expiresWeek: 4, status: 'active' as const },
+    })),
+  };
+  const resolved = resolveWeeklyNegotiationsState(rivalState);
+  assert(resolved.players[target.id].teamId === target.teamId, 'Rival cannot sign after the window closes');
 };
 
 export const checkManualTransfersRespectWindow = () => {

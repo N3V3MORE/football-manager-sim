@@ -12,7 +12,7 @@ export const LEAGUE_COUNTRIES: LeagueCountryPyramid[] = [
   {
     id: 'england',
     label: 'England',
-    reelHint: 'Swipe left for countries, then scroll down through the pyramid',
+    reelHint: 'Scroll down through the English league pyramid',
     divisions: DIVISION_ORDER,
   },
 ];

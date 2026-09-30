@@ -1,7 +1,23 @@
-import { PenaltyShootout, Player, Team } from '../models/types';
+import { Fixture, PenaltyShootout, Player, Team } from '../models/types';
+import { compareFixturesChronologically } from './fixtureLifecycle';
 import { RandomGenerator, resolveRandom } from './random';
 import { clamp } from './matchUtils';
 import { getTraitBonuses } from './traitEngine';
+
+export const getDecisiveTieScore = (fixture: Fixture, fixtures: Record<string, Fixture>) => {
+  const firstLeg = fixture.competitionType === 'league' && fixture.round === 'semi_final'
+    ? Object.values(fixtures).find(candidate => candidate.id !== fixture.id &&
+      candidate.competitionId === fixture.competitionId && candidate.round === 'semi_final' &&
+      candidate.homeTeamId === fixture.awayTeamId && candidate.awayTeamId === fixture.homeTeamId &&
+      compareFixturesChronologically(candidate, fixture) < 0)
+    : undefined;
+  return {
+    isVoid: fixture.resolution === 'void' || firstLeg?.resolution === 'void',
+    isDecisive: fixture.isKnockout || Boolean(firstLeg),
+    homeScore: (fixture.homeScore ?? 0) + (firstLeg?.awayScore ?? 0),
+    awayScore: (fixture.awayScore ?? 0) + (firstLeg?.homeScore ?? 0),
+  };
+};
 
 const getPenaltySkill = (player: Player) => (
   (player.stats.mentality_penalties ??

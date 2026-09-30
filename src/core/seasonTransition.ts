@@ -129,6 +129,7 @@ const resetPlayerSeasonStats = (player: Player): Player => ({
   yellowCards: 0,
   redCards: 0,
   matchRatingHistory: [],
+  trainingStatGains: {},
 });
 
 const findContractDestinationTeamId = (

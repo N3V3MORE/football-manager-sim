@@ -7,6 +7,32 @@ import {
   Player,
 } from './shared';
 import { generateYouthPlayer } from '../../src/core/youthIntake';
+import { computeWeeklyTraining, GOALKEEPER_TRAINING_STATS } from '../../src/core/trainingEngine';
+import { sanitizePersistedState } from '../../src/store/persistence';
+
+export const checkGoalkeeperTrainingUsesKeeperStats = () => {
+  const data = initGameData();
+  const template = Object.values(data.players).find(player => player.position === 'GK')!;
+  const team = data.teams[template.teamId];
+  const player = { ...template, age: 18, overallRating: 60, potential: 90, trainingXp: 99,
+    trainingStatProgress: 2, trainingStatGains: {}, playerTraits: [],
+    stats: { ...template.stats, gk_speed: 70, gk_reflexes: 70, gk_kicking: 70,
+      gk_handling: 70, gk_positioning: 70, gk_diving: 70 } };
+  for (const [focus, key] of Object.entries(GOALKEEPER_TRAINING_STATS)) {
+    const patch = computeWeeklyTraining(player, team, 2, () => 0.5, { focusOverride: focus as keyof typeof GOALKEEPER_TRAINING_STATS });
+    assert(patch.stats![key] === 71 && patch.trainingStatGains![key] === 1, 'Existing keeper focuses must train the mapped attribute');
+    assert(patch.stats!.passing === player.stats.passing && patch.stats!.shooting === player.stats.shooting, 'Keeper training must leave outfield attributes unchanged');
+    assert(patch.overallRating! > 60 && patch.overallRating! <= 90, 'Keeper overall must use keeper attributes and respect potential');
+  }
+  const balanced = computeWeeklyTraining(player, team, 2, () => 0.5, { focusOverride: null });
+  assert(Object.keys(balanced.trainingStatGains!).every(key => key.startsWith('gk_')), 'Balanced keeper training must train keeper attributes');
+  const capped = { ...player, stats: { ...player.stats, gk_reflexes: 99 }, trainingFocus: 'shooting' as const };
+  const cappedPatch = computeWeeklyTraining(capped, team, 2, () => 0.5);
+  assert(!cappedPatch.trainingStatGains?.gk_reflexes && !cappedPatch.stats, 'A capped attribute must not record a fictitious gain');
+  const reloaded = sanitizePersistedState({ ...data, players: { [player.id]: { ...player, ...balanced, trainingFocus: 'shooting' } } });
+  assert(reloaded.players![player.id].trainingStatGains?.gk_handling === 1, 'Save hydration must preserve keeper stat gains');
+  assert(reloaded.players![player.id].trainingFocus === 'shooting', 'Legacy focus values must remain compatible');
+};
 
 const createStaticRng = (value: number) => ({ next: () => value });
 

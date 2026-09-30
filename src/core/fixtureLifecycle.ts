@@ -118,9 +118,12 @@ export const buildVoidFixture = (fixture: Fixture): Fixture => ({
   ...fixture,
   homeScore: null,
   awayScore: null,
-  isPlayed: false,
+  isPlayed: true,
   winnerTeamId: undefined,
   resolution: 'void',
+  scoreBreakdown: undefined,
+  penaltyShootout: undefined,
+  matchSummary: undefined,
 });
 
 export const applyFixtureSuspensionService = (

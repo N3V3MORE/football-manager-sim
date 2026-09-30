@@ -13,6 +13,7 @@ import { color } from '@/src/design/tokens';
 import { useConfirmStore } from '@/src/store/confirmStore';
 import { SUPPORTED_FORMATIONS } from '@/src/constants/formations';
 import * as Haptics from 'expo-haptics';
+import { getDecisiveTieScore } from '@/src/core/matchTieResolution';
 
 // B4: extend haptics beyond the tab bar. A light tick on primary match actions
 // and a medium impact at full-time give the live sim some physical feedback.
@@ -44,11 +45,12 @@ export default function MatchScreen() {
   const liveProcessedMinutes = liveMatchState?.processedMinutes || [];
   const liveProcessedCount = liveProcessedMinutes.length;
   const liveProcessedMax = liveProcessedCount > 0 ? Math.max(...liveProcessedMinutes) : 0;
+  const tieScore = fixture ? getDecisiveTieScore(fixture, fixtures) : null;
   const liveKnockoutNeedsExtraTime = Boolean(
-    fixture?.isKnockout &&
+    !fixture?.isPlayed && tieScore?.isDecisive &&
     (
       liveMatchState?.extraTimeStarted ||
-      (liveProcessedMax >= 90 && (fixture.homeScore ?? 0) === (fixture.awayScore ?? 0))
+      (liveProcessedMax >= 90 && tieScore.homeScore === tieScore.awayScore)
     )
   );
   const liveMatchEndMinute = liveKnockoutNeedsExtraTime ? 120 : 90;
@@ -131,12 +133,16 @@ export default function MatchScreen() {
           setLogs((l) => [event, ...l].slice(0, 8));
         }
         const latestFixture = useGameStore.getState().fixtures[fixtureId];
+        const latestTieScore = latestFixture ? getDecisiveTieScore(latestFixture, useGameStore.getState().fixtures) : null;
         const needsExtraTime = Boolean(
-          latestFixture?.isKnockout &&
+          !latestFixture?.isPlayed && latestTieScore?.isDecisive &&
           nextMin === 90 &&
-          (latestFixture.homeScore ?? 0) === (latestFixture.awayScore ?? 0)
+          latestTieScore.homeScore === latestTieScore.awayScore
         );
-        if (nextMin === 45) {
+        if (latestFixture?.isPlayed) {
+          setMatchFinished(true);
+          setIsPlaying(false);
+        } else if (nextMin === 45) {
           if (!mounted) return;
           setIsHalfTime(true);
           setIsPlaying(false);
@@ -205,16 +211,17 @@ export default function MatchScreen() {
           <View style={styles.scoreboard}>
             <View style={styles.teamBox}>
               <Text style={[styles.teamName, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
-              <Text style={styles.score}>{hScore}</Text>
+              <Text style={styles.score}>{fixture.resolution === 'void' ? '—' : hScore}</Text>
             </View>
             <View style={styles.vsBox}>
               <Text style={styles.vsText}>VS</Text>
             </View>
             <View style={styles.teamBox}>
               <Text style={[styles.teamName, { color: awayPrimary }]}>{awayTeam.name}</Text>
-              <Text style={styles.score}>{aScore}</Text>
+              <Text style={styles.score}>{fixture.resolution === 'void' ? '—' : aScore}</Text>
             </View>
           </View>
+          {fixture.resolution === 'void' && <Text style={styles.penaltiesNote}>Fixture void — no result awarded</Text>}
           {fixture.resolution === 'extra_time' && (
             <Text style={styles.penaltiesNote}>
               Won after extra time
@@ -302,11 +309,12 @@ export default function MatchScreen() {
       : Object.values(players).filter(p => p.teamId === fixture.awayTeamId && p.isStarting)
   );
 
-  const handleStart = () => { tap(); setIsPlaying(true); };
+  const handleStart = () => { tap(); setPendingReplacements([]); setIsPlaying(true); };
   const handlePause = () => { tap(); setIsPlaying(false); setShowTactics(true); };
-  const handleResumeHT = () => { tap(); setIsHalfTime(false); setIsPlaying(true); };
+  const handleResumeHT = () => { tap(); setPendingReplacements([]); setIsHalfTime(false); setIsPlaying(true); };
   const canResumeFromTactics = !isHalfTime && !matchFinished && minute > 0 && minute < liveMatchEndMinute;
   const handleResumeFromTactics = () => {
+    setPendingReplacements([]);
     setShowTactics(false);
     if (canResumeFromTactics) {
       setIsPlaying(true);

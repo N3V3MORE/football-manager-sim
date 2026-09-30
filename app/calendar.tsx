@@ -80,7 +80,7 @@ export default function CalendarScreen() {
         isPast: fixture.isPlayed,
         isCurrent: fixture.week === currentWeek,
         score: fixture.isPlayed
-          ? (isHome ? `${fixture.homeScore} - ${fixture.awayScore}` : `${fixture.awayScore} - ${fixture.homeScore}`)
+          ? (fixture.resolution === 'void' ? 'VOID' : isHome ? `${fixture.homeScore} - ${fixture.awayScore}` : `${fixture.awayScore} - ${fixture.homeScore}`)
           : null,
         windowBanner: banner,
       }];

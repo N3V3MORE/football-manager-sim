@@ -1,5 +1,6 @@
 import {
   CareerRecord,
+  GameState,
   InboxAction,
   InboxMessage,
   SeasonSummary,
@@ -12,9 +13,12 @@ import {
   pickTemplate,
   type BoardInboxInput,
 } from './inboxCore';
+import { generateJobOfferCandidates } from '../core/careerEngine';
+import { getInboxSeason, mergeInboxMessages } from './inboxCore';
 
 type CareerInboxInput = {
   week: number;
+  season?: number;
   summary: SeasonSummary;
   reputationDelta: number;
   careerRecord: CareerRecord;
@@ -33,6 +37,7 @@ type CareerInboxInput = {
 export const generateCareerInboxMessages = ({
   week,
   summary,
+  season = summary.season,
   reputationDelta,
   careerRecord,
   jobOfferTeams,
@@ -71,6 +76,7 @@ export const generateCareerInboxMessages = ({
 
   messages.push(buildMessage({
     week,
+    season,
     source: 'system',
     category: 'career_milestone',
     title: isSacked ? 'Contract terminated' : `Season ${careerRecord.seasonsManaged} complete`,
@@ -109,6 +115,7 @@ export const generateCareerInboxMessages = ({
     );
     messages.push(buildMessage({
       week,
+      season,
       source: 'system',
       category: 'career_job_offer',
       title: `Job offer: ${team.name}`,
@@ -120,6 +127,24 @@ export const generateCareerInboxMessages = ({
   });
 
   return messages;
+};
+
+export const refreshUnemployedJobOffers = (
+  state: Pick<GameState, 'userTeamId' | 'currentWeek' | 'careerRecord' | 'teams' | 'competitions' | 'inboxMessages'>
+): InboxMessage[] => {
+  if (state.userTeamId) return state.inboxMessages;
+  const messages = state.inboxMessages.filter(message => message.action?.type !== 'accept_job_offer' ||
+    Boolean(state.teams[message.action.payload.teamId]));
+  if (messages.some(message => message.action?.type === 'accept_job_offer')) return messages;
+  const summary = state.careerRecord.seasonHistory.at(-1);
+  if (!summary) return messages;
+  const jobOfferTeams = generateJobOfferCandidates(state.teams, summary.teamId, summary, state.careerRecord.reputation);
+  const offers = generateCareerInboxMessages({
+    week: state.currentWeek, season: getInboxSeason(state.competitions), summary,
+    reputationDelta: 0, careerRecord: state.careerRecord, jobOfferTeams,
+    isSacked: summary.outcome === 'sacked', offersAvailableImmediately: true,
+  }).filter(message => message.category === 'career_job_offer');
+  return mergeInboxMessages(messages, offers);
 };
 
 export const generateSackWarningMessage = (

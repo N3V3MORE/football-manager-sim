@@ -5,7 +5,7 @@ import {
   selectPossessionAttacker,
   simulatePossession,
 } from '../core/matchRuntime';
-import { simulatePenaltyShootout } from '../core/matchTieResolution';
+import { getDecisiveTieScore, simulatePenaltyShootout } from '../core/matchTieResolution';
 import { addPlayerStat, getFormModifier } from '../core/matchUtils';
 import { createFixtureEventRandomGenerator, RandomGenerator } from '../core/random';
 import { applySubstitutions } from '../core/substitutionEngine';
@@ -39,6 +39,14 @@ type LiveMatchActionState = GameState & {
 };
 
 type LiveMatchActionPatch = LiveMatchActionState | Partial<LiveMatchActionState>;
+
+const finishVoidMatch = (state: LiveMatchActionState, fixture: Fixture): LiveMatchActionPatch => {
+  const voidFixture = buildVoidFixture(fixture);
+  return appendFixtureResultToState(state, {
+    fixture: voidFixture, players: state.players, previousPlayers: state.players, teams: state.teams,
+    competitionResult: resolveCompetitionProgression({ ...state.fixtures, [fixture.id]: voidFixture }, state.competitions, state.teams),
+  });
+};
 
 type LiveSubstitutionState = {
   substitutesUsed: number;
@@ -122,23 +130,25 @@ const getLatestProcessedMinute = (liveMatchState: LiveMatchState) => {
 
 const isTiedKnockoutAtEndOfRegulation = (
   fixture: Fixture,
-  liveMatchState?: LiveMatchState
+  liveMatchState: LiveMatchState | undefined,
+  fixtures: Record<string, Fixture>
 ) => (
-  fixture.isKnockout &&
+  !fixture.isPlayed && getDecisiveTieScore(fixture, fixtures).isDecisive &&
   (
     liveMatchState?.extraTimeStarted ||
     (
       (liveMatchState?.processedMinutes || []).includes(LIVE_MATCH_MINUTES) &&
-      (fixture.homeScore || 0) === (fixture.awayScore || 0)
+      getDecisiveTieScore(fixture, fixtures).homeScore === getDecisiveTieScore(fixture, fixtures).awayScore
     )
   )
 );
 
 const getLiveMatchMaxMinute = (
   fixture: Fixture,
-  liveMatchState?: LiveMatchState
+  liveMatchState: LiveMatchState | undefined,
+  fixtures: Record<string, Fixture>
 ) => (
-  isTiedKnockoutAtEndOfRegulation(fixture, liveMatchState)
+  isTiedKnockoutAtEndOfRegulation(fixture, liveMatchState, fixtures)
     ? LIVE_MATCH_EXTRA_TIME_MINUTES
     : LIVE_MATCH_MINUTES
 );
@@ -196,7 +206,7 @@ export const makeLiveSubstitutionsState = (
   if (!team) return failLiveAction('Your team could not be found.');
 
   const latestMinute = getLatestProcessedMinute(liveMatchState);
-  const maxLiveMinute = getLiveMatchMaxMinute(fixture, liveMatchState);
+  const maxLiveMinute = getLiveMatchMaxMinute(fixture, liveMatchState, state.fixtures);
   if (latestMinute <= 0 || latestMinute >= maxLiveMinute) return failLiveAction('Substitutions are only available during an active match.');
   const isHalfTime = latestMinute === 45;
   const spendWindow = !isHalfTime;
@@ -246,7 +256,10 @@ export const makeLiveSubstitutionsState = (
   });
   nextCurrentIds = nextCurrentIds.filter((playerId, index, ids) => ids.indexOf(playerId) === index);
   const nextPlayers = getPlayersByIds(state.players, nextCurrentIds);
-  const validation = validateMatchdayXI(nextPlayers, { teamId: side.teamId });
+  const nextGoalkeeperId = selectDesignatedGoalkeeperId(nextPlayers, side.goalkeeperId) ||
+    (nextCurrentIds.includes(side.goalkeeperId || '') ? side.goalkeeperId : undefined);
+  const validation = validateMatchdayXI(nextPlayers, { teamId: side.teamId,
+    designatedGoalkeeperId: nextGoalkeeperId, allowEmergencyGoalkeeper: true });
   if (!validation.ok) return failLiveAction(validation.reason || 'The resulting XI is not legal.');
 
   let nextFormationMap = { ...side.formationMap };
@@ -256,7 +269,7 @@ export const makeLiveSubstitutionsState = (
     const entryMinute = nextSubEntryMinutes[replacement.offPlayerId];
     nextMinuteMap[replacement.offPlayerId] = entryMinute !== undefined
       ? Math.max(0, latestMinute - entryMinute)
-      : Math.min(nextMinuteMap[replacement.offPlayerId] || maxLiveMinute, latestMinute);
+      : latestMinute;
     if (entryMinute !== undefined) delete nextSubEntryMinutes[replacement.offPlayerId];
     nextSubEntryMinutes[replacement.onPlayerId] = latestMinute;
     nextMinuteMap[replacement.onPlayerId] = Math.max(nextMinuteMap[replacement.onPlayerId] || 0, maxLiveMinute - latestMinute);
@@ -265,7 +278,6 @@ export const makeLiveSubstitutionsState = (
 
   const nextSubstitutionState = { ...activeSubstitutionState };
   recordLiveSubstitution(nextSubstitutionState, replacements.length, spendWindow);
-  const nextGoalkeeperId = selectDesignatedGoalkeeperId(nextPlayers, side.goalkeeperId) || validation.goalkeeperId;
   const nextLiveMatchState: LiveMatchState = side.isHome
     ? {
         ...liveMatchState,
@@ -352,10 +364,11 @@ export const processLiveMatchMinuteState = (
 ): { patch: LiveMatchActionPatch; event: string | null } => {
   let eventMsg: string | null = null;
   const fixture = state.fixtures[fixtureId];
-  if (!fixture || fixture.isPlayed) return { patch: state, event: eventMsg };
-  if (fixture.resolution === 'void') return { patch: state, event: eventMsg };
+  if (!fixture) return { patch: state, event: eventMsg };
+  if (fixture.resolution === 'void' || (!fixture.isPlayed && getDecisiveTieScore(fixture, state.fixtures).isVoid)) return { patch: finishVoidMatch(state, fixture), event: eventMsg };
+  if (fixture.isPlayed) return { patch: state, event: eventMsg };
   const storedLiveState = state.liveMatches?.[fixtureId];
-  const maxLiveMinute = getLiveMatchMaxMinute(fixture, storedLiveState);
+  const maxLiveMinute = getLiveMatchMaxMinute(fixture, storedLiveState, state.fixtures);
   if (!Number.isInteger(minute) || minute < 1 || minute > maxLiveMinute) {
     throw new Error(`Live match minute must be an integer from 1 to ${maxLiveMinute}; got ${minute}.`);
   }
@@ -400,21 +413,20 @@ export const processLiveMatchMinuteState = (
     ? getPlayersByIds(updatedPlayers, storedLiveState.currentAwayPlayerIds).filter(player => !sentOffPlayers.has(player.id))
     : ensureLiveTeamStarters(awayTeam.id, state.teams, updatedPlayers, sentOffPlayers, allowAutoAssign);
 
-  const homeValidation = validateMatchdayXI(homeStarters, { teamId: homeTeam.id });
-  const awayValidation = validateMatchdayXI(awayStarters, { teamId: awayTeam.id });
+  const homeValidation = validateMatchdayXI(homeStarters, { teamId: homeTeam.id,
+    designatedGoalkeeperId: storedLiveState?.homeGoalkeeperId, allowEmergencyGoalkeeper: Boolean(storedLiveState?.initialized) });
+  const awayValidation = validateMatchdayXI(awayStarters, { teamId: awayTeam.id,
+    designatedGoalkeeperId: storedLiveState?.awayGoalkeeperId, allowEmergencyGoalkeeper: Boolean(storedLiveState?.initialized) });
   if (!homeValidation.ok || !awayValidation.ok) {
     if (!homeValidation.ok && !awayValidation.ok) {
       const voidFixture = buildVoidFixture(fixture);
       eventMsg = `Fixture cannot be played: ${homeValidation.reason || 'home XI legal'}; ${awayValidation.reason || 'away XI legal'}.`;
       return {
-        patch: {
-          fixtures: { ...state.fixtures, [fixtureId]: voidFixture },
-          liveMatches: removeLiveMatchFixture(state.liveMatches || {}, fixtureId),
-        },
+        patch: finishVoidMatch(state, voidFixture),
         event: eventMsg,
       };
     }
-    const outcome = getAdministrativeFixtureOutcome(fixture, homeValidation.ok, awayValidation.ok);
+    const outcome = getAdministrativeFixtureOutcome({ ...fixture, isKnockout: getDecisiveTieScore(fixture, state.fixtures).isDecisive }, homeValidation.ok, awayValidation.ok);
     updatedTeams[homeTeam.id] = {
       ...(outcome.resolution === 'void'
         ? homeTeam
@@ -603,7 +615,7 @@ export const processLiveMatchMinuteState = (
         const entryMinute = entries[outfielderOff.id];
         minuteMap[outfielderOff.id] = entryMinute !== undefined
           ? Math.max(0, minute - entryMinute)
-          : Math.min(minuteMap[outfielderOff.id] || activeMatchEndMinute, minute);
+          : minute;
         if (entryMinute !== undefined) delete entries[outfielderOff.id];
         entries[reserveGoalkeeper.id] = minute;
         minuteMap[reserveGoalkeeper.id] = Math.max(minuteMap[reserveGoalkeeper.id] || 0, activeMatchEndMinute - minute);
@@ -648,7 +660,7 @@ export const processLiveMatchMinuteState = (
         const entryMinute = homeSubEntryMinutes[playerId];
         homeMinuteMap[playerId] = entryMinute !== undefined
           ? Math.max(0, minute - entryMinute)
-          : Math.min(homeMinuteMap[playerId] || activeMatchEndMinute, minute);
+          : minute;
         delete homeSubEntryMinutes[playerId];
         homeStarters = homeStarters.filter(starter => starter.id !== playerId);
         homeFormationMap = removePlayerFromLiveFormationMap(homeFormationMap, playerId);
@@ -658,7 +670,7 @@ export const processLiveMatchMinuteState = (
         const entryMinute = awaySubEntryMinutes[playerId];
         awayMinuteMap[playerId] = entryMinute !== undefined
           ? Math.max(0, minute - entryMinute)
-          : Math.min(awayMinuteMap[playerId] || activeMatchEndMinute, minute);
+          : minute;
         delete awaySubEntryMinutes[playerId];
         awayStarters = awayStarters.filter(starter => starter.id !== playerId);
         awayFormationMap = removePlayerFromLiveFormationMap(awayFormationMap, playerId);
@@ -728,79 +740,12 @@ export const processLiveMatchMinuteState = (
 
   if (minute === 45 && !eventMsg) eventMsg = 'HALF TIME.';
   if (minute === LIVE_MATCH_MINUTES && !eventMsg) {
-    eventMsg = fixture.isKnockout && updatedFixture.homeScore === updatedFixture.awayScore
+    const tieScore = getDecisiveTieScore(updatedFixture, state.fixtures);
+    eventMsg = tieScore.isDecisive && tieScore.homeScore === tieScore.awayScore
       ? 'END OF 90. Extra time to come.'
       : 'FULL TIME.';
   }
   if (minute === LIVE_MATCH_EXTRA_TIME_MINUTES && !eventMsg) eventMsg = 'END OF EXTRA TIME.';
-
-  const homeContinuation = validateMatchdayXI(homeStarters, {
-    teamId: homeTeam.id,
-    designatedGoalkeeperId: homeGoalkeeperId,
-    allowEmergencyGoalkeeper: true,
-  });
-  const awayContinuation = validateMatchdayXI(awayStarters, {
-    teamId: awayTeam.id,
-    designatedGoalkeeperId: awayGoalkeeperId,
-    allowEmergencyGoalkeeper: true,
-  });
-  if (!homeContinuation.ok || !awayContinuation.ok) {
-    const homeCanContinue = homeContinuation.ok;
-    const awayCanContinue = awayContinuation.ok;
-    if (!homeCanContinue && !awayCanContinue) {
-      const voidFixture = buildVoidFixture(fixture);
-      return {
-        patch: {
-          fixtures: { ...state.fixtures, [fixtureId]: voidFixture },
-          liveMatches: removeLiveMatchFixture(state.liveMatches || {}, fixtureId),
-        },
-        event: eventMsg || `Match voided: ${homeContinuation.reason || 'home XI legal'}; ${awayContinuation.reason || 'away XI legal'}.`,
-      };
-    }
-    const outcome = getAdministrativeFixtureOutcome(fixture, homeCanContinue, awayCanContinue);
-    if (outcome.resolution === 'void') {
-      updatedFixture.homeScore = outcome.homeScore;
-      updatedFixture.awayScore = outcome.awayScore;
-    } else {
-      if (homeCanContinue && !awayCanContinue) updatedFixture.homeScore = Math.max(updatedFixture.homeScore || 0, (updatedFixture.awayScore || 0) + 1, outcome.homeScore);
-      if (awayCanContinue && !homeCanContinue) updatedFixture.awayScore = Math.max(updatedFixture.awayScore || 0, (updatedFixture.homeScore || 0) + 1, outcome.awayScore);
-    }
-    const forfeitedFixture = {
-      ...updatedFixture,
-      isPlayed: true,
-      winnerTeamId: outcome.winnerTeamId,
-      resolution: outcome.resolution,
-    };
-    const includeTableStats = outcome.includeTableStats;
-    updatedTeams[homeTeam.id] = {
-      ...(outcome.resolution === 'void'
-        ? homeTeam
-        : updateTeamStats(homeTeam, forfeitedFixture.homeScore || 0, forfeitedFixture.awayScore || 0, includeTableStats)),
-      lastStartingXI: homeStarterIds,
-    };
-    updatedTeams[awayTeam.id] = {
-      ...(outcome.resolution === 'void'
-        ? awayTeam
-        : updateTeamStats(awayTeam, forfeitedFixture.awayScore || 0, forfeitedFixture.homeScore || 0, includeTableStats)),
-      lastStartingXI: awayStarterIds,
-    };
-    const suspensionServedPlayers = applyFixtureSuspensionService(updatedPlayers, forfeitedFixture);
-    const nextFixtures = { ...state.fixtures, [fixtureId]: forfeitedFixture };
-    const competitionProgression = resolveCompetitionProgression(nextFixtures, state.competitions, updatedTeams);
-    return {
-      patch: {
-        fixtures: competitionProgression.fixtures,
-        competitions: competitionProgression.competitions,
-        teams: updatedTeams,
-        players: suspensionServedPlayers,
-        news: competitionProgression.generatedNews.length > 0
-          ? [...competitionProgression.generatedNews, ...state.news].slice(0, 20)
-          : state.news,
-        liveMatches: removeLiveMatchFixture(state.liveMatches || {}, fixtureId),
-      },
-      event: eventMsg || `Match abandoned: ${homeContinuation.reason || 'home XI legal'}; ${awayContinuation.reason || 'away XI legal'}.`,
-    };
-  }
 
   const liveMatchState: LiveMatchState = {
     initialized: true,
@@ -838,6 +783,48 @@ export const processLiveMatchMinuteState = (
     regulationHomeScore,
     regulationAwayScore,
   };
+
+  const homeContinuation = validateMatchdayXI(homeStarters, {
+    teamId: homeTeam.id,
+    designatedGoalkeeperId: homeGoalkeeperId,
+    allowEmergencyGoalkeeper: true,
+  });
+  const awayContinuation = validateMatchdayXI(awayStarters, {
+    teamId: awayTeam.id,
+    designatedGoalkeeperId: awayGoalkeeperId,
+    allowEmergencyGoalkeeper: true,
+  });
+  if (!homeContinuation.ok || !awayContinuation.ok) {
+    const homeCanContinue = homeContinuation.ok;
+    const awayCanContinue = awayContinuation.ok;
+    if (!homeCanContinue && !awayCanContinue) {
+      const voidFixture = buildVoidFixture(fixture);
+      return {
+        patch: finishVoidMatch(state, voidFixture),
+        event: eventMsg || `Match voided: ${homeContinuation.reason || 'home XI legal'}; ${awayContinuation.reason || 'away XI legal'}.`,
+      };
+    }
+    const outcome = getAdministrativeFixtureOutcome({ ...fixture, isKnockout: getDecisiveTieScore(fixture, state.fixtures).isDecisive }, homeCanContinue, awayCanContinue);
+    if (outcome.resolution === 'void') {
+      updatedFixture.homeScore = outcome.homeScore;
+      updatedFixture.awayScore = outcome.awayScore;
+    } else {
+      if (homeCanContinue && !awayCanContinue) updatedFixture.homeScore = Math.max(updatedFixture.homeScore || 0, (updatedFixture.awayScore || 0) + 1, outcome.homeScore);
+      if (awayCanContinue && !homeCanContinue) updatedFixture.awayScore = Math.max(updatedFixture.awayScore || 0, (updatedFixture.homeScore || 0) + 1, outcome.awayScore);
+    }
+    const forfeitedFixture = {
+      ...updatedFixture,
+      isPlayed: false,
+      winnerTeamId: outcome.winnerTeamId,
+      resolution: outcome.resolution,
+    };
+    return {
+      patch: finishLiveMatchState({ ...state, players: updatedPlayers, teams: updatedTeams,
+        fixtures: { ...state.fixtures, [fixtureId]: forfeitedFixture },
+        liveMatches: { ...state.liveMatches, [fixtureId]: liveMatchState } }, fixtureId, activeRng, minute),
+      event: eventMsg || `Match abandoned: ${homeContinuation.reason || 'home XI legal'}; ${awayContinuation.reason || 'away XI legal'}.`,
+    };
+  }
 
   return {
     patch: {
@@ -890,7 +877,7 @@ const completeLiveMatchMinutes = (
   processThroughMinute(LIVE_MATCH_MINUTES);
   const fixtureAfterRegulation = nextState.fixtures[fixtureId];
   const liveAfterRegulation = nextState.liveMatches?.[fixtureId];
-  if (fixtureAfterRegulation && isTiedKnockoutAtEndOfRegulation(fixtureAfterRegulation, liveAfterRegulation)) {
+  if (fixtureAfterRegulation && isTiedKnockoutAtEndOfRegulation(fixtureAfterRegulation, liveAfterRegulation, nextState.fixtures)) {
     processThroughMinute(LIVE_MATCH_EXTRA_TIME_MINUTES);
   }
   return nextState;
@@ -899,12 +886,14 @@ const completeLiveMatchMinutes = (
 export const finishLiveMatchState = (
   state: LiveMatchActionState,
   fixtureId: string,
-  rng?: RandomGenerator
+  rng?: RandomGenerator,
+  abandonedAtMinute?: number
 ): LiveMatchActionPatch => {
   let fixture = state.fixtures[fixtureId];
-  if (!fixture || fixture.isPlayed) return state;
-  if (fixture.resolution === 'void') return state;
-  state = completeLiveMatchMinutes(state, fixtureId, rng);
+  if (!fixture) return state;
+  if (fixture.resolution === 'void' || (!fixture.isPlayed && getDecisiveTieScore(fixture, state.fixtures).isVoid)) return finishVoidMatch(state, fixture);
+  if (fixture.isPlayed) return state;
+  if (abandonedAtMinute === undefined) state = completeLiveMatchMinutes(state, fixtureId, rng);
   fixture = state.fixtures[fixtureId];
   if (!fixture || fixture.isPlayed) return state;
   if (fixture.resolution === 'void') return state;
@@ -914,7 +903,7 @@ export const finishLiveMatchState = (
   const homeTeam = state.teams[fixture.homeTeamId];
   const awayTeam = state.teams[fixture.awayTeamId];
   const liveMatchState = state.liveMatches?.[fixtureId];
-  const maxMatchMinutes = liveMatchState?.extraTimeStarted ? LIVE_MATCH_EXTRA_TIME_MINUTES : LIVE_MATCH_MINUTES;
+  const maxMatchMinutes = abandonedAtMinute ?? (liveMatchState?.extraTimeStarted ? LIVE_MATCH_EXTRA_TIME_MINUTES : LIVE_MATCH_MINUTES);
   const sentOffMinutes = liveMatchState?.sentOffMinutes || {};
   const sentOffPlayers = new Set(liveMatchState?.sentOffPlayerIds || []);
   const homeGoalMinutes = liveMatchState?.homeGoalMinutes || [];
@@ -950,11 +939,14 @@ export const finishLiveMatchState = (
     (activeIds || []).forEach(playerId => {
       if (sentOffPlayers.has(playerId)) return;
       const entryMinute = entryMinutes?.[playerId] ?? 0;
-      minuteMap[playerId] = Math.max(minuteMap[playerId] || 0, maxMatchMinutes - entryMinute);
+      minuteMap[playerId] = Math.max(0, maxMatchMinutes - entryMinute);
     });
   };
   extendActiveIdsToEnd(liveMatchState?.currentHomePlayerIds || homeTeamStarters.map(player => player.id), homeMinuteMap, liveMatchState?.homeSubEntryMinutes);
   extendActiveIdsToEnd(liveMatchState?.currentAwayPlayerIds || awayTeamStarters.map(player => player.id), awayMinuteMap, liveMatchState?.awaySubEntryMinutes);
+  [homeMinuteMap, awayMinuteMap].forEach(minutes => {
+    Object.keys(minutes).forEach(playerId => { minutes[playerId] = Math.min(minutes[playerId], maxMatchMinutes); });
+  });
 
   if (!liveMatchState?.homeMinuteMap && state.userTeamId !== homeTeam.id) {
     applySubstitutions(homeTeamStarters, homeBench, sentOffPlayers, homeMinuteMap, homeTeam, hScore, aScore, finalRng);
@@ -1000,13 +992,14 @@ export const finishLiveMatchState = (
     ...applyMatchInjuries(awayParticipants, awayMinuteMap, updatedPlayers, fixture.week, finalRng),
   ];
 
-  let winnerTeamId: string | undefined;
-  let resolution: Fixture['resolution'] | undefined;
+  let winnerTeamId: string | undefined = abandonedAtMinute === undefined ? undefined : fixture.winnerTeamId;
+  let resolution: Fixture['resolution'] | undefined = abandonedAtMinute === undefined ? undefined : fixture.resolution;
   let penaltyShootout: Fixture['penaltyShootout'] | undefined;
   const regulationHomeScore = liveMatchState?.regulationHomeScore ?? hScore;
   const regulationAwayScore = liveMatchState?.regulationAwayScore ?? aScore;
-  if (fixture.isKnockout) {
-    if (hScore === aScore) {
+  const tieScore = getDecisiveTieScore(fixture, state.fixtures);
+  if (abandonedAtMinute === undefined && tieScore.isDecisive) {
+    if (tieScore.homeScore === tieScore.awayScore) {
       const homePenaltyPlayers = liveMatchState?.currentHomePlayerIds
         ? getPlayersByIds(updatedPlayers, liveMatchState.currentHomePlayerIds).filter(player => !sentOffPlayers.has(player.id))
         : homeTeamStarters.filter(player => !sentOffPlayers.has(player.id));
@@ -1024,8 +1017,8 @@ export const finishLiveMatchState = (
       winnerTeamId = penaltyShootout.winnerTeamId;
       resolution = 'penalties';
     } else {
-      winnerTeamId = hScore > aScore ? homeTeam.id : awayTeam.id;
-      resolution = regulationHomeScore === regulationAwayScore ? 'extra_time' : 'regular';
+      winnerTeamId = tieScore.homeScore > tieScore.awayScore ? homeTeam.id : awayTeam.id;
+      resolution = liveMatchState?.extraTimeStarted ? 'extra_time' : 'regular';
     }
   }
 
@@ -1036,7 +1029,7 @@ export const finishLiveMatchState = (
     isPlayed: true,
     winnerTeamId,
     resolution,
-    scoreBreakdown: fixture.isKnockout && regulationHomeScore === regulationAwayScore
+    scoreBreakdown: liveMatchState?.extraTimeStarted
       ? {
           regulationHomeScore,
           regulationAwayScore,

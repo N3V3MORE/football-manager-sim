@@ -23,7 +23,7 @@ import {
   selectPossessionAttacker,
   simulatePossession,
 } from './matchRuntime';
-import { simulatePenaltyShootout } from './matchTieResolution';
+import { getDecisiveTieScore, simulatePenaltyShootout } from './matchTieResolution';
 import { getCompatiblePlayerRoleForTeamSlot, getRoleEnergyDrainMultiplier } from './playerRoleEngine';
 
 export { autoAssignLineup } from './lineupEngine';
@@ -118,8 +118,8 @@ export const quickSimMatch = (
   const fixture = fixtures[fixtureId];
   const emptyMatchStats = buildQuickSimMatchStats(0, 0);
   if (!fixture) throw new RangeError(`Unknown fixture: ${fixtureId}`);
+  if (fixture.resolution === 'void' || (!fixture.isPlayed && getDecisiveTieScore(fixture, fixtures).isVoid)) return { players, teams, fixture: buildVoidFixture(fixture), events: [], matchStats: emptyMatchStats };
   if (fixture.isPlayed) return { players, teams, fixture, events: [], matchStats: emptyMatchStats };
-  if (fixture.resolution === 'void') return { players, teams, fixture, events: [], matchStats: emptyMatchStats };
 
   const updatedPlayers = { ...players };
   const updatedTeams = { ...teams };
@@ -137,7 +137,7 @@ export const quickSimMatch = (
   const awayValidation = validateMatchdayXI(awayStarters, { teamId: fixture.awayTeamId });
   if (!homeValidation.ok || !awayValidation.ok) {
     const finalized = resolveAdministrativeFixture(
-      fixture,
+      { ...fixture, isKnockout: getDecisiveTieScore(fixture, fixtures).isDecisive },
       homeValidation.ok,
       awayValidation.ok,
       updatedTeams,
@@ -201,6 +201,8 @@ export const quickSimMatch = (
   let regulationHomeScore = 0;
   let regulationAwayScore = 0;
   let penaltyShootout: Fixture['penaltyShootout'] | undefined;
+  let extraTimePlayed = false;
+  const getTieScore = () => getDecisiveTieScore({ ...fixture, homeScore: hScore, awayScore: aScore }, fixtures);
   const addContribution = (playerId: string, key: keyof PlayerMatchContribution) => {
     matchContributions[playerId] = {
       ...matchContributions[playerId],
@@ -243,7 +245,7 @@ export const quickSimMatch = (
         const offEntryMinute = entries[outfielderOff.id];
         minutes[outfielderOff.id] = offEntryMinute !== undefined
           ? Math.max(0, minute - offEntryMinute)
-          : Math.min(minutes[outfielderOff.id] || maxMatchMinutes, minute);
+          : minute;
         if (offEntryMinute !== undefined) delete entries[outfielderOff.id];
         entries[reserveGoalkeeper.id] = minute;
         minutes[reserveGoalkeeper.id] = Math.max(minutes[reserveGoalkeeper.id] || 0, maxMatchMinutes - minute);
@@ -304,7 +306,7 @@ export const quickSimMatch = (
       const entryMinute = homeSubEntryMinutes[playerId];
       homeMinutes[playerId] = entryMinute !== undefined
         ? Math.max(0, minute - entryMinute)
-        : Math.min(homeMinutes[playerId] || maxMatchMinutes, minute);
+        : minute;
       if (entryMinute !== undefined) delete homeSubEntryMinutes[playerId];
       coverDismissedGoalkeeper('home', minute);
     }
@@ -314,10 +316,29 @@ export const quickSimMatch = (
       const entryMinute = awaySubEntryMinutes[playerId];
       awayMinutes[playerId] = entryMinute !== undefined
         ? Math.max(0, minute - entryMinute)
-        : Math.min(awayMinutes[playerId] || maxMatchMinutes, minute);
+        : minute;
       if (entryMinute !== undefined) delete awaySubEntryMinutes[playerId];
       coverDismissedGoalkeeper('away', minute);
     }
+  };
+
+  const abandonIfInvalid = (minute: number) => {
+    const homeLiveValidation = validateMatchdayXI(currentHomeXI, {
+      teamId: homeTeam.id, designatedGoalkeeperId: homeGoalkeeperId, allowEmergencyGoalkeeper: true,
+    });
+    const awayLiveValidation = validateMatchdayXI(currentAwayXI, {
+      teamId: awayTeam.id, designatedGoalkeeperId: awayGoalkeeperId, allowEmergencyGoalkeeper: true,
+    });
+    if (homeLiveValidation.ok && awayLiveValidation.ok) return false;
+    const outcome = getAdministrativeFixtureOutcome({ ...fixture, isKnockout: getTieScore().isDecisive }, homeLiveValidation.ok, awayLiveValidation.ok);
+    forcedResolution = outcome.resolution;
+    forcedWinnerTeamId = outcome.winnerTeamId;
+    forcedIncludeTableStats = outcome.includeTableStats;
+    maxMatchMinutes = minute;
+    if (homeLiveValidation.ok) hScore = Math.max(hScore, aScore + 1, outcome.homeScore ?? 0);
+    else if (awayLiveValidation.ok) aScore = Math.max(aScore, hScore + 1, outcome.awayScore ?? 0);
+    matchEvents.push(`Match ${outcome.resolution === 'void' ? 'voided' : 'abandoned'}: ${homeLiveValidation.reason || 'home XI legal'}; ${awayLiveValidation.reason || 'away XI legal'}.`);
+    return true;
   };
 
   for (let i = 0; i < ENGINE_CONFIG.TOTAL_POSSESSIONS; i++) {
@@ -358,43 +379,7 @@ export const quickSimMatch = (
     currentAwayXI = drainQuickMatchEnergy(currentAwayXI, awayTeam);
     refreshHomeProfile();
     refreshAwayProfile();
-    const homeLiveValidation = validateMatchdayXI(currentHomeXI, {
-      teamId: homeTeam.id,
-      designatedGoalkeeperId: homeGoalkeeperId,
-      allowEmergencyGoalkeeper: true,
-    });
-    const awayLiveValidation = validateMatchdayXI(currentAwayXI, {
-      teamId: awayTeam.id,
-      designatedGoalkeeperId: awayGoalkeeperId,
-      allowEmergencyGoalkeeper: true,
-    });
-    if (!homeLiveValidation.ok || !awayLiveValidation.ok) {
-      if (!homeLiveValidation.ok && !awayLiveValidation.ok) {
-        const voidFixture = buildVoidFixture(fixture);
-        matchEvents.push(`Match voided: ${homeLiveValidation.reason || 'home XI legal'}; ${awayLiveValidation.reason || 'away XI legal'}.`);
-        return {
-          players,
-          teams,
-          fixture: voidFixture,
-          events: matchEvents,
-          matchStats: buildQuickSimMatchStats(homePossessions, awayPossessions),
-        };
-      }
-      const outcome = getAdministrativeFixtureOutcome(fixture, homeLiveValidation.ok, awayLiveValidation.ok);
-      forcedResolution = outcome.resolution;
-      forcedWinnerTeamId = outcome.winnerTeamId;
-      forcedIncludeTableStats = outcome.includeTableStats;
-      if (outcome.resolution === 'void') {
-        hScore = 0;
-        aScore = 0;
-      } else if (homeLiveValidation.ok && !awayLiveValidation.ok) {
-        hScore = Math.max(hScore, aScore + 1, outcome.homeScore);
-      } else if (awayLiveValidation.ok && !homeLiveValidation.ok) {
-        aScore = Math.max(aScore, hScore + 1, outcome.awayScore);
-      }
-      matchEvents.push(`Match abandoned: ${homeLiveValidation.reason || 'home XI legal'}; ${awayLiveValidation.reason || 'away XI legal'}.`);
-      break;
-    }
+    if (abandonIfInvalid(minute)) break;
     const isHomeAttacking = selectPossessionAttacker(
       homeTeam,
       awayTeam,
@@ -469,6 +454,7 @@ export const quickSimMatch = (
         addContribution(playerId, 'redCards');
       }
     }
+    if (abandonIfInvalid(minute)) break;
   }
   regulationHomeScore = hScore;
   regulationAwayScore = aScore;
@@ -477,16 +463,17 @@ export const quickSimMatch = (
     currentHomeXI.forEach(player => {
       if (sentOffPlayers.has(player.id)) return;
       const entryMinute = homeSubEntryMinutes[player.id] ?? 0;
-      homeMinutes[player.id] = Math.max(homeMinutes[player.id] || 0, endMinute - entryMinute);
+      homeMinutes[player.id] = Math.max(0, endMinute - entryMinute);
     });
     currentAwayXI.forEach(player => {
       if (sentOffPlayers.has(player.id)) return;
       const entryMinute = awaySubEntryMinutes[player.id] ?? 0;
-      awayMinutes[player.id] = Math.max(awayMinutes[player.id] || 0, endMinute - entryMinute);
+      awayMinutes[player.id] = Math.max(0, endMinute - entryMinute);
     });
   };
 
-  if (!forcedResolution && fixture.isKnockout && hScore === aScore) {
+  if (!forcedResolution && getTieScore().isDecisive && getTieScore().homeScore === getTieScore().awayScore) {
+    extraTimePlayed = true;
     maxMatchMinutes = EXTRA_TIME_MATCH_MINUTES;
     homeSubstitutionState.maxWindows = Math.max(homeSubstitutionState.maxWindows, 4);
     awaySubstitutionState.maxWindows = Math.max(awaySubstitutionState.maxWindows, 4);
@@ -533,6 +520,7 @@ export const quickSimMatch = (
       currentAwayXI = drainQuickMatchEnergy(currentAwayXI, awayTeam, ENGINE_CONFIG.EXTRA_TIME_ENERGY_DRAIN_MULTIPLIER);
       refreshHomeProfile();
       refreshAwayProfile();
+      if (abandonIfInvalid(minute)) break;
       const isHomeAttacking = selectPossessionAttacker(
         homeTeam,
         awayTeam,
@@ -606,12 +594,21 @@ export const quickSimMatch = (
           addContribution(playerId, 'redCards');
         }
       }
+      if (abandonIfInvalid(minute)) break;
     }
-    if (hScore === aScore) matchEvents.push('Extra time cannot separate them. Penalties will decide it.');
-    else matchEvents.push(`${hScore > aScore ? homeTeam.name : awayTeam.name} win after extra time.`);
+    if (!forcedResolution) {
+      if (getTieScore().homeScore === getTieScore().awayScore) matchEvents.push('Extra time cannot separate them. Penalties will decide it.');
+      else matchEvents.push(`${getTieScore().homeScore > getTieScore().awayScore ? homeTeam.name : awayTeam.name} win after extra time.`);
+    }
   }
 
+  if (forcedResolution === 'void') {
+    return { players, teams, fixture: buildVoidFixture(fixture), events: matchEvents, matchStats: emptyMatchStats };
+  }
   extendActivePlayersToMinute(maxMatchMinutes);
+  [homeMinutes, awayMinutes].forEach(minutes => {
+    Object.keys(minutes).forEach(playerId => { minutes[playerId] = Math.min(minutes[playerId], maxMatchMinutes); });
+  });
   applyMinuteCaps(homeMinutes, sentOffMinutes, maxMatchMinutes);
   applyMinuteCaps(awayMinutes, sentOffMinutes, maxMatchMinutes);
 
@@ -662,8 +659,8 @@ export const quickSimMatch = (
   if (forcedResolution) {
     winnerTeamId = forcedWinnerTeamId;
     resolution = forcedResolution;
-  } else if (fixture.isKnockout) {
-    if (hScore === aScore) {
+  } else if (getTieScore().isDecisive) {
+    if (getTieScore().homeScore === getTieScore().awayScore) {
       penaltyShootout = simulatePenaltyShootout(
         homeTeam,
         awayTeam,
@@ -676,8 +673,8 @@ export const quickSimMatch = (
       resolution = 'penalties';
       matchEvents.push(`${updatedTeams[winnerTeamId].name} keep their nerve and advance on penalties.`);
     } else {
-      winnerTeamId = hScore > aScore ? homeTeam.id : awayTeam.id;
-      resolution = regulationHomeScore === regulationAwayScore ? 'extra_time' : 'regular';
+      winnerTeamId = getTieScore().homeScore > getTieScore().awayScore ? homeTeam.id : awayTeam.id;
+      resolution = extraTimePlayed ? 'extra_time' : 'regular';
     }
   }
 
@@ -688,7 +685,7 @@ export const quickSimMatch = (
     isPlayed: true,
     winnerTeamId,
     resolution,
-    scoreBreakdown: fixture.isKnockout && regulationHomeScore === regulationAwayScore
+    scoreBreakdown: extraTimePlayed
       ? {
           regulationHomeScore,
           regulationAwayScore,

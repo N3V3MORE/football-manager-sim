@@ -1,4 +1,9 @@
 import { FREE_AGENT_TEAM_ID, Player, advanceSeason, assert, computeMarketValue, computeWeeklyProgression, createFreeAgentTeam, createSeededRandom, getCompetitionPanelForTeam, getSeasonWeekLimit, getSquadPolicy, initGameData, readSource, resolveCompetitionProgression } from './shared';
+import { quickSimMatch, useGameStore, processLiveMatchMinuteState, finishLiveMatchState, sanitizePersistedState, advanceWeekState } from './shared';
+import { ENGINE_CONFIG } from '../../src/config/engineConfig';
+import { getDecisiveTieScore } from '../../src/core/matchTieResolution';
+import { buildVoidFixture } from '../../src/core/fixtureLifecycle';
+import { playCurrentWeekFixtures } from '../../src/store/fixtureResolution';
 
 export const checkCompetitionPanelHandlesMissingTeam = () => {
   const data = initGameData('Arsenal');
@@ -178,29 +183,96 @@ export const checkEflPlayoffSemiFinalsUseAggregateTiebreak = () => {
 
   const playedSemiFixtures = {
     ...withSemis.fixtures,
-    [firstAId]: { ...firstA, isPlayed: true, homeScore: 2, awayScore: 0 },
-    [secondAId]: { ...secondA, isPlayed: true, homeScore: 2, awayScore: 0 },
+    [firstAId]: { ...firstA, isPlayed: true, homeScore: 0, awayScore: 0 },
     [firstBId]: { ...firstB, isPlayed: true, homeScore: 0, awayScore: 1 },
     [secondBId]: { ...secondB, isPlayed: true, homeScore: 1, awayScore: 0 },
   };
+
+  const originalChance = ENGINE_CONFIG.BIG_MOMENT_CHANCE;
+  try {
+    ENGINE_CONFIG.BIG_MOMENT_CHANCE = 0;
+    const result = quickSimMatch(secondAId, data.players, teams, playedSemiFixtures, null, { rng: { next: () => 0.99 } });
+    playedSemiFixtures[secondAId] = result.fixture;
+    assert(result.fixture.penaltyShootout!.kicks.length > 0, 'Aggregate ties must record real penalty kicks after extra time');
+    assert(result.fixture.scoreBreakdown?.extraTimeHomeScore === 0, 'Second-leg goals must remain separate from aggregate goals');
+  } finally {
+    ENGINE_CONFIG.BIG_MOMENT_CHANCE = originalChance;
+  }
 
   const withFinal = resolveCompetitionProgression(playedSemiFixtures, withSemis.competitions, teams, { next: () => 0 });
   const finalRound = withFinal.competitions.championship.rounds.find(round => round.key === 'final');
   const finalFixture = finalRound?.fixtureIds[0] ? withFinal.fixtures[finalRound.fixtureIds[0]] : undefined;
   assert(finalFixture, 'Aggregate semi-final winners should schedule a play-off final');
   assert(
-    withFinal.fixtures[secondAId].winnerTeamId === firstA.homeTeamId,
+    withFinal.fixtures[secondAId].winnerTeamId === playedSemiFixtures[secondAId].penaltyShootout?.winnerTeamId,
     'Aggregate-tied semi-final should use aggregate tiebreak winner, not second-leg match winner'
   );
   assert(withFinal.fixtures[secondAId].resolution === 'penalties', 'Aggregate-tied semi-final should mark second leg as penalties');
   assert(
-    finalFixture!.homeTeamId === firstA.homeTeamId || finalFixture!.awayTeamId === firstA.homeTeamId,
+    finalFixture!.homeTeamId === playedSemiFixtures[secondAId].winnerTeamId || finalFixture!.awayTeamId === playedSemiFixtures[secondAId].winnerTeamId,
     'Play-off final should include aggregate tiebreak winner'
   );
   assert(
     finalFixture!.homeTeamId === secondB.homeTeamId || finalFixture!.awayTeamId === secondB.homeTeamId,
     'Play-off final should include clear aggregate winner from the other semi-final'
   );
+  const voidSemi = resolveCompetitionProgression({ ...playedSemiFixtures,
+    [firstAId]: { ...buildVoidFixture(firstA), isPlayed: false }, [secondAId]: secondA }, withSemis.competitions, teams);
+  assert(voidSemi.fixtures[secondAId].resolution === 'void' && voidSemi.fixtures[secondAId].isPlayed, 'A void semifinal must cancel its remaining leg');
+  const directVoid = quickSimMatch(secondAId, data.players, teams, { ...withSemis.fixtures, [firstAId]: buildVoidFixture(firstA) });
+  assert(directVoid.fixture.resolution === 'void' && directVoid.fixture.isPlayed, 'Opening a legacy second leg directly must respect the void first leg');
+  assert(voidSemi.competitions.championship.playoffWinnerTeamId === secondB.homeTeamId, 'A lone surviving semifinal winner must receive the final bye');
+  const voidFinal = resolveCompetitionProgression({ ...withFinal.fixtures, [finalFixture!.id]: buildVoidFixture(finalFixture!) }, withFinal.competitions, teams);
+  assert(!voidFinal.competitions.championship.playoffWinnerTeamId, 'A void playoff final must not award a promotion winner');
+  assert(voidFinal.competitions.championship.rounds.find(round => round.key === 'final')!.completed, 'A void playoff final must finish the competition');
+};
+
+export const checkAggregateLiveAndVoidRecovery = () => {
+  const snapshot = useGameStore.getState();
+  const originalChance = ENGINE_CONFIG.BIG_MOMENT_CHANCE;
+  try {
+    useGameStore.getState().initializeGame('T1', 606);
+    const initial = useGameStore.getState();
+    const base = Object.values(initial.fixtures)[0];
+    const first = { ...base, id: 'aggregate-first', week: 1, dateOrdinal: 0, round: 'semi_final' as const,
+      isKnockout: false, isPlayed: true, homeScore: 2, awayScore: 0 };
+    const second = { ...first, id: 'aggregate-second', week: 2, dateOrdinal: 7, isPlayed: false, homeScore: null, awayScore: null,
+      homeTeamId: first.awayTeamId, awayTeamId: first.homeTeamId };
+    let current: typeof initial = { ...initial, currentWeek: 2, userTeamId: null, fixtures: { [first.id]: first, [second.id]: second }, liveMatches: {} };
+    ENGINE_CONFIG.BIG_MOMENT_CHANCE = 0;
+    for (let minute = 1; minute <= 90; minute += 1) {
+      current = { ...current, ...processLiveMatchMinuteState(current, second.id, minute, { next: () => 0.99 }).patch };
+    }
+    current.fixtures[second.id] = { ...current.fixtures[second.id], homeScore: 2, awayScore: 0 };
+    const tied = getDecisiveTieScore(current.fixtures[second.id], current.fixtures);
+    assert(tied.homeScore === 2 && tied.awayScore === 2, 'Reversed first-leg scores must be added in the correct orientation');
+    const reloaded = { ...current, ...sanitizePersistedState(current) };
+    const finished = finishLiveMatchState(reloaded, second.id, { next: () => 0.99 });
+    const result = finished.fixtures![second.id];
+    assert(result.resolution === 'penalties' && result.penaltyShootout!.kicks.length > 0, 'A 2-0 leg with tied aggregate must finish extra time and penalties after reload');
+    assert(result.homeScore === 2 && result.awayScore === 0, 'Aggregate totals must never replace leg scores');
+    const clear = getDecisiveTieScore({ ...second, homeScore: 0, awayScore: 0 }, { [first.id]: first, [second.id]: second });
+    assert(clear.homeScore !== clear.awayScore, 'A drawn leg with a clear aggregate winner must not need extra time');
+    const voidFixture = buildVoidFixture(base);
+    const voidState = { ...initial, userTeamId: null, fixtures: { [base.id]: { ...voidFixture, isPlayed: false } }, liveMatches: {} };
+    const next = advanceWeekState(voidState);
+    assert(next.currentWeek === 2 && next.fixtures[base.id].isPlayed, 'An old unplayed void fixture must not block the week');
+    assert(next.teams[base.homeTeamId].played === initial.teams[base.homeTeamId].played, 'Void matches must not affect league standings');
+    const cup = initial.competitions['fa-cup'];
+    const cupFixtures = Object.values(initial.fixtures).filter(fixture => fixture.competitionId === 'fa-cup').slice(0, 2);
+    const [cupA, cupB] = cupFixtures;
+    const semifinal = { ...cup.rounds[0], key: 'semi_final' as const, fixtureIds: cupFixtures.map(fixture => fixture.id),
+      entrantTeamIds: cupFixtures.flatMap(fixture => [fixture.homeTeamId, fixture.awayTeamId]), byeTeamIds: [], winnerTeamIds: [], completed: false };
+    const oldCupState = { ...initial, userTeamId: null, currentWeek: 40,
+      fixtures: { [cupA.id]: { ...buildVoidFixture(cupA), isPlayed: false },
+        [cupB.id]: { ...cupB, isPlayed: true, homeScore: 1, awayScore: 0, winnerTeamId: cupB.homeTeamId } },
+      competitions: { [cup.id]: { ...cup, rounds: [semifinal], currentRound: 'semi_final' as const } }, liveMatches: {} };
+    const recovered = playCurrentWeekFixtures({ ...oldCupState, ...sanitizePersistedState(oldCupState) });
+    assert(recovered.competitions[cup.id].championTeamId === cupB.homeTeamId, 'Migration must finish an old void cup round even with no unplayed fixtures');
+  } finally {
+    ENGINE_CONFIG.BIG_MOMENT_CHANCE = originalChance;
+    useGameStore.setState(snapshot);
+  }
 };
 
 export const checkRolloverWaitsForPlayoffFinal = () => {

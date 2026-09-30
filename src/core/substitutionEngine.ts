@@ -148,10 +148,9 @@ export const applySubstitutions = (
 
     const subMinute = options?.minuteOverride ?? (minMinute + Math.floor(random() * Math.max(1, maxMinute - minMinute + 1)));
     const offPlayerEntryMinute = playerEntryMinutes?.[offPlayer.id];
-    const offPlayerMinutes = playerMinutes[offPlayer.id] ?? matchEndMinute;
     playerMinutes[offPlayer.id] = offPlayerEntryMinute !== undefined
       ? Math.max(0, subMinute - offPlayerEntryMinute)
-      : Math.min(offPlayerMinutes, subMinute);
+      : subMinute;
     if (playerEntryMinutes && offPlayerEntryMinute !== undefined) delete playerEntryMinutes[offPlayer.id];
     if (playerEntryMinutes) playerEntryMinutes[onPlayer.id] = subMinute;
     playerMinutes[onPlayer.id] = Math.max(playerMinutes[onPlayer.id] || 0, matchEndMinute - subMinute);

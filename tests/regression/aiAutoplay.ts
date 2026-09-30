@@ -3,6 +3,31 @@ import { installAgentGameHandler } from '../../src/dev/agentGameHandler';
 import { runAiPreWeekPolicy } from '../../src/dev/aiPolicy';
 import type { Player } from '../../src/models/types';
 import { assert, buildTestPlayer, buildTestTeam, initGameData, readSource } from './shared';
+import { useGameStore } from '../../src/store/gameStore';
+import { getInboxSeason } from '../../src/store/inboxCore';
+
+export const checkSeasonRunnerIgnoresSackingAndBoundsErrors = () => {
+  const cleanup = installAgentGameHandler();
+  const advanceWeek = useGameStore.getState().advanceWeek;
+  try {
+    useGameStore.getState().initializeGame('T1', 9029);
+    useGameStore.setState({ advanceWeek: () => {
+      const current = useGameStore.getState();
+      useGameStore.setState({ currentWeek: current.currentWeek + 1,
+        careerRecord: { ...current.careerRecord, seasonsManaged: current.careerRecord.seasonsManaged + 1 } });
+    } });
+    const result = globalThis.__FM_AGENT__!.run('playSeason', { maxWeeks: 1, applyAssistantActions: false, continueOnError: true });
+    assert(!(result.data as { completedSeason: boolean }).completedSeason, 'A sacking must not count as world rollover');
+    let failures = 0;
+    useGameStore.setState({ advanceWeek: () => { failures += 1; throw new Error('Repeatable advance failure'); } });
+    const failed = globalThis.__FM_AGENT__!.run('playWithAI', { seasons: 1, stopOnError: false, verbosity: 'quiet' });
+    assert(failed.ok && failures <= 3, 'Autoplay must stop after repeated errors without progressing');
+    assert((failed.data as AIPlayReportShape).bugs.length > 0, 'Failed autoplay must report its errors');
+  } finally {
+    useGameStore.setState({ advanceWeek });
+    cleanup();
+  }
+};
 
 type AgentRunner = (command: string, payload?: Record<string, unknown>) => {
   ok: boolean;
@@ -55,6 +80,7 @@ export const checkAiAutoplayCommandProducesReport = () => {
     const report = result.data as AIPlayReportShape;
     assert(report.seasons === 1, 'AI play report should echo requested season count');
     assert(report.weeksPlayed > 0, 'AI play report should advance at least one week');
+    assert(getInboxSeason(useGameStore.getState().competitions) >= 2, 'One-season autoplay must complete a world rollover');
     assert(Array.isArray(report.bugs), 'AI play report should include a bugs array');
     assert(report.bugs.length === 0, 'One-season balanced AI smoke run should not report integrity bugs');
     assert(Array.isArray(report.balanceFlags), 'AI play report should include a balanceFlags array');
@@ -163,4 +189,18 @@ export const checkAiAutoplayRotationDoesNotReuseBenchPlayer = () => {
   });
 
   assert(swappedIn.length === new Set(swappedIn).size, 'AI rotation should not reuse the same bench player for multiple tired starters');
+};
+export const checkAiGoalkeeperTrainingAvoidsCappedStats = () => {
+  const snapshot = useGameStore.getState();
+  try {
+    useGameStore.getState().initializeGame('T1', 761);
+    const state = useGameStore.getState();
+    const keeper = Object.values(state.players).find(player => player.teamId === 'T1' && player.position === 'GK')!;
+    let chosenFocus: string | null = null;
+    runAiPreWeekPolicy({ ...state, players: { [keeper.id]: { ...keeper, age: 18, overallRating: 60, potential: 85,
+      stats: { ...keeper.stats, passing: 10, physical: 50, gk_kicking: 99, gk_diving: 99, gk_reflexes: 40, gk_positioning: 60, gk_handling: 70, gk_speed: 65 } } },
+      setTrainingFocus: (id, focus) => { if (id === keeper.id) chosenFocus = focus; } },
+    { seasons: 1, seed: 761, teamId: 'T1', policy: 'passive', stopOnError: true, reportBalanceFlags: false, verbosity: 'quiet' });
+    assert(chosenFocus === 'shooting', 'AI keeper training must target weak reflexes rather than capped kicking');
+  } finally { useGameStore.setState(snapshot); }
 };

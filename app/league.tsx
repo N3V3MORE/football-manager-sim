@@ -234,7 +234,7 @@ export default function LeagueTableScreen() {
     <Screen scroll={false}>
       <PageHeader
         title="League Table"
-        subtitle="Swipe left/right for countries. Scroll down for lower divisions."
+        subtitle="Scroll down for lower divisions."
         backLabel="< Hub"
         onBack={() => router.replace('/')}
       />

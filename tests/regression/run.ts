@@ -16,9 +16,31 @@ import { checkPlayerRatingUtilsPreserveSharedCurves } from './playerRatingUtils'
 import { checkAppendFixtureResultToStatePreservesPostMatchPatch, checkQuickSimActionLivesWithFixtureResolution } from './fixtureResolution';
 import { checkInboxHelpersUseConcreteModules, checkManagedTeamObjectivesAreInlined, checkSelectedComponentsUseDesignTokens } from './storeStructure';
 import { checkAiAutoplayCommandProducesReport, checkAiAutoplayRotationDoesNotReuseBenchPlayer, checkAiAutoplayRunnerScriptsExist } from './aiAutoplay';
+import { checkNegotiationsRevalidateCurrentState } from './transfer';
+import { checkSeasonRunnerIgnoresSackingAndBoundsErrors } from './aiAutoplay';
+import { checkQuickSimAbandonmentStopsImmediately, checkZeroMoraleRemainsZeroAfterLoss } from './match';
+import { checkQuickLineupKeepsBackupKeeperOutfieldFree, checkSeededGoalkeeperAttributes, checkAssistantRotationPreservesFullLineup } from './squad';
+import { checkAggregateLiveAndVoidRecovery } from './calendar';
+import { checkUnemployedCareerRecovery } from './board';
+import { checkGoalkeeperTrainingUsesKeeperStats } from './training';
+import { checkAiGoalkeeperTrainingAvoidsCappedStats } from './aiAutoplay';
+import { checkEmergencyGoalkeeperCanContinueAndSubstitute } from './live-match';
 
 const runRegressionChecks = () => {
   console.log('--- ENGINE REGRESSION CHECKS ---');
+  checkNegotiationsRevalidateCurrentState();
+  checkZeroMoraleRemainsZeroAfterLoss();
+  checkQuickSimAbandonmentStopsImmediately();
+  checkAggregateLiveAndVoidRecovery();
+  checkUnemployedCareerRecovery();
+  checkGoalkeeperTrainingUsesKeeperStats();
+  checkAiGoalkeeperTrainingAvoidsCappedStats();
+  checkEmergencyGoalkeeperCanContinueAndSubstitute();
+  checkQuickLineupKeepsBackupKeeperOutfieldFree();
+  checkSeededGoalkeeperAttributes();
+  checkAssistantRotationPreservesFullLineup();
+  checkSeasonRunnerIgnoresSackingAndBoundsErrors();
+  console.log('[OK] Transfer revalidation, zero morale and injury-crisis lineup checks passed');
   checkFormationSlotLookupUsesExactFormation();
   console.log('[OK] Exact formation slot lookup passed');
   checkCleanSheetWindows();

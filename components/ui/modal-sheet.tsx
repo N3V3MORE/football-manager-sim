@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, Modal, Pressable, ScrollView, type ViewStyle } from 'react-native';
 
 import { color, radius, space, type } from '@/src/design/tokens';
@@ -37,14 +38,23 @@ export function ModalSheet({
   footer,
   style,
 }: ModalSheetProps) {
+  const closeButtonRef = useRef<View>(null);
+  // React Native Web's modal trap can programmatically focus a wrapper with tabIndex -1.
+  const focusCloseButton = () => closeButtonRef.current?.focus();
+
   return (
     <Modal visible={visible} transparent animationType={variant === 'sheet' ? 'slide' : 'fade'} onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={dismissable ? onClose : undefined} accessibilityRole="button" accessibilityLabel="Close dialog">
+      <Pressable accessible={false} focusable={false} tabIndex={-1} onFocus={focusCloseButton} style={[styles.backdrop, variant === 'dialog' && styles.dialogBackdrop]} onPress={dismissable ? onClose : undefined}>
         <Pressable
           style={[styles.surface, variant === 'sheet' ? styles.sheet : styles.dialog, style]}
           onPress={(e) => e.stopPropagation()}
           accessibilityRole="alert"
           accessibilityLabel={title}
+          accessible={false}
+          focusable={false}
+          tabIndex={-1}
+          onFocus={focusCloseButton}
+          accessibilityViewIsModal
         >
           <View style={styles.headerRow}>
             <View style={styles.headerText}>
@@ -52,6 +62,7 @@ export function ModalSheet({
               {subtitle ? <Text style={styles.subtitle} numberOfLines={2}>{subtitle}</Text> : null}
             </View>
             <TouchableOpacity
+              ref={closeButtonRef}
               onPress={onClose}
               accessibilityRole="button"
               accessibilityLabel="Close"
@@ -85,13 +96,16 @@ const styles = StyleSheet.create({
     borderColor: color.border.default,
     maxHeight: '85%',
   },
+  dialogBackdrop: {
+    justifyContent: 'center',
+    padding: space.xl,
+  },
   sheet: {
     borderTopLeftRadius: radius.none,
     borderTopRightRadius: radius.none,
     borderBottomWidth: 0,
   },
   dialog: {
-    margin: space.xl,
     borderRadius: radius.lg,
     alignSelf: 'center',
     width: '100%',

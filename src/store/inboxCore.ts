@@ -240,13 +240,18 @@ export const buildLineupSuggestionPayload = (
   const currentStarters = getCurrentStarters(team.id, players);
   const currentMap = rebuildFormationMap(slots, currentStarters, team.formationMap || {});
   const slotPlayers = rebuildFormationSlotPlayers(slots, currentStarters, currentMap);
+  const reservedStarterIds = new Set(Object.values(currentMap));
   const selectedIds = new Set<string>();
   const nextMap: Record<string, string> = {};
 
   slots.forEach((row, rowIndex) => {
     row.forEach((slot, colIndex) => {
       const currentPlayer = slotPlayers[rowIndex]?.[colIndex];
-      const availableCandidates = eligiblePlayers.filter(player => !selectedIds.has(player.id));
+      const availableCandidates = eligiblePlayers.filter(player => (
+        !selectedIds.has(player.id) &&
+        (!reservedStarterIds.has(player.id) || player.id === currentPlayer?.id) &&
+        (slot.pos === 'GK' ? player.position === 'GK' : player.position !== 'GK')
+      ));
       const bestFitCandidate = [...availableCandidates]
         .filter(player => getSlotFitScore(player, slot) > -Infinity)
         .sort((a, b) => {
@@ -391,6 +396,7 @@ export const pruneInboxMessagesForManagedTeam = (
   nextTeamId: string | null
 ) => (
   messages.filter(message => {
+    if (!nextTeamId && message.category === 'career_job_offer' && message.action?.type === 'accept_job_offer') return true;
     if (!message.teamId) return true;
     if (nextTeamId && message.teamId === nextTeamId) return true;
     return PERSISTENT_CAREER_CATEGORIES.has(message.category);

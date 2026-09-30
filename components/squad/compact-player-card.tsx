@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Player, StatKey } from '@/src/models/types';
+import { Player, StatKey, TrainingStatKey } from '@/src/models/types';
+import { GOALKEEPER_TRAINING_STATS } from '@/src/core/trainingEngine';
 import { getPositionColor } from '@/src/constants/positionColors';
 import { formatContractLength, getPlayerAvailabilityStatus, isContractExpiringSoon, isPlayerInjured } from '@/src/core/playerStatusUtils';
 
@@ -23,13 +24,15 @@ const TRAINING_OPTIONS: { label: string; value: StatKey | null }[] = [
   { label: 'PHY', value: 'physical' },
 ];
 
-const STAT_LABELS: Record<StatKey, string> = {
+const STAT_LABELS: Record<TrainingStatKey, string> = {
   pace: 'PAC',
   shooting: 'SHO',
   passing: 'PAS',
   dribbling: 'DRI',
   defending: 'DEF',
   physical: 'PHY',
+  gk_speed: 'SPD', gk_reflexes: 'REF', gk_kicking: 'KIC',
+  gk_handling: 'HAN', gk_positioning: 'POS', gk_diving: 'DIV',
 };
 
 export function CompactPlayerCard({
@@ -48,7 +51,7 @@ export function CompactPlayerCard({
   const statusLine = `${getPlayerAvailabilityStatus(item)} | ${formatContractLength(item)}`;
   const trainingXp = Math.max(0, Math.min(99, item.trainingXp || 0));
   const trainingGains = Object.entries(item.trainingStatGains || {})
-    .filter((entry): entry is [StatKey, number] => Number(entry[1]) > 0);
+    .filter((entry): entry is [TrainingStatKey, number] => Number(entry[1]) > 0);
 
   return (
     <View>
@@ -146,7 +149,7 @@ export function CompactPlayerCard({
                       accessibilityState={{ selected }}
                     >
                       <Text style={[styles.trainingOptionText, selected && styles.trainingOptionTextSelected]}>
-                        {option.label}
+                        {item.position === 'GK' && option.value ? STAT_LABELS[GOALKEEPER_TRAINING_STATS[option.value]] : option.label}
                       </Text>
                     </TouchableOpacity>
                   );

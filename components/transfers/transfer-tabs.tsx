@@ -27,6 +27,7 @@ export function TransferTabs({ activeTab, marketCount, allPlayersCount, freeAgen
         value={activeTab}
         onChange={onChange}
         label="Transfer tabs"
+        wrapLabels
       />
     </View>
   );

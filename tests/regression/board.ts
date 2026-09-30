@@ -343,3 +343,32 @@ export const checkStoreInitializesSelectedTeamDefaults = () => {
     Math.random = originalRandom;
   }
 };
+import { refreshUnemployedJobOffers } from '../../src/store/inboxCareerBoard';
+import { rolloverSeasonIfNeeded } from '../../src/store/seasonRollover';
+import { dismissUserManagerFromTeam } from '../../src/core/careerEngine';
+
+export const checkUnemployedCareerRecovery = () => {
+  const snapshot = useGameStore.getState();
+  try {
+    useGameStore.getState().initializeGame('T1', 101);
+    const initial = useGameStore.getState();
+    const dismissal = dismissUserManagerFromTeam(initial.teams, initial.competitions, 'T1', initial.careerRecord, 1)!;
+    const stableTeams = Object.fromEntries(Object.entries(dismissal.teams).map(([id, team]) => [id,
+      { ...team, boardApproval: 80, manager: { ...team.manager, jobSecurity: 90, replacementRisk: 0, contractYearsRemaining: 3 } }]));
+    const unemployed = { ...initial, userTeamId: null, teams: stableTeams, careerRecord: dismissal.careerRecord, inboxMessages: [] };
+    assert(refreshUnemployedJobOffers(unemployed).length === 0, 'Secure clubs must not manufacture vacancies');
+    unemployed.teams.T2 = { ...unemployed.teams.T2, boardApproval: 20,
+      manager: { ...unemployed.teams.T2.manager, jobSecurity: 20, replacementRisk: 90, contractYearsRemaining: 1 } };
+    const messages = refreshUnemployedJobOffers(unemployed);
+    assert(messages.length === 1 && messages[0].action?.type === 'accept_job_offer', 'A later vacancy must produce an actionable job offer');
+    assert(refreshUnemployedJobOffers({ ...unemployed, inboxMessages: messages }).length === 1, 'Refresh must not duplicate offers or career milestones');
+    const rollover = rolloverSeasonIfNeeded({ ...unemployed, currentWeek: 100, inboxMessages: messages }, 99, [])!;
+    assert(rollover.inboxMessages.some(message => message.id === messages[0].id), 'Outstanding offers must survive unemployed season rollover');
+    assert(JSON.stringify(rollover.careerRecord) === JSON.stringify(unemployed.careerRecord), 'Waiting for work must not change career history or reputation');
+    const rehired = applyInboxActionState(rollover, messages[0].id);
+    assert(rehired.userTeamId === 'T2', 'A carried offer must restore employment');
+    assert(rehired.teams!.T2.manager.name === unemployed.careerRecord.userManager!.name, 'Rehire must preserve manager identity');
+    assert(!rehired.inboxMessages!.some(message => message.action?.type === 'accept_job_offer'), 'Rehire must clear competing offers');
+    assert(rehired.boardObjectives!.length > 0, 'Rehire must restore club objectives');
+  } finally { useGameStore.setState(snapshot); }
+};

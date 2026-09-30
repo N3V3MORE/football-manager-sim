@@ -8,6 +8,7 @@ import { useGameStore } from '@/src/store/gameStore';
 import { SeasonSummary, TrophyEntry } from '@/src/models/types';
 import { getCompetitionName } from '@/src/core/competitionEngine';
 import { getReviewVerdict } from '@/src/core/boardEngine';
+import { buildTrophyId } from '@/src/core/careerEngine';
 import { color, space } from '@/src/design/tokens';
 
 const OUTCOME_LABEL: Record<SeasonSummary['outcome'], string> = {
@@ -214,7 +215,7 @@ export default function BoardScreen() {
             <Text style={styles.sectionTitle}>Trophy Cabinet</Text>
             {careerRecord.trophies.map(trophy => (
               <View
-                key={`${trophy.season}-${trophy.type}-${trophy.division}`}
+                key={trophy.id || buildTrophyId(trophy.season, trophy.type, trophy.competitionId, trophy.label)}
                 style={styles.trophyCard}
               >
                 <View style={[styles.trophyBadge, { backgroundColor: TROPHY_COLOR[trophy.type] + '22' }]}>

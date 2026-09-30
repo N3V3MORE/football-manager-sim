@@ -1,5 +1,79 @@
-import { Fixture, Player, applySharedPostMatchAccounting, applyWindowedCleanSheets, assert, createSeededRandom, didConcedeInWindow, initGameData, qualifiesForWindowedCleanSheet, quickSimMatch, readSource, simulatePenaltyShootout } from './shared';
+import { Fixture, Player, applySharedPostMatchAccounting, applyWindowedCleanSheets, assert, buildTestPlayer, buildTestTeam, createSeededRandom, didConcedeInWindow, initGameData, qualifiesForWindowedCleanSheet, quickSimMatch, readSource, simulatePenaltyShootout } from './shared';
+import { ENGINE_CONFIG } from '../../src/config/engineConfig';
 import { isScoreLogMismatch } from '../../src/core/matchAuditUtils';
+import { scaleLineupForMatch } from '../../src/core/matchUtils';
+import { processLiveMatchMinuteState, finishLiveMatchState, useGameStore } from './shared';
+import { LiveMatchState } from '../../src/store/liveMatchHelpers';
+
+export const checkQuickSimAbandonmentStopsImmediately = () => {
+  const data = initGameData();
+  const template = Object.values(data.players)[0];
+  const home = buildTestTeam(data.teams.T1, 'abandon-home', 'Home');
+  const away = buildTestTeam(data.teams.T2, 'abandon-away', 'Away');
+  const players: Record<string, Player> = {};
+  [home, away].forEach(team => {
+    for (let index = 0; index < 7; index += 1) {
+      const player = buildTestPlayer(template, `${team.id}-${index}`, team.id, index === 0 ? 'GK' : 'MID', 70, {
+        isStarting: true, playerTraits: [],
+        stats: { ...template.stats, passing: 1, dribbling: 1, shooting: 1, defending: 99, physical: 99,
+          gk_reflexes: 70, gk_handling: 70, gk_positioning: 70 },
+      });
+      players[player.id] = player;
+    }
+  });
+  const originalConfig = { ...ENGINE_CONFIG };
+  try {
+    Object.assign(ENGINE_CONFIG, { TOTAL_POSSESSIONS: 4, BIG_MOMENT_CHANCE: 1, BIG_MOMENT_MAX_CHANCE: 0.8,
+      MIDFIELD_FOUL_CHANCE: 1, RED_CARD_CHANCE: 1 });
+    for (const extraTime of [false, true]) {
+      ENGINE_CONFIG.TOTAL_POSSESSIONS = extraTime ? 1 : 4;
+      ENGINE_CONFIG.EXTRA_TIME_POSSESSIONS = 2;
+      let calls = 0;
+      const fixture: Fixture = { ...Object.values(data.fixtures)[0], id: `abandon-${extraTime}`,
+        homeTeamId: home.id, awayTeamId: away.id, isKnockout: extraTime,
+        homeScore: null, awayScore: null, isPlayed: false };
+      const result = quickSimMatch(fixture.id, players, { [home.id]: home, [away.id]: away }, { [fixture.id]: fixture }, null, {
+        rng: { next: () => extraTime && calls++ < 3 ? 0.99 : 0.4 },
+      });
+      const expectedMinute = extraTime ? 105 : 23;
+      assert(result.fixture.resolution === 'forfeit', 'A dismissal below seven must abandon the match, including extra time');
+      const participants = Object.values(result.players);
+      assert(participants.every(player => player.minutesPlayed === expectedMinute), `Abandonment must credit only ${expectedMinute} minutes`);
+      assert(!result.fixture.penaltyShootout, 'An abandoned match must not continue to penalties');
+      assert(result.matchStats.totalPossessions === (extraTime ? 2 : 1), 'No possession may follow the abandoning dismissal');
+      let live: ReturnType<typeof useGameStore.getState> = { ...useGameStore.getState(), userTeamId: home.id, currentWeek: fixture.week,
+        players, teams: { [home.id]: home, [away.id]: away }, fixtures: { [fixture.id]: fixture },
+        competitions: {}, liveMatches: {} as Record<string, LiveMatchState> };
+      for (let minute = 1; minute <= expectedMinute; minute += 1) {
+        live = { ...live, ...processLiveMatchMinuteState(live, fixture.id, minute, { next: () => extraTime && minute <= 90 ? 0.99 : 0.4 }).patch };
+      }
+      assert(live.fixtures[fixture.id].resolution === 'forfeit', 'Live dismissal below seven must abandon immediately');
+      assert(Object.values(live.players).every(player => player.minutesPlayed === expectedMinute), 'Live abandonment must credit actual elapsed minutes');
+      assert(Object.values(live.players).every(player => player.matchRatingHistory.length === 1), 'Live abandonment must finalize player ratings');
+      assert(!live.liveMatches[fixture.id], 'Live abandonment must remove the runtime');
+      const beforeFinish = JSON.stringify(live.players);
+      const afterFinish = finishLiveMatchState(live, fixture.id);
+      assert(JSON.stringify(afterFinish.players || live.players) === beforeFinish, 'Repeated finish must not count an abandoned match twice');
+    }
+  } finally {
+    Object.assign(ENGINE_CONFIG, originalConfig);
+  }
+};
+
+export const checkZeroMoraleRemainsZeroAfterLoss = () => {
+  const data = initGameData();
+  const player = { ...Object.values(data.players)[0], morale: 0 };
+  const updatedPlayers = { [player.id]: { ...player } };
+  applySharedPostMatchAccounting({
+    teamParticipants: [player], teamStarterIds: new Set([player.id]), minuteMap: { [player.id]: 90 },
+    concededGoalMinutes: [30], concededGoalsTotal: 1, isWin: false, isDraw: false,
+    teamTactics: data.teams[player.teamId].tactics, updatedPlayers, rng: { next: () => 0.5 },
+  });
+  assert(updatedPlayers[player.id].morale === 0, 'A loss must not restore zero morale to average');
+  const low = scaleLineupForMatch([player], 1, 1)[0];
+  const average = scaleLineupForMatch([{ ...player, morale: 50 }], 1, 1)[0];
+  assert(low.stats.passing < average.stats.passing, 'Zero morale must affect match ability');
+};
 
 export const checkCleanSheetWindows = () => {
   assert(!didConcedeInWindow([], 0, 90, 0), 'Empty conceded-minute list with 0 conceded should be clean');

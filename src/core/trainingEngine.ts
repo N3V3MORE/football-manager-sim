@@ -1,9 +1,14 @@
-import { Player, StatKey, Team } from '../models/types';
+import { GoalkeeperStatKey, Player, StatKey, Team, TrainingStatKey } from '../models/types';
 import { computeMarketValue } from '../utils/calendar';
 import { calculateImpactCoefficient, clampRating } from './playerRatingUtils';
 import { getTrainingTraitXpMultiplier } from './traitEngine';
 
 const statKeys: StatKey[] = ['pace', 'shooting', 'passing', 'dribbling', 'defending', 'physical'];
+export const GOALKEEPER_TRAINING_STATS: Record<StatKey, GoalkeeperStatKey> = {
+  pace: 'gk_speed', shooting: 'gk_reflexes', passing: 'gk_kicking',
+  dribbling: 'gk_handling', defending: 'gk_positioning', physical: 'gk_diving',
+};
+const goalkeeperStatKeys = Object.values(GOALKEEPER_TRAINING_STATS);
 
 type TrainingOptions = {
   xpMultiplier?: number;
@@ -28,7 +33,11 @@ const getAgeMultiplier = (age: number) => {
   return 0.5;
 };
 
-const getStatWeight = (player: Player, key: StatKey) => {
+const getStatWeight = (player: Player, key: TrainingStatKey) => {
+  if (player.position === 'GK') {
+    return key === 'gk_reflexes' ? 0.28 : key === 'gk_positioning' ? 0.24
+      : key === 'gk_diving' ? 0.20 : key === 'gk_handling' ? 0.16 : key === 'gk_kicking' ? 0.08 : 0.04;
+  }
   if (player.position === 'DEF') {
     return key === 'defending' ? 0.34
       : key === 'physical' ? 0.22
@@ -65,18 +74,18 @@ const getStatWeight = (player: Player, key: StatKey) => {
 };
 
 const estimateOverallFromStats = (player: Player, stats: Player['stats']) => {
-  const weightedTotal = statKeys.reduce((sum, key) => (
-    sum + (stats[key] || player.overallRating) * getStatWeight(player, key)
+  const keys = player.position === 'GK' ? goalkeeperStatKeys : statKeys;
+  const weightedTotal = keys.reduce((sum, key) => (
+    sum + (stats[key] ?? player.overallRating) * getStatWeight(player, key)
   ), 0);
-  const weightTotal = statKeys.reduce((sum, key) => sum + getStatWeight(player, key), 0);
+  const weightTotal = keys.reduce((sum, key) => sum + getStatWeight(player, key), 0);
   return clampRating(weightedTotal / Math.max(0.01, weightTotal));
 };
 
-const pickTrainingStat = (player: Player, rng: () => number, focusOverride?: StatKey | null): StatKey => {
-  if (focusOverride !== undefined) {
-    return focusOverride || statKeys[Math.floor(rng() * statKeys.length)] || 'passing';
-  }
-  return player.trainingFocus || statKeys[Math.floor(rng() * statKeys.length)] || 'passing';
+const pickTrainingStat = (player: Player, rng: () => number, focusOverride?: StatKey | null): TrainingStatKey => {
+  const focus = (focusOverride !== undefined ? focusOverride : player.trainingFocus)
+    || statKeys[Math.floor(rng() * statKeys.length)] || 'passing';
+  return player.position === 'GK' ? GOALKEEPER_TRAINING_STATS[focus] : focus;
 };
 
 export const computeWeeklyTraining = (
@@ -112,10 +121,10 @@ export const computeWeeklyTraining = (
   let totalXp = previousXp + xpGain;
   let statPoints = Math.floor(totalXp / 100);
   const trainingXp = totalXp % 100;
-  let stats = { ...player.stats };
+  let stats = player.stats;
   let overallRating = player.overallRating;
   let trainingStatProgress = Math.max(0, player.trainingStatProgress || 0);
-  const trainingStatGains: Partial<Record<StatKey, number>> = {
+  const trainingStatGains: Partial<Record<TrainingStatKey, number>> = {
     ...(player.trainingStatGains || {}),
   };
 
@@ -124,9 +133,11 @@ export const computeWeeklyTraining = (
     if (overallRating >= potential) continue;
 
     const key = pickTrainingStat(player, rng, options.focusOverride);
+    const previousStat = stats[key] ?? player.overallRating;
+    if (previousStat >= 99) continue;
     stats = {
       ...stats,
-      [key]: clampRating((stats[key] || player.overallRating) + 1),
+      [key]: clampRating(previousStat + 1),
     };
     trainingStatProgress += 1;
     trainingStatGains[key] = (trainingStatGains[key] || 0) + 1;

@@ -16,6 +16,7 @@ type DraggableDotProps = {
   roleLabel?: string | null;
   onPress: () => void;
   onDragBegin: () => void;
+  onDragCancel: () => void;
   onDragEnd: (moveX: number, moveY: number) => boolean;
   setRef: (ref: View | null) => void;
 };
@@ -37,6 +38,7 @@ export function DraggableDot({
   roleLabel,
   onPress,
   onDragBegin,
+  onDragCancel,
   onDragEnd,
   setRef,
 }: DraggableDotProps) {
@@ -44,6 +46,8 @@ export function DraggableDot({
   const pan = useRef(new Animated.ValueXY()).current;
   const assignedRef = useRef(assigned);
   assignedRef.current = assigned;
+  const dragCallbacks = useRef({ onDragBegin, onDragCancel, onDragEnd });
+  dragCallbacks.current = { onDragBegin, onDragCancel, onDragEnd };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -51,14 +55,20 @@ export function DraggableDot({
       onMoveShouldSetPanResponder: (_event, gesture) => !!assignedRef.current && (Math.abs(gesture.dx) > 10 || Math.abs(gesture.dy) > 10),
       onPanResponderGrant: () => {
         setDragging(true);
-        onDragBegin();
+        dragCallbacks.current.onDragBegin();
         pan.extractOffset();
       },
       onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+      onPanResponderTerminate: () => {
+        setDragging(false);
+        pan.flattenOffset();
+        pan.setValue({ x: 0, y: 0 });
+        dragCallbacks.current.onDragCancel();
+      },
       onPanResponderRelease: (_event, gesture: PanResponderGestureState) => {
         setDragging(false);
         pan.flattenOffset();
-        const swapped = onDragEnd(gesture.moveX, gesture.moveY);
+        const swapped = dragCallbacks.current.onDragEnd(gesture.moveX, gesture.moveY);
 
         if (swapped) {
           pan.setValue({ x: 0, y: 0 });

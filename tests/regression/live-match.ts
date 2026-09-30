@@ -1,5 +1,46 @@
 import { Fixture, Formation, advanceWeekState, assert, createSeededRandom, finishLiveMatchState, initGameData, makeLiveSubstitutionsState, processLiveMatchMinuteState, sanitizePersistedState, setLiveMatchFormationState, useGameStore } from './shared';
 
+export const checkEmergencyGoalkeeperCanContinueAndSubstitute = () => {
+  const snapshot = useGameStore.getState();
+  try {
+    useGameStore.getState().initializeGame('T1', 82);
+    const initial = useGameStore.getState();
+    const fixture = Object.values(initial.fixtures)[0];
+    let current: typeof initial = { ...initial, userTeamId: fixture.homeTeamId };
+    current = { ...current, ...processLiveMatchMinuteState(current, fixture.id, 1, { next: () => 0.99 }).patch };
+    const live = current.liveMatches[fixture.id];
+    const keeperId = live.currentHomePlayerIds!.find(id => current.players[id].position === 'GK')!;
+    const reserveKeeperId = live.homeBenchIds!.find(id => current.players[id].position === 'GK')!;
+    assert(reserveKeeperId, 'Keeper substitution regression needs a reserve goalkeeper');
+    const keeperSwap = makeLiveSubstitutionsState(current, fixture.id, [{ offPlayerId: keeperId, onPlayerId: reserveKeeperId }]);
+    assert(keeperSwap.result.success, `A natural goalkeeper swap must be legal: ${keeperSwap.result.message}`);
+    const swapped = { ...current, ...keeperSwap.patch };
+    assert(swapped.liveMatches[fixture.id].homeGoalkeeperId === reserveKeeperId, 'The incoming goalkeeper must be designated');
+    const swapContinued = { ...swapped, ...processLiveMatchMinuteState(swapped, fixture.id, 2, { next: () => 0.99 }).patch };
+    assert(!swapContinued.fixtures[fixture.id].isPlayed, 'The replacement keeper must remain legal on the next minute');
+    assert(swapped.liveMatches[fixture.id].homeMinuteMap![keeperId] === 1, 'The outgoing keeper minutes must stop at substitution');
+    const remainingIds = live.currentHomePlayerIds!.filter(id => id !== keeperId);
+    const emergencyId = remainingIds[0];
+    current = { ...current, liveMatches: { ...current.liveMatches, [fixture.id]: { ...live,
+      currentHomePlayerIds: remainingIds, homeGoalkeeperId: emergencyId,
+      sentOffPlayerIds: [keeperId], sentOffMinutes: { [keeperId]: 1 },
+      homeMinuteMap: { ...live.homeMinuteMap, [keeperId]: 1 } } } };
+    const keeperRestored = makeLiveSubstitutionsState(current, fixture.id, [{ offPlayerId: remainingIds[1], onPlayerId: reserveKeeperId }]);
+    assert(keeperRestored.result.success, 'A natural goalkeeper must be able to replace an outfielder in an emergency keeper XI');
+    const restored = { ...current, ...keeperRestored.patch };
+    assert(restored.liveMatches[fixture.id].homeGoalkeeperId === reserveKeeperId, 'An incoming natural keeper must replace the emergency designation');
+    const restoredContinued = { ...restored, ...processLiveMatchMinuteState(restored, fixture.id, 2, { next: () => 0.99 }).patch };
+    assert(!restoredContinued.fixtures[fixture.id].isPlayed, 'A restored natural goalkeeper XI must continue');
+    current = { ...current, liveMatches: { ...current.liveMatches, [fixture.id]: { ...current.liveMatches[fixture.id],
+      homeBenchIds: (live.homeBenchIds || []).filter(id => current.players[id].position !== 'GK') } } };
+    current = { ...current, ...processLiveMatchMinuteState(current, fixture.id, 2, { next: () => 0.99 }).patch };
+    assert(!current.fixtures[fixture.id].isPlayed, 'A designated emergency keeper must remain legal on the next minute');
+    const replacementId = (current.liveMatches[fixture.id].homeBenchIds || []).find(id => current.players[id].position !== 'GK')!;
+    const result = makeLiveSubstitutionsState(current, fixture.id, [{ offPlayerId: remainingIds[1], onPlayerId: replacementId }]);
+    assert(result.result.success, 'An emergency keeper XI must allow legal outfield substitutions');
+  } finally { useGameStore.setState(snapshot); }
+};
+
 const getUserLiveFixture = (state: any) => {
   const fixture = Object.values(state.fixtures)
     .find((item: any) => item.week === state.currentWeek && (item.homeTeamId === state.userTeamId || item.awayTeamId === state.userTeamId));

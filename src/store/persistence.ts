@@ -24,6 +24,11 @@ import { LiveMatchState, pruneInvalidLiveMatches } from './liveMatchHelpers';
 import { createFreeAgentTeam, FREE_AGENT_TEAM_ID } from '../core/freeAgentPool';
 import { sanitizePlayerRolesForTeam } from '../core/playerRoleEngine';
 import { normalizePlayerTraits } from '../core/traitEngine';
+import englishLeaguePlayers from '../data/english_league_players.json';
+import { buildVoidFixture } from '../core/fixtureLifecycle';
+
+const SOURCE_GOALKEEPERS = englishLeaguePlayers.filter(player => player.position === 'GK');
+const GOALKEEPER_STAT_KEYS = ['gk_diving', 'gk_handling', 'gk_kicking', 'gk_reflexes', 'gk_speed', 'gk_positioning'] as const;
 
 export type PersistedStoreState = Partial<GameState & {
   liveMatches: Record<string, LiveMatchState>;
@@ -170,7 +175,8 @@ export const safeStorage = {
     let raw: string | null;
     try {
       raw = await AsyncStorage.getItem(key);
-    } catch {
+    } catch (readError) {
+      setPersistLoadError(key, `Your saved game could not be read. Please reload to try again. ${(readError as Error).message}`);
       return null;
     }
     if (raw === null) return null;
@@ -283,6 +289,9 @@ const reconcileBoardObjectives = (
       met: typeof persistedObjective.met === 'boolean'
         ? persistedObjective.met
         : objective.met,
+      failed: typeof persistedObjective.failed === 'boolean'
+        ? persistedObjective.failed
+        : objective.failed,
     };
   });
 };
@@ -360,6 +369,17 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
     ? Object.fromEntries(
       Object.entries(state.players).map(([playerId, player]) => {
         const typedPlayer = (player && typeof player === 'object' ? player : {}) as Partial<Player>;
+        const sourceGoalkeeper = typedPlayer.position === 'GK'
+          ? SOURCE_GOALKEEPERS.find(source => typedPlayer.longName
+            ? source.longName === typedPlayer.longName
+            : source.name === typedPlayer.name)
+          : undefined;
+        const stats = typedPlayer.stats ? { ...typedPlayer.stats } : undefined;
+        if (stats && sourceGoalkeeper) {
+          GOALKEEPER_STAT_KEYS.forEach(key => {
+            if (!Number.isFinite(stats[key]) || (stats[key] ?? 0) <= 1) stats[key] = sourceGoalkeeper.stats[key];
+          });
+        }
         const validStringId = typeof typedPlayer.id === 'string' && typedPlayer.id.trim() === playerId
           ? typedPlayer.id
           : '';
@@ -371,7 +391,7 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
         const trainingStatGains = typedPlayer.trainingStatGains && typeof typedPlayer.trainingStatGains === 'object'
           ? Object.fromEntries(
               Object.entries(typedPlayer.trainingStatGains)
-                .filter(([key, value]) => VALID_TRAINING_FOCUS.has(key) && typeof value === 'number' && Number.isFinite(value))
+                .filter(([key, value]) => (VALID_TRAINING_FOCUS.has(key) || GOALKEEPER_STAT_KEYS.some(stat => stat === key)) && typeof value === 'number' && Number.isFinite(value))
                 .map(([key, value]) => [key, clampInt(value, 0, 99, 0)])
             )
           : undefined;
@@ -380,6 +400,7 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
           playerId,
           {
             ...typedPlayer,
+            stats,
             id: validStringId || playerId,
             overallRating: clampInt(typedPlayer.overallRating, 1, 99, 50),
             age: clampInt(typedPlayer.age, 16, 50, 25),
@@ -394,8 +415,8 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
             trainingStatProgress: clampInt(typedPlayer.trainingStatProgress, 0, 2, 0),
             trainingStatGains,
             ...(playerTraits.length > 0 ? { playerTraits } : { playerTraits: undefined }),
-            morale: clampInt(typedPlayer.morale, 0, 100, 50),
-            energy: clampInt(typedPlayer.energy, 0, 100, 100),
+            morale: clampNumber(typedPlayer.morale, 0, 100, 50),
+            energy: clampNumber(typedPlayer.energy, 0, 100, 100),
             injuryWeeks: clampInt(typedPlayer.injuryWeeks, 0, 52, 0),
             injuryType: clampInt(typedPlayer.injuryWeeks, 0, 52, 0) > 0 ? typedPlayer.injuryType : undefined,
             injuryAppliedWeek: Number.isFinite(typedPlayer.injuryAppliedWeek) ? typedPlayer.injuryAppliedWeek : undefined,
@@ -496,7 +517,7 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
           currentBid: clampNumber(item.currentBid, 0, 500, 0),
           currentWage: clampNumber(item.currentWage, 0, 1000, 0),
           askingPrice: clampNumber(item.askingPrice, 0, 500, 0),
-          round: clampInt(item.round, 1, 4, 1),
+          round: clampInt(item.round, 0, 4, 0),
           createdWeek: clampInt(item.createdWeek, 1, 200, currentWeek),
           expiresWeek: clampInt(item.expiresWeek, 1, 200, currentWeek + 1),
         }))
@@ -547,6 +568,9 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
     : {};
 
   // --- Referential integrity validation: fixtures → teams ---
+  Object.values(rawFixtures).forEach(fixture => {
+    if (fixture.resolution === 'void') rawFixtures[fixture.id] = buildVoidFixture(fixture);
+  });
   // Drop fixtures whose home or away team no longer exists before deriving
   // competition membership.
   const teamValidFixtures = Object.fromEntries(

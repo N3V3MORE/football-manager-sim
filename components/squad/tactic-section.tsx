@@ -29,6 +29,8 @@ export function TacticSection({
               key={option}
               style={[styles.tacticsOptBtn, isActive && styles.tacticsOptBtnActive]}
               onPress={() => onSelect(option)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive }}
             >
               <Text style={[styles.tacticsOptText, isActive && styles.tacticsOptTextActive]}>{option}</Text>
             </TouchableOpacity>

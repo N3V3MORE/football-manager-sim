@@ -1,5 +1,7 @@
 export type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
 export type StatKey = 'pace' | 'shooting' | 'passing' | 'dribbling' | 'defending' | 'physical';
+export type GoalkeeperStatKey = 'gk_diving' | 'gk_handling' | 'gk_kicking' | 'gk_reflexes' | 'gk_speed' | 'gk_positioning';
+export type TrainingStatKey = StatKey | GoalkeeperStatKey;
 export type PlayerRole =
   | 'default'
   | 'targetMan'
@@ -92,7 +94,7 @@ export interface Player {
   trainingFocus?: StatKey | null;
   trainingXp?: number;
   trainingStatProgress?: number;
-  trainingStatGains?: Partial<Record<StatKey, number>>;
+  trainingStatGains?: Partial<Record<TrainingStatKey, number>>;
   matchRatingHistory: number[]; // array of hidden ratings for each match
   minutesPlayed: number;        // total season minutes played
   goals: number;

@@ -6,6 +6,7 @@ import { isPlayerUnavailable } from '../core/playerStatusUtils';
 import { hashStringToSeed } from '../core/random';
 import { useGameStore } from '../store/gameStore';
 import { initGameData } from '../utils/initGame';
+import { getInboxSeason } from '../store/inboxCore';
 import {
   AIPlayConfig,
   AIPlayReport,
@@ -352,10 +353,10 @@ export const validateAgentGameState = (): AgentValidationReport => {
     if (fixture.week < current.currentWeek && !fixture.isPlayed) {
       addIssue('error', 'Fixture from a past week is still unplayed', fixture.id);
     }
-    if (fixture.isPlayed) {
+    if (fixture.isPlayed && fixture.resolution !== 'void') {
       if (typeof fixture.homeScore !== 'number') addIssue('error', 'Played fixture is missing home score', fixture.id);
       if (typeof fixture.awayScore !== 'number') addIssue('error', 'Played fixture is missing away score', fixture.id);
-      if (fixture.isKnockout && fixture.resolution !== 'void' && !fixture.winnerTeamId) addIssue('error', 'Played knockout fixture is missing winner', fixture.id);
+      if (fixture.isKnockout && !fixture.winnerTeamId) addIssue('error', 'Played knockout fixture is missing winner', fixture.id);
     }
   });
 
@@ -559,7 +560,7 @@ const playSeason = (payload: AgentPayload) => {
   }
 
   const startedAt = buildAgentGameSummary();
-  const startingManagedSeasons = state().careerRecord.seasonsManaged;
+  const startingSeason = getInboxSeason(state().competitions);
   const weeklyReports: {
     week: number;
     playedFixtures: number;
@@ -596,10 +597,7 @@ const playSeason = (payload: AgentPayload) => {
       if (!continueOnError) break;
     }
 
-    if (
-      state().currentWeek === 1 ||
-      state().careerRecord.seasonsManaged > startingManagedSeasons
-    ) {
+    if (getInboxSeason(state().competitions) > startingSeason) {
       completedSeason = true;
       break;
     }
@@ -803,19 +801,22 @@ const playWithAI = (payload: AgentPayload): AIPlayReport => {
   const bugs: BugReport[] = [];
   const balanceFlags: BalanceFlag[] = [];
   const initialSeasonHistoryLength = state().careerRecord.seasonHistory.length;
-  const startingSeasonsManaged = state().careerRecord.seasonsManaged;
+  const startingSeason = getInboxSeason(state().competitions);
   const maxWeeks = config.seasons * 120;
   let seasonStartRatings = buildSeasonStartRatings();
-  let lastSeasonMarker = state().careerRecord.seasonsManaged;
+  let lastSeasonMarker = startingSeason;
+  let attempts = 0;
+  let consecutiveErrors = 0;
   let weeksPlayed = 0;
   let transfersMade = 0;
   let playedMatches = 0;
   let totalGoals = 0;
 
   while (
-    weeksPlayed < maxWeeks &&
-    state().careerRecord.seasonsManaged - startingSeasonsManaged < config.seasons
+    attempts < maxWeeks &&
+    getInboxSeason(state().competitions) - startingSeason < config.seasons
   ) {
+    attempts += 1;
     const beforePlayers = state().players;
     const playedFixtureIdsBefore = new Set(
       Object.values(state().fixtures).filter(fixture => fixture.isPlayed).map(fixture => fixture.id)
@@ -827,9 +828,11 @@ const playWithAI = (payload: AgentPayload): AIPlayReport => {
       state().advanceWeek();
       weeksPlayed += 1;
       runAiPostWeekPolicy(getAiPolicyGameState(), config);
+      consecutiveErrors = 0;
     } catch (error) {
+      consecutiveErrors += 1;
       bugs.push(buildBugReport('exception', errorMessage(error), error));
-      if (config.stopOnError) break;
+      if (config.stopOnError || consecutiveErrors >= 3) break;
     }
 
     transfersMade += getPlayerTeamChanges(beforePlayers, state().players);
@@ -840,7 +843,7 @@ const playWithAI = (payload: AgentPayload): AIPlayReport => {
       if (config.stopOnError) break;
     }
 
-    const seasonAdvanced = state().careerRecord.seasonsManaged > lastSeasonMarker;
+    const seasonAdvanced = getInboxSeason(state().competitions) > lastSeasonMarker;
     const newlyPlayedFixtures = Object.values(state().fixtures).filter(fixture => (
       fixture.isPlayed && !playedFixtureIdsBefore.has(fixture.id)
     ));
@@ -859,8 +862,12 @@ const playWithAI = (payload: AgentPayload): AIPlayReport => {
 
     if (seasonAdvanced) {
       seasonStartRatings = buildSeasonStartRatings();
-      lastSeasonMarker = state().careerRecord.seasonsManaged;
+      lastSeasonMarker = getInboxSeason(state().competitions);
     }
+  }
+
+  if (getInboxSeason(state().competitions) - startingSeason < config.seasons && bugs.length === 0) {
+    bugs.push(buildBugReport('validation', 'Autoplay reached its attempt limit before completing the requested seasons.'));
   }
 
   return {

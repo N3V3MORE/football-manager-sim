@@ -1,4 +1,39 @@
 import { BASE_FORMATION_SLOTS, InboxMessage, Team, applyInboxActionState, applyTacticalAdaptation, assert, computeWeeklyProgression, computeWeeklyTransfers, createSeededRandom, getSeasonWeekLimit, getSlotsForFormation, initGameData, isPlayerUnavailable, markAsSubState, quickSimMatch, readSource, rebuildFormationMap, rebuildFormationSlotPlayers, toggleStartingState } from './shared';
+import englishLeaguePlayers from '../../src/data/english_league_players.json';
+import { buildLineupSuggestionPayload } from '../../src/store/inboxCore';
+import { buildTestPlayer, buildTestTeam } from './shared';
+import { buildQuickSimLineup } from '../../src/core/lineupEngine';
+
+export const checkAssistantRotationPreservesFullLineup = () => {
+  const data = initGameData();
+  const template = Object.values(data.players)[0];
+  const players: Record<string, typeof template> = {};
+  const formationMap: Record<string, string> = {};
+  let midfielders = 0;
+  getSlotsForFormation('4-3-3').forEach((row, rowIndex) => row.forEach((slot, colIndex) => {
+    const id = `rotation-${rowIndex}-${colIndex}`;
+    const tired = slot.pos === 'MID' && midfielders++ === 0;
+    players[id] = buildTestPlayer(template, id, 'rotation', slot.pos, tired ? 80 : 90, {
+      subPosition: slot.label, altPositions: [slot.label], isStarting: true, energy: tired ? 30 : 95,
+    });
+    formationMap[`${rowIndex}-${colIndex}`] = id;
+  }));
+  players.reserve = buildTestPlayer(template, 'reserve', 'rotation', 'MID', 82, { energy: 95 });
+  const team = buildTestTeam(data.teams.T1, 'rotation', 'Rotation', { activeFormation: '4-3-3', formationMap });
+  const suggestion = buildLineupSuggestionPayload(team, players);
+  const ids = suggestion?.payload.startingIds || [];
+  assert(ids.length === 11 && new Set(ids).size === 11, 'Assistant rotation must preserve eleven unique players');
+  assert(ids.includes('reserve'), 'Assistant should rotate in the reserve rather than steal another starting slot');
+};
+
+export const checkSeededGoalkeeperAttributes = () => {
+  const keepers = englishLeaguePlayers.filter(player => player.position === 'GK');
+  const keys = ['gk_diving', 'gk_handling', 'gk_kicking', 'gk_reflexes', 'gk_speed', 'gk_positioning'] as const;
+  keepers.forEach(player => keys.forEach(key => {
+    assert(player.stats[key] > 0 && player.stats[key] <= 99, `${player.name} should have recorded ${key}`);
+  }));
+  assert(keepers.find(player => player.name === 'Alisson')?.stats.gk_reflexes === 89, 'Alisson should retain CSV reflexes');
+};
 
 export const checkFormationSlotLookupUsesExactFormation = () => {
   const threeFiveTwoSlots = getSlotsForFormation('3-5-2');
@@ -388,4 +423,18 @@ export const checkTacticalAdaptationIgnoresUnavailablePlayers = () => {
     !teams[team!.id].activeFormation.startsWith('5'),
     'AI formation adaptation should not choose a back five using injured defensive depth'
   );
+};
+export const checkQuickLineupKeepsBackupKeeperOutfieldFree = () => {
+  const data = initGameData();
+  const template = Object.values(data.players)[0];
+  const players = Object.fromEntries(Array.from({ length: 8 }, (_, index) => {
+    const id = `crisis-${index}`;
+    return [id, { ...template, id, teamId: 'crisis', position: index < 2 ? 'GK' as const : 'MID' as const,
+      subPosition: index < 2 ? 'GK' : 'CM', altPositions: [], overallRating: 70,
+      injuryWeeks: 0, matchesSuspended: 0, isStarting: false, isSub: false }];
+  }));
+  const updates = buildQuickSimLineup('crisis', players, '4-3-3');
+  const selected = Object.values(players).filter(player => updates[player.id].isStarting);
+  assert(selected.length === 7, 'Injury crisis should still select the seven legal players');
+  assert(selected.filter(player => player.position === 'GK').length === 1, 'Backup keeper must remain on bench');
 };

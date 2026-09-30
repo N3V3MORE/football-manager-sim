@@ -84,11 +84,11 @@ export const playMatchState = (
   });
 };
 
-export const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TState): TState => {
+export const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(state: TState, recoveryPass = 0): TState => {
+  if (recoveryPass > 32) throw new Error('Competition progression exceeded the recovery limit.');
   const weekFixtures = Object.values(state.fixtures).filter(
     fixture => fixture.week <= state.currentWeek && !fixture.isPlayed
   ).sort(compareFixturesChronologically);
-  if (weekFixtures.length === 0) return state;
 
   let updatedPlayers = state.players;
   let updatedTeams = state.teams;
@@ -147,7 +147,7 @@ export const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(sta
   const unresolvedDueFixtures = Object.values(updatedFixtures).filter(
     fixture => fixture.week <= state.currentWeek && !fixture.isPlayed && !updatedLiveMatches[fixture.id]
   );
-  if (unresolvedDueFixtures.length > 0) {
+  if (unresolvedDueFixtures.some(fixture => weekFixtures.some(previous => previous.id === fixture.id))) {
     throw new Error(`Cannot advance week with unresolved due fixtures: ${unresolvedDueFixtures.map(fixture => fixture.id).join(', ')}.`);
   }
 
@@ -162,7 +162,7 @@ export const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(sta
     );
   }
 
-  return {
+  const nextState = {
     ...state,
     players: updatedPlayers,
     teams: updatedTeams,
@@ -174,4 +174,5 @@ export const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(sta
     liveMatches: updatedLiveMatches,
     inboxMessages,
   };
+  return unresolvedDueFixtures.length > 0 ? playCurrentWeekFixtures(nextState, recoveryPass + 1) : nextState;
 };

@@ -3,7 +3,49 @@ import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../src/constants/for
 import { isPlayerSlotFit, rebuildFormationMap } from '../src/core/formationMapUtils';
 import { Formation, Team } from '../src/models/types';
 import { useGameStore } from '../src/store/gameStore';
-import { sanitizePersistedState } from '../src/store/persistence';
+import { clearPersistLoadError, getPersistLoadError, PERSIST_STORAGE_KEY, safeStorage, sanitizePersistedState } from '../src/store/persistence';
+
+const checkCurrentVersionHydration = async () => {
+  await useGameStore.persist.rehydrate();
+  useGameStore.getState().initializeGame('T1', 9029);
+  const state = useGameStore.getState();
+  const player = Object.values(state.players)[0];
+  const target = Object.values(state.players).find(item => item.teamId !== state.userTeamId)!;
+  const objective = state.boardObjectives[0];
+  const keeper = Object.values(state.players).find(item => item.name === 'Alisson')!;
+  const saved = {
+    ...state,
+    players: { ...state.players, [player.id]: { ...player, energy: 73.25 },
+      [keeper.id]: { ...keeper, stats: { ...keeper.stats, gk_reflexes: 0, gk_handling: 1 } },
+      orphan: { ...player, id: 'orphan', teamId: 'missing' } },
+    boardObjectives: state.boardObjectives.map(item => ({ ...item, failed: item.id === objective.id })),
+    pendingNegotiations: [{ id: 'round-zero', playerId: target.id, buyerTeamId: state.userTeamId,
+      sellerTeamId: target.teamId, currentBid: 0, currentWage: target.wage, askingPrice: 10,
+      round: 0, status: 'pending', createdWeek: 1, expiresWeek: 3, source: 'unlisted_approach' }],
+  };
+  await AsyncStorage.setItem(PERSIST_STORAGE_KEY, JSON.stringify({ state: saved, version: 9 }));
+  await useGameStore.persist.rehydrate();
+  const restored = useGameStore.getState();
+  assert(restored.teams[restored.players.orphan.teamId], 'Current-version hydration should repair broken team references');
+  assert(restored.players[player.id].energy === 73.25, 'Hydration must preserve fractional live-match energy');
+  assert(restored.boardObjectives.find(item => item.id === objective.id)?.failed, 'Hydration must preserve failed board objectives');
+  assert(restored.pendingNegotiations?.[0].round === 0, 'Hydration must preserve initial negotiation round');
+  assert(restored.players[keeper.id].stats.gk_reflexes === keeper.stats.gk_reflexes, 'Hydration should restore missing recorded keeper attributes');
+  assert(restored.players[keeper.id].stats.gk_handling === keeper.stats.gk_handling, 'Hydration should repair legacy keeper attributes clamped to one');
+};
+
+const checkStorageReadFailure = async () => {
+  const originalGetItem = AsyncStorage.getItem;
+  clearPersistLoadError();
+  try {
+    AsyncStorage.getItem = async () => { throw new Error('Temporary read failure'); };
+    assert(await safeStorage.getItem(PERSIST_STORAGE_KEY) === null, 'Read failure should return no data');
+    assert(getPersistLoadError()?.key === PERSIST_STORAGE_KEY, 'Read failure must block automatic fresh initialization');
+  } finally {
+    AsyncStorage.getItem = originalGetItem;
+    clearPersistLoadError();
+  }
+};
 
 const FORMATIONS: Formation[] = [
   '4-3-3',
@@ -263,6 +305,9 @@ const runSaveIntegrityCheck = async () => {
   });
   await checkMockStorageRoundTrip();
   console.log('[OK] Mock storage round trip passed');
+  await checkStorageReadFailure();
+  await checkCurrentVersionHydration();
+  console.log('[OK] Read failure protection and current-version hydration passed');
   console.log('--- SAVE INTEGRITY CHECK COMPLETE ---');
 };
 

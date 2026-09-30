@@ -10,6 +10,7 @@ type SegmentedControlProps<T extends string> = {
   onChange: (value: T) => void;
   /** Optional accessibility label for the group. */
   label?: string;
+  wrapLabels?: boolean;
 };
 
 /**
@@ -17,7 +18,7 @@ type SegmentedControlProps<T extends string> = {
  * (squad, tactics, match) with one component. Active segment uses the accent
  * surface; inactive segments are transparent with muted labels.
  */
-export function SegmentedControl<T extends string>({ segments, value, onChange, label }: SegmentedControlProps<T>) {
+export function SegmentedControl<T extends string>({ segments, value, onChange, label, wrapLabels = false }: SegmentedControlProps<T>) {
   return (
     <View style={styles.container} accessibilityRole="tablist" accessibilityLabel={label}>
       {segments.map(segment => {
@@ -32,7 +33,7 @@ export function SegmentedControl<T extends string>({ segments, value, onChange, 
             activeOpacity={0.85}
             style={[styles.option, active && styles.optionActive]}
           >
-            <Text style={[styles.optionText, active && styles.optionTextActive]} numberOfLines={1}>
+            <Text style={[styles.optionText, wrapLabels && styles.wrappedOptionText, active && styles.optionTextActive]} numberOfLines={wrapLabels ? 3 : 1}>
               {segment.label}
             </Text>
           </TouchableOpacity>
@@ -70,4 +71,5 @@ const styles = StyleSheet.create({
   optionTextActive: {
     color: color.accent.onPrimary,
   },
+  wrappedOptionText: { fontSize: 12, textAlign: 'center' },
 });

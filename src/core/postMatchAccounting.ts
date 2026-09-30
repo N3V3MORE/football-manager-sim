@@ -147,7 +147,7 @@ export const applySharedPostMatchAccounting = ({
       moraleDelta = minutes >= 30 ? -3 : -1;
     }
     // Capped to min 0, max 100.
-    const newMorale = Math.max(0, Math.min(100, (updatedPlayers[player.id].morale || 50) + moraleDelta));
+    const newMorale = Math.max(0, Math.min(100, (updatedPlayers[player.id].morale ?? 50) + moraleDelta));
 
     updatedPlayers[player.id] = {
       ...updatedPlayers[player.id],

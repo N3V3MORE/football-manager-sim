@@ -9,7 +9,7 @@ import {
   getSackingImminentWeek,
 } from '../core/careerEngine';
 import { generateAssistantWeekMessages } from './inboxAssistant';
-import { generateCareerInboxMessages } from './inboxCareerBoard';
+import { generateCareerInboxMessages, refreshUnemployedJobOffers } from './inboxCareerBoard';
 import { generateSystemInboxMessages, getInboxSeason, mergeInboxMessages, pruneInboxMessagesForManagedTeam } from './inboxCore';
 import type { WeeklyLifecycleState } from './fixtureResolution';
 
@@ -42,10 +42,12 @@ export const rolloverSeasonIfNeeded = <TState extends WeeklyLifecycleState>(
       boardObjectives: nextSeason.boardObjectives,
       news: nextSeason.news,
       liveMatches: {},
-      inboxMessages: mergeInboxMessages(pruneInboxMessagesForManagedTeam(state.inboxMessages, null), [
+      inboxMessages: refreshUnemployedJobOffers({ ...state, teams: nextSeason.teams,
+        competitions: nextSeason.competitions, currentWeek: nextSeason.currentWeek,
+        inboxMessages: mergeInboxMessages(pruneInboxMessagesForManagedTeam(state.inboxMessages, null), [
         ...weekMessages,
         ...generateSystemInboxMessages(nextSeason.currentWeek, nextSeason.generatedNews, nextInboxSeason),
-      ]),
+      ]) }),
     };
   }
 

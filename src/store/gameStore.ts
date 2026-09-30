@@ -379,6 +379,9 @@ export const useGameStore = create<GameStore>()(
       name: PERSIST_STORAGE_KEY,
       storage: createJSONStorage(() => safeStorage),
       version: 9,
+      merge: (persistedState, currentState) => persistedState
+        ? { ...currentState, ...sanitizePersistedState(persistedState as Partial<GameStore>) }
+        : currentState,
       migrate: (persistedState, version) => {
         const rawState = (persistedState || {}) as Partial<GameStore>;
         const sanitized = sanitizePersistedState(rawState);

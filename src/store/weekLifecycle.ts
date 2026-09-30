@@ -16,6 +16,7 @@ import {
 import { resolveWeeklyNegotiationsState } from './transferActions';
 import { rolloverSeasonIfNeeded } from './seasonRollover';
 import { ensureReferentialIntegrity } from './persistence';
+import { refreshUnemployedJobOffers } from './inboxCareerBoard';
 
 export type { WeeklyLifecycleState };
 
@@ -125,7 +126,8 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
 
   return {
     ...nextState,
-    inboxMessages: mergeInboxMessages(nextState.inboxMessages, [...weekMessages, ...nextAssistantMessages]),
+    inboxMessages: refreshUnemployedJobOffers({ ...nextState,
+      inboxMessages: mergeInboxMessages(nextState.inboxMessages, [...weekMessages, ...nextAssistantMessages]) }),
   };
 };
 

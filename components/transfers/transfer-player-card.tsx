@@ -40,6 +40,8 @@ export function TransferPlayerCard({
         <TouchableOpacity
           style={[styles.actionBtn, actionVariant === 'danger' && styles.actionBtnDanger]}
           onPress={onAction}
+          accessibilityRole="button"
+          accessibilityLabel={`${actionLabel} ${player.name}`}
         >
           <Text style={[styles.actionText, actionVariant === 'danger' && styles.actionTextDanger]}>
             {actionLabel}
@@ -49,6 +51,8 @@ export function TransferPlayerCard({
           <TouchableOpacity
             style={[styles.actionBtn, styles.secondaryActionBtn, secondaryActionVariant === 'danger' && styles.actionBtnDanger]}
             onPress={onSecondaryAction}
+            accessibilityRole="button"
+            accessibilityLabel={`${secondaryActionLabel} ${player.name}`}
           >
             <Text style={[styles.actionText, styles.secondaryActionText, secondaryActionVariant === 'danger' && styles.actionTextDanger]}>
               {secondaryActionLabel}

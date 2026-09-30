@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, ScrollView, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { StyleSheet, Text, FlatList, View } from 'react-native';
 import { useGameStore } from '@/src/store/gameStore';
 import { getTransferWindowLabel, isTransferWindowOpen } from '@/src/utils/calendar';
 import { Player, TransferNegotiation } from '@/src/models/types';
@@ -12,6 +12,7 @@ import { TransferTabs } from '@/components/transfers/transfer-tabs';
 import { Screen, Card, Badge, EmptyState } from '@/components/ui';
 import { color, space, type } from '@/src/design/tokens';
 import { useConfirmStore } from '@/src/store/confirmStore';
+import { getInboxSeason } from '@/src/store/inboxCore';
 
 type TransferTab = 'market' | 'allPlayers' | 'freeAgents' | 'squad';
 
@@ -20,6 +21,7 @@ export default function TransfersScreen() {
   const userTeamId = useGameStore(s => s.userTeamId);
   const teams = useGameStore(s => s.teams);
   const players = useGameStore(s => s.players);
+  const competitions = useGameStore(s => s.competitions);
   const pendingNegotiations = useGameStore(s => s.pendingNegotiations || []);
   const approachPlayer = useGameStore(s => s.approachPlayer);
   const buyPlayer = useGameStore(s => s.buyPlayer);
@@ -29,24 +31,24 @@ export default function TransfersScreen() {
   const listPlayerForSale = useGameStore(s => s.listPlayerForSale);
   const unlistPlayer = useGameStore(s => s.unlistPlayer);
 
-  const windowLabel = getTransferWindowLabel(currentWeek);
+  const windowLabel = getTransferWindowLabel(currentWeek, getInboxSeason(competitions));
   const windowOpen = isTransferWindowOpen(currentWeek);
 
   const [tab, setTab] = useState<TransferTab>('market');
   const [dialog, setDialog] = useState<TransferDialogState>(null);
   const showAlert = useConfirmStore(s => s.showAlert);
 
-  if (!userTeamId) return <Screen scroll={false} />;
-  const userTeam = teams[userTeamId];
-
-  const marketPlayers = sortPlayersByPositionGroup(Object.values(players).filter(p => p.isTransferListed && p.teamId !== userTeamId));
-  const allPlayers = sortPlayersByPositionGroup(Object.values(players).filter(p => (
+  const marketPlayers = useMemo(() => sortPlayersByPositionGroup(Object.values(players).filter(p => p.isTransferListed && p.teamId !== userTeamId)), [players, userTeamId]);
+  const allPlayers = useMemo(() => sortPlayersByPositionGroup(Object.values(players).filter(p => (
     p.teamId !== userTeamId &&
     p.teamId !== FREE_AGENT_TEAM_ID &&
     !p.isTransferListed
-  )));
-  const freeAgentPlayers = sortPlayersByPositionGroup(Object.values(players).filter(p => p.teamId === FREE_AGENT_TEAM_ID));
-  const mySquad = sortPlayersByPositionGroup(Object.values(players).filter(p => p.teamId === userTeamId));
+  ))), [players, userTeamId]);
+  const freeAgentPlayers = useMemo(() => sortPlayersByPositionGroup(Object.values(players).filter(p => p.teamId === FREE_AGENT_TEAM_ID)), [players]);
+  const mySquad = useMemo(() => sortPlayersByPositionGroup(Object.values(players).filter(p => p.teamId === userTeamId)), [players, userTeamId]);
+  if (!userTeamId || !teams[userTeamId]) return <Screen scroll={false} />;
+  const userTeam = teams[userTeamId];
+  const visiblePlayers = tab === 'market' ? marketPlayers : tab === 'allPlayers' ? allPlayers : tab === 'freeAgents' ? freeAgentPlayers : mySquad;
   const activeNegotiations = pendingNegotiations.filter(item => (
     item.buyerTeamId === userTeamId &&
     (item.status === 'pending' || item.status === 'countered')
@@ -200,8 +202,15 @@ export default function TransfersScreen() {
         onChange={setTab}
       />
 
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {activeNegotiations.length > 0 && (
+      <FlatList
+        key={tab}
+        data={visiblePlayers}
+        keyExtractor={player => player.id}
+        contentContainerStyle={styles.scroll}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={5}
+        ListHeaderComponent={activeNegotiations.length > 0 ? (
           <View style={styles.negotiationsSection}>
             <Text style={styles.sectionTitle}>Pending Talks</Text>
             {activeNegotiations.map(negotiation => {
@@ -225,69 +234,26 @@ export default function TransfersScreen() {
               );
             })}
           </View>
+        ) : null}
+        ListEmptyComponent={<EmptyState
+          title={tab === 'market' ? 'No players listed' : tab === 'allPlayers' ? 'No approach targets' : tab === 'freeAgents' ? 'No free agents' : 'No squad players'}
+          message={tab === 'market' ? 'The market is quiet right now.' : tab === 'allPlayers' ? 'No external club players are available to approach.' : tab === 'freeAgents' ? 'The free-agent pool is empty right now.' : 'Your squad is empty.'}
+        />}
+        renderItem={({ item: player }) => (
+          <TransferPlayerCard
+            player={player}
+            subLabel={tab === 'freeAgents' ? `Free agent | Wage: GBP ${player.wage}k/w | ${formatContractLength(player)}`
+              : tab === 'squad' ? `Value: GBP ${player.marketValue}m | ${getPlayerAvailabilityStatus(player)} | ${formatContractLength(player)}${isContractExpiringSoon(player) ? ' | Expiring' : ''}`
+                : tab === 'allPlayers' ? `${teams[player.teamId]?.name || ''} | Value: GBP ${player.marketValue.toFixed(1)}m | ${formatContractLength(player)}`
+                  : `${teams[player.teamId]?.name || ''} | ${getPlayerAvailabilityStatus(player)} | ${formatContractLength(player)}`}
+            actionLabel={tab === 'market' ? `GBP ${player.askingPrice.toFixed(1)}m` : tab === 'allPlayers' ? 'Approach'
+              : tab === 'freeAgents' ? 'Offer' : player.isTransferListed ? `Unlist (GBP ${player.askingPrice}m)` : 'List'}
+            actionVariant={tab === 'squad' && player.isTransferListed ? 'danger' : 'primary'}
+            onAction={() => tab === 'market' ? handleBuy(player) : tab === 'allPlayers' ? handleApproach(player)
+              : tab === 'freeAgents' ? handleSignFreeAgent(player) : handleSellToggle(player)}
+          />
         )}
-
-        {tab === 'market' && (
-          marketPlayers.length === 0 ? (
-            <EmptyState title="No players listed" message="The market is quiet right now." />
-          ) : (
-            marketPlayers.map(p => (
-              <TransferPlayerCard
-                key={p.id}
-                player={p}
-                subLabel={`${teams[p.teamId]?.name || ''} | ${getPlayerAvailabilityStatus(p)} | ${formatContractLength(p)}`}
-                actionLabel={`GBP ${p.askingPrice.toFixed(1)}m`}
-                onAction={() => handleBuy(p)}
-              />
-            ))
-          )
-        )}
-
-        {tab === 'allPlayers' && (
-          allPlayers.length === 0 ? (
-            <EmptyState title="No approach targets" message="No external club players are available to approach." />
-          ) : (
-            allPlayers.map(p => (
-              <TransferPlayerCard
-                key={p.id}
-                player={p}
-                subLabel={`${teams[p.teamId]?.name || ''} | Value: GBP ${p.marketValue.toFixed(1)}m | ${formatContractLength(p)}`}
-                actionLabel="Approach"
-                onAction={() => handleApproach(p)}
-              />
-            ))
-          )
-        )}
-
-        {tab === 'freeAgents' && (
-          freeAgentPlayers.length === 0 ? (
-            <EmptyState title="No free agents" message="The free-agent pool is empty right now." />
-          ) : (
-            freeAgentPlayers.map(p => (
-              <TransferPlayerCard
-                key={p.id}
-                player={p}
-                subLabel={`Free agent | Wage: GBP ${p.wage}k/w | ${formatContractLength(p)}`}
-                actionLabel="Offer"
-                onAction={() => handleSignFreeAgent(p)}
-              />
-            ))
-          )
-        )}
-
-        {tab === 'squad' && (
-          mySquad.map(p => (
-            <TransferPlayerCard
-              key={p.id}
-              player={p}
-              subLabel={`Value: GBP ${p.marketValue}m | ${getPlayerAvailabilityStatus(p)} | ${formatContractLength(p)}${isContractExpiringSoon(p) ? ' | Expiring' : ''}`}
-              actionLabel={p.isTransferListed ? `Unlist (GBP ${p.askingPrice}m)` : 'List'}
-              actionVariant={p.isTransferListed ? 'danger' : 'primary'}
-              onAction={() => handleSellToggle(p)}
-            />
-          ))
-        )}
-      </ScrollView>
+      />
 
       <TransferDialog
         dialog={dialog}

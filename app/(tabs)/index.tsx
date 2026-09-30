@@ -20,6 +20,7 @@ import { UpcomingFixturesCard, UpcomingFixtureCardRow } from '@/components/hub/u
 import { Screen } from '@/components/ui';
 import { color } from '@/src/design/tokens';
 import { Ionicons } from '@expo/vector-icons';
+import { getInboxSeason } from '@/src/store/inboxCore';
 
 type UpcomingFixtureRow = {
   id: string;
@@ -38,7 +39,7 @@ type CompetitionPanelItem = {
   accent: string;
 };
 
-const weekToDate = (week: number): string => formatShortDate(week);
+const weekToDate = (week: number, season: number): string => formatShortDate(week, season);
 
 const getStatValue = (player: Player, stat: 'goals' | 'assists' | 'cleanSheets'): number => {
   if (stat === 'goals') return player.goals;
@@ -65,6 +66,7 @@ export default function HubScreen() {
   const players = useGameStore(state => state.players);
   const news = useGameStore(state => state.news);
   const careerRecord = useGameStore(state => state.careerRecord);
+  const seasonNumber = getInboxSeason(competitions);
 
   const myTeam = userTeamId ? teams[userTeamId] : null;
   const myDivision = myTeam?.division ?? 'Premier League';
@@ -143,18 +145,18 @@ export default function HubScreen() {
       return {
         id,
         week,
-        dateLabel: match ? formatFixtureShortDate(match) : weekToDate(week),
+        dateLabel: match ? formatFixtureShortDate(match, seasonNumber) : weekToDate(week, seasonNumber),
         isCurrentWeek: week === currentWeek,
         isHome: !!isHome,
         opponentName: opponent?.name || null,
         opponentPrimary: opponentTheme?.primary,
         opponentSecondary: opponentTheme?.secondary,
         score: match && match.isPlayed
-          ? (isHome ? `${match.homeScore}-${match.awayScore}` : `${match.awayScore}-${match.homeScore}`)
+          ? (match.resolution === 'void' ? 'VOID' : isHome ? `${match.homeScore}-${match.awayScore}` : `${match.awayScore}-${match.homeScore}`)
           : null,
       };
     })
-  ), [currentWeek, upcomingFixtures, teams, userTeamId]);
+  ), [currentWeek, upcomingFixtures, teams, userTeamId, seasonNumber]);
 
   const allPlayers = useMemo(() => {
     return Object.values(players).filter(player => {
@@ -189,6 +191,10 @@ export default function HubScreen() {
             You are not currently attached to a club. Check your inbox for job offers and season updates.
           </Text>
           <LatestNewsCard news={news} />
+          <TouchableOpacity style={styles.emptyInboxButton} onPress={advanceWeek}
+            accessibilityRole="button" accessibilityLabel="Advance week while between jobs">
+            <Text style={styles.emptyInboxText}>Advance Week · W{currentWeek}</Text>
+          </TouchableOpacity>
           {careerRecord.seasonsManaged > 0 ? (
             <CareerStatsCard careerRecord={careerRecord} onPress={() => router.push('/board')} />
           ) : null}
@@ -211,7 +217,7 @@ export default function HubScreen() {
 
   const myPosition = miniTableData.myPosition;
   const myRecord = `${myTeam.wins}W ${myTeam.draws}D ${myTeam.losses}L`;
-  const nextFixtureLabel = `${myNextMatch ? getCompetitionShortName(myNextMatch.competitionId) : 'Matchday'} | ${homeTheme?.stadium || 'TBD'} | ${myNextMatch ? formatFixtureShortDate(myNextMatch) : weekToDate(currentWeek)}`;
+  const nextFixtureLabel = `${myNextMatch ? getCompetitionShortName(myNextMatch.competitionId) : 'Matchday'} | ${homeTheme?.stadium || 'TBD'} | ${myNextMatch ? formatFixtureShortDate(myNextMatch, seasonNumber) : weekToDate(currentWeek, seasonNumber)}`;
   const competitionPanels = [
     getCompetitionPanelForTeam('carabao-cup', competitions, fixtures, teams, myTeam.id, currentWeek),
     getCompetitionPanelForTeam('fa-cup', competitions, fixtures, teams, myTeam.id, currentWeek),
@@ -228,7 +234,7 @@ export default function HubScreen() {
             position={myPosition}
             record={myRecord}
             currentWeek={currentWeek}
-            weekLabel={weekToDate(currentWeek)}
+            weekLabel={weekToDate(currentWeek, seasonNumber)}
           />
           <LatestNewsCard news={news} />
 

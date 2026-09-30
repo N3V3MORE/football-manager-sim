@@ -7,7 +7,7 @@ export const ENGINE_CONFIG = {
   WEEKLY_ENERGY_RECOVERY: 25, // Energy regained after a week (reduced from 50 to make rotation meaningful)
 
   // SCORING & CHANCES
-  BIG_MOMENT_CHANCE: 0.35, // Drastically reduced from 0.52
+  BIG_MOMENT_CHANCE: 0.48, // Calibrated against recorded goalkeeper attributes and the season scoring gate.
   GLOBAL_HOME_ADVANTAGE: 1.04, // Slightly tuned
   PHASE_ONE_FAIL_ESCAPE_CHANCE: 0.12, // Cut from 0.25 so midfield walls work better
   ATTACKING_THROUGH_BALL_BASE_CHANCE: 0.35,

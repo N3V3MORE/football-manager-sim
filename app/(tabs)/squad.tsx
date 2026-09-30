@@ -339,6 +339,7 @@ export default function SquadScreen() {
                                 onPress={() => handleSlotPress(rowIdx, colIdx)}
                                 onDragBegin={() => { setScrollEnabled(false); measureSlots(); }}
                                 onDragEnd={(mx: number, my: number) => handleDragEnd(rowIdx, colIdx, mx, my)}
+                                onDragCancel={() => setScrollEnabled(true)}
                                 setRef={(ref) => { slotRefs.current[slotKey] = ref; }}
                              />
                            </View>

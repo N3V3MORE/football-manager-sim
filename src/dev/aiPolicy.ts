@@ -3,6 +3,7 @@ import { FREE_AGENT_TEAM_ID } from '../core/freeAgentPool';
 import { isPlayerUnavailable } from '../core/playerStatusUtils';
 import { buildSquadPlan } from '../core/squadPlanningEngine';
 import { scoreAiTransferTarget } from '../core/transferEngine';
+import { GOALKEEPER_TRAINING_STATS } from '../core/trainingEngine';
 import { isTransferWindowOpen } from '../utils/calendar';
 import type {
   Fixture,
@@ -123,7 +124,7 @@ const DIVISION_RANK: Record<string, number> = {
 const STAT_KEYS: StatKey[] = ['pace', 'shooting', 'passing', 'dribbling', 'defending', 'physical'];
 
 const POSITION_STAT_PRIORITY: Record<Player['position'], StatKey[]> = {
-  GK: ['physical', 'passing'],
+  GK: ['shooting', 'defending', 'physical', 'dribbling', 'passing', 'pace'],
   DEF: ['defending', 'physical', 'pace', 'passing'],
   MID: ['passing', 'dribbling', 'physical', 'pace'],
   FWD: ['shooting', 'pace', 'dribbling', 'physical'],
@@ -242,7 +243,7 @@ const rotateTiredPlayers = (game: AIPolicyGameState, team: Team, decisions: AIPo
 const pickTrainingFocus = (player: Player): StatKey => {
   const preferredStats = POSITION_STAT_PRIORITY[player.position] || STAT_KEYS;
   return preferredStats
-    .map(stat => ({ stat, value: player.stats[stat] ?? player.overallRating }))
+    .map(stat => ({ stat, value: player.stats[player.position === 'GK' ? GOALKEEPER_TRAINING_STATS[stat] : stat] ?? player.overallRating }))
     .sort((a, b) => a.value - b.value)[0]?.stat ?? 'passing';
 };
 

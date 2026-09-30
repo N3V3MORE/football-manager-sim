@@ -60,6 +60,7 @@ export function TransferDialog({
           <Text style={styles.fieldLabel}>Transfer fee (GBP millions)</Text>
           <TextInput
             value={dialog.fee}
+            accessibilityLabel="Transfer fee in GBP millions"
             onChangeText={(value) => onChangeValue('fee', value)}
             keyboardType="decimal-pad"
             style={styles.input}
@@ -72,6 +73,7 @@ export function TransferDialog({
           <Text style={styles.fieldLabel}>Wage (GBP k/week)</Text>
           <TextInput
             value={dialog.wage}
+            accessibilityLabel="Wage in GBP thousands per week"
             onChangeText={(value) => onChangeValue('wage', value)}
             keyboardType="number-pad"
             style={styles.input}
@@ -86,6 +88,7 @@ export function TransferDialog({
           <Text style={styles.fieldLabel}>Wage (GBP k/week)</Text>
           <TextInput
             value={dialog.wage}
+            accessibilityLabel="Wage in GBP thousands per week"
             onChangeText={(value) => onChangeValue('wage', value)}
             keyboardType="number-pad"
             style={styles.input}
@@ -100,6 +103,7 @@ export function TransferDialog({
           <Text style={styles.fieldLabel}>Asking price (GBP millions)</Text>
           <TextInput
             value={dialog.price}
+            accessibilityLabel="Asking price in GBP millions"
             onChangeText={(value) => onChangeValue('price', value)}
             keyboardType="decimal-pad"
             style={styles.input}

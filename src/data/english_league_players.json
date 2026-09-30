@@ -225,12 +225,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 86,
+      "gk_handling": 84,
+      "gk_kicking": 87,
+      "gk_reflexes": 87,
+      "gk_speed": 62,
+      "gk_positioning": 85
     }
   },
   {
@@ -671,12 +671,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 77,
+      "gk_handling": 78,
+      "gk_kicking": 82,
+      "gk_reflexes": 81,
+      "gk_speed": 40,
+      "gk_positioning": 77
     }
   },
   {
@@ -875,12 +875,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 83,
+      "gk_handling": 82,
+      "gk_kicking": 82,
+      "gk_reflexes": 85,
+      "gk_speed": 56,
+      "gk_positioning": 85
     }
   },
   {
@@ -1424,12 +1424,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 78,
+      "gk_handling": 75,
+      "gk_kicking": 72,
+      "gk_reflexes": 78,
+      "gk_speed": 46,
+      "gk_positioning": 79
     }
   },
   {
@@ -1733,12 +1733,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 80,
+      "gk_handling": 78,
+      "gk_kicking": 73,
+      "gk_reflexes": 82,
+      "gk_speed": 41,
+      "gk_positioning": 78
     }
   },
   {
@@ -2450,12 +2450,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 65,
+      "gk_kicking": 63,
+      "gk_reflexes": 69,
+      "gk_speed": 33,
+      "gk_positioning": 66
     }
   },
   {
@@ -2516,12 +2516,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 56,
+      "gk_handling": 55,
+      "gk_kicking": 55,
+      "gk_reflexes": 56,
+      "gk_speed": 30,
+      "gk_positioning": 56
     }
   },
   {
@@ -2683,12 +2683,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 77,
+      "gk_handling": 76,
+      "gk_kicking": 79,
+      "gk_reflexes": 80,
+      "gk_speed": 43,
+      "gk_positioning": 78
     }
   },
   {
@@ -3297,12 +3297,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 68,
+      "gk_handling": 65,
+      "gk_kicking": 64,
+      "gk_reflexes": 69,
+      "gk_speed": 20,
+      "gk_positioning": 68
     }
   },
   {
@@ -3434,12 +3434,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 67,
+      "gk_handling": 63,
+      "gk_kicking": 65,
+      "gk_reflexes": 66,
+      "gk_speed": 30,
+      "gk_positioning": 65
     }
   },
   {
@@ -3467,12 +3467,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 62,
+      "gk_kicking": 61,
+      "gk_reflexes": 64,
+      "gk_speed": 39,
+      "gk_positioning": 60
     }
   },
   {
@@ -3603,12 +3603,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 59,
+      "gk_handling": 57,
+      "gk_kicking": 58,
+      "gk_reflexes": 58,
+      "gk_speed": 25,
+      "gk_positioning": 57
     }
   },
   {
@@ -3941,12 +3941,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 79,
+      "gk_handling": 76,
+      "gk_kicking": 76,
+      "gk_reflexes": 81,
+      "gk_speed": 56,
+      "gk_positioning": 75
     }
   },
   {
@@ -4349,12 +4349,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 74,
+      "gk_handling": 72,
+      "gk_kicking": 78,
+      "gk_reflexes": 72,
+      "gk_speed": 39,
+      "gk_positioning": 73
     }
   },
   {
@@ -4485,12 +4485,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 60,
+      "gk_kicking": 63,
+      "gk_reflexes": 63,
+      "gk_speed": 31,
+      "gk_positioning": 61
     }
   },
   {
@@ -4621,12 +4621,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 76,
+      "gk_handling": 76,
+      "gk_kicking": 78,
+      "gk_reflexes": 79,
+      "gk_speed": 38,
+      "gk_positioning": 75
     }
   },
   {
@@ -5474,12 +5474,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 69,
+      "gk_handling": 69,
+      "gk_kicking": 69,
+      "gk_reflexes": 70,
+      "gk_speed": 54,
+      "gk_positioning": 68
     }
   },
   {
@@ -5507,12 +5507,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 64,
+      "gk_kicking": 67,
+      "gk_reflexes": 72,
+      "gk_speed": 35,
+      "gk_positioning": 61
     }
   },
   {
@@ -6256,12 +6256,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 79,
+      "gk_handling": 77,
+      "gk_kicking": 75,
+      "gk_reflexes": 79,
+      "gk_speed": 59,
+      "gk_positioning": 77
     }
   },
   {
@@ -6360,12 +6360,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 77,
+      "gk_handling": 76,
+      "gk_kicking": 72,
+      "gk_reflexes": 78,
+      "gk_speed": 45,
+      "gk_positioning": 77
     }
   },
   {
@@ -6601,12 +6601,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 64,
+      "gk_kicking": 63,
+      "gk_reflexes": 70,
+      "gk_speed": 45,
+      "gk_positioning": 65
     }
   },
   {
@@ -6734,12 +6734,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 82,
+      "gk_handling": 78,
+      "gk_kicking": 77,
+      "gk_reflexes": 82,
+      "gk_speed": 55,
+      "gk_positioning": 80
     }
   },
   {
@@ -6905,12 +6905,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 79,
+      "gk_handling": 78,
+      "gk_kicking": 72,
+      "gk_reflexes": 80,
+      "gk_speed": 37,
+      "gk_positioning": 78
     }
   },
   {
@@ -7454,12 +7454,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 63,
+      "gk_kicking": 62,
+      "gk_reflexes": 63,
+      "gk_speed": 45,
+      "gk_positioning": 62
     }
   },
   {
@@ -7521,12 +7521,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 84,
+      "gk_handling": 78,
+      "gk_kicking": 88,
+      "gk_reflexes": 87,
+      "gk_speed": 53,
+      "gk_positioning": 81
     }
   },
   {
@@ -8136,12 +8136,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 73,
+      "gk_handling": 69,
+      "gk_kicking": 69,
+      "gk_reflexes": 74,
+      "gk_speed": 40,
+      "gk_positioning": 72
     }
   },
   {
@@ -8270,12 +8270,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 63,
+      "gk_kicking": 61,
+      "gk_reflexes": 64,
+      "gk_speed": 42,
+      "gk_positioning": 63
     }
   },
   {
@@ -8303,12 +8303,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 61,
+      "gk_kicking": 62,
+      "gk_reflexes": 65,
+      "gk_speed": 16,
+      "gk_positioning": 62
     }
   },
   {
@@ -8439,12 +8439,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 80,
+      "gk_handling": 79,
+      "gk_kicking": 76,
+      "gk_reflexes": 81,
+      "gk_speed": 53,
+      "gk_positioning": 80
     }
   },
   {
@@ -9013,12 +9013,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 73,
+      "gk_handling": 72,
+      "gk_kicking": 75,
+      "gk_reflexes": 75,
+      "gk_speed": 41,
+      "gk_positioning": 73
     }
   },
   {
@@ -9148,12 +9148,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 80,
+      "gk_handling": 79,
+      "gk_kicking": 79,
+      "gk_reflexes": 82,
+      "gk_speed": 35,
+      "gk_positioning": 80
     }
   },
   {
@@ -9895,12 +9895,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 73,
+      "gk_handling": 70,
+      "gk_kicking": 66,
+      "gk_reflexes": 75,
+      "gk_speed": 58,
+      "gk_positioning": 72
     }
   },
   {
@@ -9928,12 +9928,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 71,
+      "gk_handling": 72,
+      "gk_kicking": 70,
+      "gk_reflexes": 73,
+      "gk_speed": 38,
+      "gk_positioning": 70
     }
   },
   {
@@ -9961,12 +9961,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 61,
+      "gk_kicking": 62,
+      "gk_reflexes": 63,
+      "gk_speed": 49,
+      "gk_positioning": 62
     }
   },
   {
@@ -10131,12 +10131,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 86,
+      "gk_handling": 85,
+      "gk_kicking": 86,
+      "gk_reflexes": 89,
+      "gk_speed": 56,
+      "gk_positioning": 90
     }
   },
   {
@@ -10332,12 +10332,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 84,
+      "gk_handling": 81,
+      "gk_kicking": 72,
+      "gk_reflexes": 84,
+      "gk_speed": 48,
+      "gk_positioning": 84
     }
   },
   {
@@ -10746,12 +10746,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 72,
+      "gk_handling": 69,
+      "gk_kicking": 62,
+      "gk_reflexes": 71,
+      "gk_speed": 47,
+      "gk_positioning": 68
     }
   },
   {
@@ -10914,12 +10914,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 62,
+      "gk_kicking": 63,
+      "gk_reflexes": 67,
+      "gk_speed": 51,
+      "gk_positioning": 63
     }
   },
   {
@@ -11047,12 +11047,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 90,
+      "gk_handling": 83,
+      "gk_kicking": 70,
+      "gk_reflexes": 90,
+      "gk_speed": 52,
+      "gk_positioning": 87
     }
   },
   {
@@ -11602,12 +11602,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 78,
+      "gk_handling": 77,
+      "gk_kicking": 85,
+      "gk_reflexes": 81,
+      "gk_speed": 52,
+      "gk_positioning": 78
     }
   },
   {
@@ -11703,12 +11703,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 77,
+      "gk_handling": 74,
+      "gk_kicking": 72,
+      "gk_reflexes": 78,
+      "gk_speed": 53,
+      "gk_positioning": 74
     }
   },
   {
@@ -11840,12 +11840,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 70,
+      "gk_kicking": 69,
+      "gk_reflexes": 71,
+      "gk_speed": 30,
+      "gk_positioning": 71
     }
   },
   {
@@ -12351,12 +12351,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 79,
+      "gk_handling": 77,
+      "gk_kicking": 71,
+      "gk_reflexes": 77,
+      "gk_speed": 21,
+      "gk_positioning": 79
     }
   },
   {
@@ -12521,12 +12521,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 77,
+      "gk_handling": 72,
+      "gk_kicking": 70,
+      "gk_reflexes": 77,
+      "gk_speed": 30,
+      "gk_positioning": 75
     }
   },
   {
@@ -12622,12 +12622,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 68,
+      "gk_handling": 66,
+      "gk_kicking": 65,
+      "gk_reflexes": 67,
+      "gk_speed": 42,
+      "gk_positioning": 68
     }
   },
   {
@@ -13060,12 +13060,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 81,
+      "gk_handling": 81,
+      "gk_kicking": 68,
+      "gk_reflexes": 82,
+      "gk_speed": 49,
+      "gk_positioning": 78
     }
   },
   {
@@ -13363,12 +13363,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 77,
+      "gk_handling": 76,
+      "gk_kicking": 80,
+      "gk_reflexes": 79,
+      "gk_speed": 48,
+      "gk_positioning": 74
     }
   },
   {
@@ -13564,12 +13564,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 66,
+      "gk_handling": 69,
+      "gk_kicking": 66,
+      "gk_reflexes": 67,
+      "gk_speed": 35,
+      "gk_positioning": 68
     }
   },
   {
@@ -13667,12 +13667,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 61,
+      "gk_kicking": 60,
+      "gk_reflexes": 64,
+      "gk_speed": 32,
+      "gk_positioning": 61
     }
   },
   {
@@ -13766,12 +13766,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 82,
+      "gk_handling": 80,
+      "gk_kicking": 79,
+      "gk_reflexes": 83,
+      "gk_speed": 36,
+      "gk_positioning": 83
     }
   },
   {
@@ -14512,12 +14512,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 73,
+      "gk_handling": 71,
+      "gk_kicking": 70,
+      "gk_reflexes": 74,
+      "gk_speed": 48,
+      "gk_positioning": 70
     }
   },
   {
@@ -14580,12 +14580,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 74,
+      "gk_handling": 67,
+      "gk_kicking": 66,
+      "gk_reflexes": 76,
+      "gk_speed": 23,
+      "gk_positioning": 68
     }
   },
   {
@@ -15093,12 +15093,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 76,
+      "gk_handling": 74,
+      "gk_kicking": 68,
+      "gk_reflexes": 76,
+      "gk_speed": 31,
+      "gk_positioning": 70
     }
   },
   {
@@ -15228,12 +15228,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 73,
+      "gk_handling": 71,
+      "gk_kicking": 72,
+      "gk_reflexes": 75,
+      "gk_speed": 30,
+      "gk_positioning": 70
     }
   },
   {
@@ -15640,12 +15640,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 67,
+      "gk_handling": 65,
+      "gk_kicking": 68,
+      "gk_reflexes": 67,
+      "gk_speed": 47,
+      "gk_positioning": 64
     }
   },
   {
@@ -15840,12 +15840,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 58,
+      "gk_handling": 55,
+      "gk_kicking": 55,
+      "gk_reflexes": 61,
+      "gk_speed": 35,
+      "gk_positioning": 53
     }
   },
   {
@@ -16113,12 +16113,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 83,
+      "gk_handling": 78,
+      "gk_kicking": 78,
+      "gk_reflexes": 84,
+      "gk_speed": 52,
+      "gk_positioning": 80
     }
   },
   {
@@ -16728,12 +16728,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 76,
+      "gk_handling": 76,
+      "gk_kicking": 76,
+      "gk_reflexes": 75,
+      "gk_speed": 25,
+      "gk_positioning": 74
     }
   },
   {
@@ -16794,12 +16794,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 69,
+      "gk_handling": 65,
+      "gk_kicking": 64,
+      "gk_reflexes": 66,
+      "gk_speed": 41,
+      "gk_positioning": 65
     }
   },
   {
@@ -17202,12 +17202,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 78,
+      "gk_handling": 75,
+      "gk_kicking": 74,
+      "gk_reflexes": 78,
+      "gk_speed": 55,
+      "gk_positioning": 76
     }
   },
   {
@@ -17371,12 +17371,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 76,
+      "gk_handling": 75,
+      "gk_kicking": 76,
+      "gk_reflexes": 77,
+      "gk_speed": 50,
+      "gk_positioning": 76
     }
   },
   {
@@ -17473,12 +17473,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 75,
+      "gk_handling": 75,
+      "gk_kicking": 68,
+      "gk_reflexes": 74,
+      "gk_speed": 49,
+      "gk_positioning": 76
     }
   },
   {
@@ -17986,12 +17986,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 77,
+      "gk_handling": 75,
+      "gk_kicking": 70,
+      "gk_reflexes": 77,
+      "gk_speed": 52,
+      "gk_positioning": 76
     }
   },
   {
@@ -18087,12 +18087,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 77,
+      "gk_handling": 76,
+      "gk_kicking": 69,
+      "gk_reflexes": 77,
+      "gk_speed": 41,
+      "gk_positioning": 74
     }
   },
   {
@@ -18495,12 +18495,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 71,
+      "gk_handling": 67,
+      "gk_kicking": 69,
+      "gk_reflexes": 72,
+      "gk_speed": 46,
+      "gk_positioning": 70
     }
   },
   {
@@ -19248,12 +19248,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 69,
+      "gk_kicking": 68,
+      "gk_reflexes": 71,
+      "gk_speed": 46,
+      "gk_positioning": 70
     }
   },
   {
@@ -19492,12 +19492,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 66,
+      "gk_handling": 67,
+      "gk_kicking": 72,
+      "gk_reflexes": 69,
+      "gk_speed": 42,
+      "gk_positioning": 66
     }
   },
   {
@@ -19525,12 +19525,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 53,
+      "gk_handling": 53,
+      "gk_kicking": 55,
+      "gk_reflexes": 52,
+      "gk_speed": 28,
+      "gk_positioning": 53
     }
   },
   {
@@ -19939,12 +19939,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 71,
+      "gk_handling": 66,
+      "gk_kicking": 67,
+      "gk_reflexes": 71,
+      "gk_speed": 45,
+      "gk_positioning": 67
     }
   },
   {
@@ -20279,12 +20279,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 68,
+      "gk_handling": 66,
+      "gk_kicking": 60,
+      "gk_reflexes": 69,
+      "gk_speed": 31,
+      "gk_positioning": 62
     }
   },
   {
@@ -20516,12 +20516,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 54,
+      "gk_handling": 52,
+      "gk_kicking": 53,
+      "gk_reflexes": 52,
+      "gk_speed": 27,
+      "gk_positioning": 51
     }
   },
   {
@@ -20857,12 +20857,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 68,
+      "gk_kicking": 65,
+      "gk_reflexes": 73,
+      "gk_speed": 46,
+      "gk_positioning": 69
     }
   },
   {
@@ -21062,12 +21062,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 71,
+      "gk_handling": 66,
+      "gk_kicking": 74,
+      "gk_reflexes": 72,
+      "gk_speed": 44,
+      "gk_positioning": 68
     }
   },
   {
@@ -21095,12 +21095,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 68,
+      "gk_kicking": 68,
+      "gk_reflexes": 72,
+      "gk_speed": 43,
+      "gk_positioning": 69
     }
   },
   {
@@ -21404,12 +21404,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 59,
+      "gk_handling": 58,
+      "gk_kicking": 57,
+      "gk_reflexes": 60,
+      "gk_speed": 57,
+      "gk_positioning": 58
     }
   },
   {
@@ -21538,12 +21538,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 73,
+      "gk_handling": 74,
+      "gk_kicking": 70,
+      "gk_reflexes": 76,
+      "gk_speed": 46,
+      "gk_positioning": 73
     }
   },
   {
@@ -22220,12 +22220,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 67,
+      "gk_kicking": 64,
+      "gk_reflexes": 64,
+      "gk_speed": 37,
+      "gk_positioning": 65
     }
   },
   {
@@ -22253,12 +22253,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 66,
+      "gk_handling": 61,
+      "gk_kicking": 63,
+      "gk_reflexes": 66,
+      "gk_speed": 39,
+      "gk_positioning": 60
     }
   },
   {
@@ -22594,12 +22594,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 72,
+      "gk_handling": 70,
+      "gk_kicking": 71,
+      "gk_reflexes": 73,
+      "gk_speed": 55,
+      "gk_positioning": 71
     }
   },
   {
@@ -22830,12 +22830,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 68,
+      "gk_kicking": 68,
+      "gk_reflexes": 71,
+      "gk_speed": 47,
+      "gk_positioning": 68
     }
   },
   {
@@ -23070,12 +23070,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 67,
+      "gk_kicking": 62,
+      "gk_reflexes": 71,
+      "gk_speed": 41,
+      "gk_positioning": 65
     }
   },
   {
@@ -23341,12 +23341,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 75,
+      "gk_handling": 70,
+      "gk_kicking": 59,
+      "gk_reflexes": 74,
+      "gk_speed": 38,
+      "gk_positioning": 67
     }
   },
   {
@@ -23918,12 +23918,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 66,
+      "gk_handling": 67,
+      "gk_kicking": 65,
+      "gk_reflexes": 67,
+      "gk_speed": 42,
+      "gk_positioning": 65
     }
   },
   {
@@ -24021,12 +24021,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 62,
+      "gk_kicking": 60,
+      "gk_reflexes": 62,
+      "gk_speed": 52,
+      "gk_positioning": 62
     }
   },
   {
@@ -24257,12 +24257,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 72,
+      "gk_handling": 70,
+      "gk_kicking": 64,
+      "gk_reflexes": 77,
+      "gk_speed": 39,
+      "gk_positioning": 69
     }
   },
   {
@@ -24840,12 +24840,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 66,
+      "gk_handling": 65,
+      "gk_kicking": 62,
+      "gk_reflexes": 66,
+      "gk_speed": 46,
+      "gk_positioning": 65
     }
   },
   {
@@ -25454,12 +25454,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 74,
+      "gk_handling": 72,
+      "gk_kicking": 72,
+      "gk_reflexes": 73,
+      "gk_speed": 30,
+      "gk_positioning": 72
     }
   },
   {
@@ -25757,12 +25757,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 68,
+      "gk_kicking": 66,
+      "gk_reflexes": 70,
+      "gk_speed": 35,
+      "gk_positioning": 68
     }
   },
   {
@@ -25927,12 +25927,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 60,
+      "gk_kicking": 59,
+      "gk_reflexes": 61,
+      "gk_speed": 39,
+      "gk_positioning": 61
     }
   },
   {
@@ -26503,12 +26503,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 72,
+      "gk_handling": 68,
+      "gk_kicking": 73,
+      "gk_reflexes": 71,
+      "gk_speed": 34,
+      "gk_positioning": 68
     }
   },
   {
@@ -26605,12 +26605,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 70,
+      "gk_kicking": 65,
+      "gk_reflexes": 67,
+      "gk_speed": 26,
+      "gk_positioning": 73
     }
   },
   {
@@ -26638,12 +26638,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 72,
+      "gk_handling": 69,
+      "gk_kicking": 69,
+      "gk_reflexes": 73,
+      "gk_speed": 36,
+      "gk_positioning": 70
     }
   },
   {
@@ -27387,12 +27387,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 67,
+      "gk_kicking": 69,
+      "gk_reflexes": 74,
+      "gk_speed": 40,
+      "gk_positioning": 66
     }
   },
   {
@@ -27661,12 +27661,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 67,
+      "gk_kicking": 67,
+      "gk_reflexes": 66,
+      "gk_speed": 51,
+      "gk_positioning": 64
     }
   },
   {
@@ -27694,12 +27694,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 65,
+      "gk_kicking": 62,
+      "gk_reflexes": 66,
+      "gk_speed": 33,
+      "gk_positioning": 65
     }
   },
   {
@@ -28209,12 +28209,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 69,
+      "gk_handling": 68,
+      "gk_kicking": 64,
+      "gk_reflexes": 69,
+      "gk_speed": 24,
+      "gk_positioning": 69
     }
   },
   {
@@ -28444,12 +28444,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 67,
+      "gk_handling": 65,
+      "gk_kicking": 61,
+      "gk_reflexes": 70,
+      "gk_speed": 37,
+      "gk_positioning": 66
     }
   },
   {
@@ -28545,12 +28545,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 65,
+      "gk_kicking": 62,
+      "gk_reflexes": 65,
+      "gk_speed": 47,
+      "gk_positioning": 64
     }
   },
   {
@@ -28784,12 +28784,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 59,
+      "gk_kicking": 57,
+      "gk_reflexes": 62,
+      "gk_speed": 44,
+      "gk_positioning": 58
     }
   },
   {
@@ -28817,12 +28817,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 59,
+      "gk_kicking": 60,
+      "gk_reflexes": 60,
+      "gk_speed": 20,
+      "gk_positioning": 58
     }
   },
   {
@@ -29363,12 +29363,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 73,
+      "gk_handling": 70,
+      "gk_kicking": 69,
+      "gk_reflexes": 69,
+      "gk_speed": 37,
+      "gk_positioning": 71
     }
   },
   {
@@ -29673,12 +29673,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 69,
+      "gk_handling": 62,
+      "gk_kicking": 69,
+      "gk_reflexes": 69,
+      "gk_speed": 45,
+      "gk_positioning": 65
     }
   },
   {
@@ -29845,12 +29845,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 60,
+      "gk_kicking": 70,
+      "gk_reflexes": 65,
+      "gk_speed": 50,
+      "gk_positioning": 63
     }
   },
   {
@@ -30358,12 +30358,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 69,
+      "gk_handling": 68,
+      "gk_kicking": 68,
+      "gk_reflexes": 69,
+      "gk_speed": 47,
+      "gk_positioning": 68
     }
   },
   {
@@ -30739,12 +30739,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 68,
+      "gk_handling": 65,
+      "gk_kicking": 66,
+      "gk_reflexes": 69,
+      "gk_speed": 44,
+      "gk_positioning": 66
     }
   },
   {
@@ -30908,12 +30908,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 63,
+      "gk_kicking": 63,
+      "gk_reflexes": 63,
+      "gk_speed": 32,
+      "gk_positioning": 63
     }
   },
   {
@@ -31007,12 +31007,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 54,
+      "gk_handling": 56,
+      "gk_kicking": 56,
+      "gk_reflexes": 55,
+      "gk_speed": 52,
+      "gk_positioning": 54
     }
   },
   {
@@ -31178,12 +31178,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 70,
+      "gk_kicking": 69,
+      "gk_reflexes": 72,
+      "gk_speed": 44,
+      "gk_positioning": 70
     }
   },
   {
@@ -31761,12 +31761,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 63,
+      "gk_kicking": 64,
+      "gk_reflexes": 66,
+      "gk_speed": 40,
+      "gk_positioning": 63
     }
   },
   {
@@ -31827,12 +31827,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 63,
+      "gk_kicking": 64,
+      "gk_reflexes": 64,
+      "gk_speed": 43,
+      "gk_positioning": 65
     }
   },
   {
@@ -31927,12 +31927,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 62,
+      "gk_kicking": 60,
+      "gk_reflexes": 64,
+      "gk_speed": 43,
+      "gk_positioning": 63
     }
   },
   {
@@ -32437,12 +32437,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 69,
+      "gk_kicking": 66,
+      "gk_reflexes": 70,
+      "gk_speed": 45,
+      "gk_positioning": 68
     }
   },
   {
@@ -32847,12 +32847,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 67,
+      "gk_handling": 64,
+      "gk_kicking": 60,
+      "gk_reflexes": 66,
+      "gk_speed": 34,
+      "gk_positioning": 67
     }
   },
   {
@@ -32947,12 +32947,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 62,
+      "gk_kicking": 60,
+      "gk_reflexes": 66,
+      "gk_speed": 32,
+      "gk_positioning": 60
     }
   },
   {
@@ -33049,12 +33049,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 59,
+      "gk_handling": 58,
+      "gk_kicking": 52,
+      "gk_reflexes": 56,
+      "gk_speed": 30,
+      "gk_positioning": 55
     }
   },
   {
@@ -33186,12 +33186,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 74,
+      "gk_handling": 68,
+      "gk_kicking": 68,
+      "gk_reflexes": 76,
+      "gk_speed": 50,
+      "gk_positioning": 72
     }
   },
   {
@@ -34006,12 +34006,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 65,
+      "gk_kicking": 60,
+      "gk_reflexes": 62,
+      "gk_speed": 58,
+      "gk_positioning": 56
     }
   },
   {
@@ -34211,12 +34211,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 76,
+      "gk_handling": 74,
+      "gk_kicking": 77,
+      "gk_reflexes": 77,
+      "gk_speed": 54,
+      "gk_positioning": 75
     }
   },
   {
@@ -34962,12 +34962,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 69,
+      "gk_handling": 65,
+      "gk_kicking": 65,
+      "gk_reflexes": 69,
+      "gk_speed": 40,
+      "gk_positioning": 67
     }
   },
   {
@@ -35301,12 +35301,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 54,
+      "gk_handling": 53,
+      "gk_kicking": 53,
+      "gk_reflexes": 56,
+      "gk_speed": 27,
+      "gk_positioning": 52
     }
   },
   {
@@ -35574,12 +35574,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 71,
+      "gk_handling": 67,
+      "gk_kicking": 66,
+      "gk_reflexes": 70,
+      "gk_speed": 48,
+      "gk_positioning": 67
     }
   },
   {
@@ -35747,12 +35747,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 65,
+      "gk_kicking": 65,
+      "gk_reflexes": 64,
+      "gk_speed": 31,
+      "gk_positioning": 64
     }
   },
   {
@@ -36014,12 +36014,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 55,
+      "gk_handling": 53,
+      "gk_kicking": 56,
+      "gk_reflexes": 56,
+      "gk_speed": 19,
+      "gk_positioning": 52
     }
   },
   {
@@ -36214,12 +36214,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 53,
+      "gk_handling": 49,
+      "gk_kicking": 48,
+      "gk_reflexes": 52,
+      "gk_speed": 27,
+      "gk_positioning": 50
     }
   },
   {
@@ -36590,12 +36590,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 74,
+      "gk_handling": 72,
+      "gk_kicking": 74,
+      "gk_reflexes": 76,
+      "gk_speed": 47,
+      "gk_positioning": 69
     }
   },
   {
@@ -36960,12 +36960,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 71,
+      "gk_handling": 70,
+      "gk_kicking": 62,
+      "gk_reflexes": 72,
+      "gk_speed": 45,
+      "gk_positioning": 68
     }
   },
   {
@@ -37094,12 +37094,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 68,
+      "gk_handling": 66,
+      "gk_kicking": 66,
+      "gk_reflexes": 68,
+      "gk_speed": 31,
+      "gk_positioning": 64
     }
   },
   {
@@ -37197,12 +37197,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 55,
+      "gk_handling": 54,
+      "gk_kicking": 52,
+      "gk_reflexes": 55,
+      "gk_speed": 33,
+      "gk_positioning": 51
     }
   },
   {
@@ -37230,12 +37230,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 75,
+      "gk_handling": 71,
+      "gk_kicking": 70,
+      "gk_reflexes": 77,
+      "gk_speed": 40,
+      "gk_positioning": 73
     }
   },
   {
@@ -37983,12 +37983,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 66,
+      "gk_handling": 62,
+      "gk_kicking": 65,
+      "gk_reflexes": 65,
+      "gk_speed": 43,
+      "gk_positioning": 64
     }
   },
   {
@@ -38049,12 +38049,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 62,
+      "gk_kicking": 59,
+      "gk_reflexes": 65,
+      "gk_speed": 34,
+      "gk_positioning": 63
     }
   },
   {
@@ -38082,12 +38082,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 57,
+      "gk_kicking": 56,
+      "gk_reflexes": 60,
+      "gk_speed": 26,
+      "gk_positioning": 58
     }
   },
   {
@@ -38525,12 +38525,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 72,
+      "gk_handling": 69,
+      "gk_kicking": 69,
+      "gk_reflexes": 72,
+      "gk_speed": 47,
+      "gk_positioning": 69
     }
   },
   {
@@ -38866,12 +38866,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 66,
+      "gk_handling": 64,
+      "gk_kicking": 68,
+      "gk_reflexes": 67,
+      "gk_speed": 34,
+      "gk_positioning": 65
     }
   },
   {
@@ -39310,12 +39310,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 70,
+      "gk_handling": 69,
+      "gk_kicking": 66,
+      "gk_reflexes": 70,
+      "gk_speed": 19,
+      "gk_positioning": 69
     }
   },
   {
@@ -39723,12 +39723,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 67,
+      "gk_handling": 66,
+      "gk_kicking": 62,
+      "gk_reflexes": 67,
+      "gk_speed": 41,
+      "gk_positioning": 66
     }
   },
   {
@@ -39995,12 +39995,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 57,
+      "gk_handling": 55,
+      "gk_kicking": 54,
+      "gk_reflexes": 55,
+      "gk_speed": 37,
+      "gk_positioning": 49
     }
   },
   {
@@ -40578,12 +40578,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 68,
+      "gk_handling": 69,
+      "gk_kicking": 68,
+      "gk_reflexes": 68,
+      "gk_speed": 42,
+      "gk_positioning": 69
     }
   },
   {
@@ -40713,12 +40713,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 63,
+      "gk_kicking": 62,
+      "gk_reflexes": 66,
+      "gk_speed": 30,
+      "gk_positioning": 63
     }
   },
   {
@@ -40815,12 +40815,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 54,
+      "gk_handling": 52,
+      "gk_kicking": 52,
+      "gk_reflexes": 55,
+      "gk_speed": 26,
+      "gk_positioning": 52
     }
   },
   {
@@ -41192,12 +41192,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 71,
+      "gk_handling": 69,
+      "gk_kicking": 68,
+      "gk_reflexes": 69,
+      "gk_speed": 46,
+      "gk_positioning": 68
     }
   },
   {
@@ -41327,12 +41327,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 68,
+      "gk_handling": 67,
+      "gk_kicking": 67,
+      "gk_reflexes": 69,
+      "gk_speed": 44,
+      "gk_positioning": 69
     }
   },
   {
@@ -41769,12 +41769,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 61,
+      "gk_kicking": 60,
+      "gk_reflexes": 63,
+      "gk_speed": 43,
+      "gk_positioning": 59
     }
   },
   {
@@ -42177,12 +42177,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 62,
+      "gk_kicking": 60,
+      "gk_reflexes": 65,
+      "gk_speed": 39,
+      "gk_positioning": 63
     }
   },
   {
@@ -42654,12 +42654,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 58,
+      "gk_handling": 56,
+      "gk_kicking": 54,
+      "gk_reflexes": 62,
+      "gk_speed": 28,
+      "gk_positioning": 58
     }
   },
   {
@@ -43298,12 +43298,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 65,
+      "gk_kicking": 60,
+      "gk_reflexes": 64,
+      "gk_speed": 41,
+      "gk_positioning": 61
     }
   },
   {
@@ -43401,12 +43401,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 59,
+      "gk_kicking": 59,
+      "gk_reflexes": 63,
+      "gk_speed": 37,
+      "gk_positioning": 61
     }
   },
   {
@@ -43605,12 +43605,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 59,
+      "gk_handling": 57,
+      "gk_kicking": 56,
+      "gk_reflexes": 58,
+      "gk_speed": 26,
+      "gk_positioning": 57
     }
   },
   {
@@ -43842,12 +43842,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 69,
+      "gk_handling": 67,
+      "gk_kicking": 68,
+      "gk_reflexes": 70,
+      "gk_speed": 60,
+      "gk_positioning": 66
     }
   },
   {
@@ -44317,12 +44317,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 64,
+      "gk_kicking": 66,
+      "gk_reflexes": 65,
+      "gk_speed": 27,
+      "gk_positioning": 65
     }
   },
   {
@@ -45236,12 +45236,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 60,
+      "gk_kicking": 63,
+      "gk_reflexes": 63,
+      "gk_speed": 40,
+      "gk_positioning": 60
     }
   },
   {
@@ -45269,12 +45269,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 61,
+      "gk_kicking": 60,
+      "gk_reflexes": 62,
+      "gk_speed": 35,
+      "gk_positioning": 62
     }
   },
   {
@@ -45337,12 +45337,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 56,
+      "gk_handling": 58,
+      "gk_kicking": 57,
+      "gk_reflexes": 58,
+      "gk_speed": 36,
+      "gk_positioning": 54
     }
   },
   {
@@ -45878,12 +45878,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 61,
+      "gk_kicking": 59,
+      "gk_reflexes": 63,
+      "gk_speed": 42,
+      "gk_positioning": 61
     }
   },
   {
@@ -46354,12 +46354,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 57,
+      "gk_handling": 58,
+      "gk_kicking": 55,
+      "gk_reflexes": 60,
+      "gk_speed": 29,
+      "gk_positioning": 54
     }
   },
   {
@@ -46453,12 +46453,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 52,
+      "gk_handling": 51,
+      "gk_kicking": 51,
+      "gk_reflexes": 53,
+      "gk_speed": 24,
+      "gk_positioning": 51
     }
   },
   {
@@ -46520,12 +46520,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 67,
+      "gk_handling": 63,
+      "gk_kicking": 70,
+      "gk_reflexes": 67,
+      "gk_speed": 43,
+      "gk_positioning": 66
     }
   },
   {
@@ -46897,12 +46897,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 62,
+      "gk_kicking": 63,
+      "gk_reflexes": 63,
+      "gk_speed": 35,
+      "gk_positioning": 61
     }
   },
   {
@@ -47140,12 +47140,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 57,
+      "gk_kicking": 60,
+      "gk_reflexes": 64,
+      "gk_speed": 23,
+      "gk_positioning": 58
     }
   },
   {
@@ -47380,12 +47380,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 53,
+      "gk_handling": 52,
+      "gk_kicking": 51,
+      "gk_reflexes": 53,
+      "gk_speed": 29,
+      "gk_positioning": 52
     }
   },
   {
@@ -47685,12 +47685,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 72,
+      "gk_handling": 68,
+      "gk_kicking": 68,
+      "gk_reflexes": 73,
+      "gk_speed": 39,
+      "gk_positioning": 68
     }
   },
   {
@@ -47787,12 +47787,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 69,
+      "gk_handling": 67,
+      "gk_kicking": 65,
+      "gk_reflexes": 69,
+      "gk_speed": 46,
+      "gk_positioning": 70
     }
   },
   {
@@ -48303,12 +48303,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 54,
+      "gk_handling": 53,
+      "gk_kicking": 52,
+      "gk_reflexes": 55,
+      "gk_speed": 22,
+      "gk_positioning": 52
     }
   },
   {
@@ -48404,12 +48404,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 66,
+      "gk_handling": 64,
+      "gk_kicking": 63,
+      "gk_reflexes": 68,
+      "gk_speed": 35,
+      "gk_positioning": 63
     }
   },
   {
@@ -49083,12 +49083,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 58,
+      "gk_kicking": 59,
+      "gk_reflexes": 61,
+      "gk_speed": 42,
+      "gk_positioning": 60
     }
   },
   {
@@ -49183,12 +49183,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 53,
+      "gk_handling": 49,
+      "gk_kicking": 48,
+      "gk_reflexes": 55,
+      "gk_speed": 31,
+      "gk_positioning": 51
     }
   },
   {
@@ -49216,12 +49216,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 67,
+      "gk_kicking": 66,
+      "gk_reflexes": 65,
+      "gk_speed": 46,
+      "gk_positioning": 64
     }
   },
   {
@@ -49933,12 +49933,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 56,
+      "gk_kicking": 56,
+      "gk_reflexes": 60,
+      "gk_speed": 38,
+      "gk_positioning": 59
     }
   },
   {
@@ -50172,12 +50172,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 53,
+      "gk_handling": 52,
+      "gk_kicking": 50,
+      "gk_reflexes": 54,
+      "gk_speed": 22,
+      "gk_positioning": 50
     }
   },
   {
@@ -50891,12 +50891,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 67,
+      "gk_kicking": 58,
+      "gk_reflexes": 66,
+      "gk_speed": 41,
+      "gk_positioning": 65
     }
   },
   {
@@ -50959,12 +50959,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 63,
+      "gk_kicking": 64,
+      "gk_reflexes": 66,
+      "gk_speed": 38,
+      "gk_positioning": 64
     }
   },
   {
@@ -50992,12 +50992,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 61,
+      "gk_kicking": 69,
+      "gk_reflexes": 66,
+      "gk_speed": 32,
+      "gk_positioning": 64
     }
   },
   {
@@ -51855,12 +51855,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 61,
+      "gk_kicking": 60,
+      "gk_reflexes": 63,
+      "gk_speed": 43,
+      "gk_positioning": 61
     }
   },
   {
@@ -52062,12 +52062,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 60,
+      "gk_kicking": 63,
+      "gk_reflexes": 60,
+      "gk_speed": 24,
+      "gk_positioning": 58
     }
   },
   {
@@ -52748,12 +52748,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 63,
+      "gk_kicking": 64,
+      "gk_reflexes": 64,
+      "gk_speed": 30,
+      "gk_positioning": 61
     }
   },
   {
@@ -52986,12 +52986,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 57,
+      "gk_handling": 56,
+      "gk_kicking": 60,
+      "gk_reflexes": 60,
+      "gk_speed": 29,
+      "gk_positioning": 57
     }
   },
   {
@@ -53053,12 +53053,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 55,
+      "gk_handling": 53,
+      "gk_kicking": 53,
+      "gk_reflexes": 56,
+      "gk_speed": 19,
+      "gk_positioning": 54
     }
   },
   {
@@ -53766,12 +53766,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 67,
+      "gk_handling": 65,
+      "gk_kicking": 60,
+      "gk_reflexes": 67,
+      "gk_speed": 27,
+      "gk_positioning": 67
     }
   },
   {
@@ -53866,12 +53866,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 68,
+      "gk_handling": 63,
+      "gk_kicking": 61,
+      "gk_reflexes": 68,
+      "gk_speed": 45,
+      "gk_positioning": 64
     }
   },
   {
@@ -54279,12 +54279,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 64,
+      "gk_kicking": 63,
+      "gk_reflexes": 66,
+      "gk_speed": 47,
+      "gk_positioning": 66
     }
   },
   {
@@ -54966,12 +54966,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 57,
+      "gk_kicking": 58,
+      "gk_reflexes": 58,
+      "gk_speed": 29,
+      "gk_positioning": 56
     }
   },
   {
@@ -55477,12 +55477,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 61,
+      "gk_kicking": 61,
+      "gk_reflexes": 64,
+      "gk_speed": 42,
+      "gk_positioning": 63
     }
   },
   {
@@ -55716,12 +55716,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 59,
+      "gk_handling": 59,
+      "gk_kicking": 51,
+      "gk_reflexes": 60,
+      "gk_speed": 31,
+      "gk_positioning": 52
     }
   },
   {
@@ -55850,12 +55850,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 52,
+      "gk_handling": 52,
+      "gk_kicking": 57,
+      "gk_reflexes": 55,
+      "gk_speed": 25,
+      "gk_positioning": 55
     }
   },
   {
@@ -56256,12 +56256,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 62,
+      "gk_kicking": 63,
+      "gk_reflexes": 65,
+      "gk_speed": 58,
+      "gk_positioning": 62
     }
   },
   {
@@ -56289,12 +56289,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 62,
+      "gk_kicking": 63,
+      "gk_reflexes": 64,
+      "gk_speed": 38,
+      "gk_positioning": 63
     }
   },
   {
@@ -56463,12 +56463,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 66,
+      "gk_handling": 60,
+      "gk_kicking": 57,
+      "gk_reflexes": 62,
+      "gk_speed": 23,
+      "gk_positioning": 65
     }
   },
   {
@@ -56941,12 +56941,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 57,
+      "gk_kicking": 55,
+      "gk_reflexes": 57,
+      "gk_speed": 24,
+      "gk_positioning": 57
     }
   },
   {
@@ -57077,12 +57077,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 69,
+      "gk_handling": 67,
+      "gk_kicking": 64,
+      "gk_reflexes": 71,
+      "gk_speed": 34,
+      "gk_positioning": 69
     }
   },
   {
@@ -57696,12 +57696,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 58,
+      "gk_kicking": 56,
+      "gk_reflexes": 62,
+      "gk_speed": 24,
+      "gk_positioning": 56
     }
   },
   {
@@ -57898,12 +57898,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 51,
+      "gk_handling": 55,
+      "gk_kicking": 50,
+      "gk_reflexes": 56,
+      "gk_speed": 28,
+      "gk_positioning": 50
     }
   },
   {
@@ -57964,12 +57964,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 71,
+      "gk_handling": 65,
+      "gk_kicking": 60,
+      "gk_reflexes": 72,
+      "gk_speed": 30,
+      "gk_positioning": 64
     }
   },
   {
@@ -58169,12 +58169,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 63,
+      "gk_kicking": 61,
+      "gk_reflexes": 65,
+      "gk_speed": 41,
+      "gk_positioning": 65
     }
   },
   {
@@ -58677,12 +58677,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 65,
+      "gk_kicking": 67,
+      "gk_reflexes": 60,
+      "gk_speed": 46,
+      "gk_positioning": 61
     }
   },
   {
@@ -58914,12 +58914,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 69,
+      "gk_handling": 65,
+      "gk_kicking": 66,
+      "gk_reflexes": 69,
+      "gk_speed": 55,
+      "gk_positioning": 66
     }
   },
   {
@@ -59534,12 +59534,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 62,
+      "gk_kicking": 63,
+      "gk_reflexes": 63,
+      "gk_speed": 41,
+      "gk_positioning": 62
     }
   },
   {
@@ -60291,12 +60291,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 66,
+      "gk_handling": 65,
+      "gk_kicking": 64,
+      "gk_reflexes": 67,
+      "gk_speed": 50,
+      "gk_positioning": 66
     }
   },
   {
@@ -60933,12 +60933,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 52,
+      "gk_handling": 53,
+      "gk_kicking": 52,
+      "gk_reflexes": 53,
+      "gk_speed": 37,
+      "gk_positioning": 50
     }
   },
   {
@@ -61275,12 +61275,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 64,
+      "gk_handling": 64,
+      "gk_kicking": 62,
+      "gk_reflexes": 65,
+      "gk_speed": 23,
+      "gk_positioning": 64
     }
   },
   {
@@ -61650,12 +61650,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 62,
+      "gk_kicking": 63,
+      "gk_reflexes": 62,
+      "gk_speed": 20,
+      "gk_positioning": 61
     }
   },
   {
@@ -61887,12 +61887,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 52,
+      "gk_handling": 53,
+      "gk_kicking": 51,
+      "gk_reflexes": 51,
+      "gk_speed": 30,
+      "gk_positioning": 53
     }
   },
   {
@@ -62396,12 +62396,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 63,
+      "gk_kicking": 65,
+      "gk_reflexes": 65,
+      "gk_speed": 22,
+      "gk_positioning": 64
     }
   },
   {
@@ -62600,12 +62600,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 60,
+      "gk_kicking": 62,
+      "gk_reflexes": 66,
+      "gk_speed": 40,
+      "gk_positioning": 65
     }
   },
   {
@@ -62769,12 +62769,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 57,
+      "gk_handling": 54,
+      "gk_kicking": 55,
+      "gk_reflexes": 57,
+      "gk_speed": 26,
+      "gk_positioning": 54
     }
   },
   {
@@ -62802,12 +62802,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 58,
+      "gk_handling": 54,
+      "gk_kicking": 53,
+      "gk_reflexes": 57,
+      "gk_speed": 35,
+      "gk_positioning": 55
     }
   },
   {
@@ -62976,12 +62976,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 67,
+      "gk_handling": 66,
+      "gk_kicking": 65,
+      "gk_reflexes": 68,
+      "gk_speed": 34,
+      "gk_positioning": 67
     }
   },
   {
@@ -63632,12 +63632,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 58,
+      "gk_kicking": 64,
+      "gk_reflexes": 62,
+      "gk_speed": 45,
+      "gk_positioning": 60
     }
   },
   {
@@ -63871,12 +63871,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 54,
+      "gk_handling": 53,
+      "gk_kicking": 53,
+      "gk_reflexes": 56,
+      "gk_speed": 32,
+      "gk_positioning": 53
     }
   },
   {
@@ -64212,12 +64212,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 67,
+      "gk_handling": 66,
+      "gk_kicking": 66,
+      "gk_reflexes": 67,
+      "gk_speed": 44,
+      "gk_positioning": 66
     }
   },
   {
@@ -64724,12 +64724,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 59,
+      "gk_handling": 69,
+      "gk_kicking": 64,
+      "gk_reflexes": 56,
+      "gk_speed": 22,
+      "gk_positioning": 58
     }
   },
   {
@@ -64757,12 +64757,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 58,
+      "gk_kicking": 56,
+      "gk_reflexes": 60,
+      "gk_speed": 49,
+      "gk_positioning": 59
     }
   },
   {
@@ -65469,12 +65469,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 59,
+      "gk_handling": 58,
+      "gk_kicking": 56,
+      "gk_reflexes": 58,
+      "gk_speed": 29,
+      "gk_positioning": 59
     }
   },
   {
@@ -65638,12 +65638,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 56,
+      "gk_handling": 55,
+      "gk_kicking": 54,
+      "gk_reflexes": 57,
+      "gk_speed": 29,
+      "gk_positioning": 55
     }
   },
   {
@@ -65805,12 +65805,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 51,
+      "gk_handling": 50,
+      "gk_kicking": 46,
+      "gk_reflexes": 52,
+      "gk_speed": 32,
+      "gk_positioning": 48
     }
   },
   {
@@ -66348,12 +66348,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 62,
+      "gk_kicking": 60,
+      "gk_reflexes": 62,
+      "gk_speed": 27,
+      "gk_positioning": 59
     }
   },
   {
@@ -66518,12 +66518,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 59,
+      "gk_handling": 59,
+      "gk_kicking": 60,
+      "gk_reflexes": 61,
+      "gk_speed": 43,
+      "gk_positioning": 58
     }
   },
   {
@@ -67199,12 +67199,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 58,
+      "gk_kicking": 61,
+      "gk_reflexes": 63,
+      "gk_speed": 48,
+      "gk_positioning": 62
     }
   },
   {
@@ -67605,12 +67605,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 60,
+      "gk_kicking": 64,
+      "gk_reflexes": 59,
+      "gk_speed": 27,
+      "gk_positioning": 55
     }
   },
   {
@@ -67740,12 +67740,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 64,
+      "gk_kicking": 68,
+      "gk_reflexes": 64,
+      "gk_speed": 54,
+      "gk_positioning": 64
     }
   },
   {
@@ -68456,12 +68456,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 55,
+      "gk_handling": 53,
+      "gk_kicking": 54,
+      "gk_reflexes": 55,
+      "gk_speed": 24,
+      "gk_positioning": 53
     }
   },
   {
@@ -68763,12 +68763,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 59,
+      "gk_kicking": 62,
+      "gk_reflexes": 62,
+      "gk_speed": 34,
+      "gk_positioning": 60
     }
   },
   {
@@ -69167,12 +69167,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 55,
+      "gk_kicking": 59,
+      "gk_reflexes": 58,
+      "gk_speed": 42,
+      "gk_positioning": 54
     }
   },
   {
@@ -69371,12 +69371,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 55,
+      "gk_handling": 55,
+      "gk_kicking": 48,
+      "gk_reflexes": 47,
+      "gk_speed": 25,
+      "gk_positioning": 54
     }
   },
   {
@@ -70058,12 +70058,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 57,
+      "gk_kicking": 59,
+      "gk_reflexes": 61,
+      "gk_speed": 37,
+      "gk_positioning": 58
     }
   },
   {
@@ -70196,12 +70196,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 56,
+      "gk_handling": 54,
+      "gk_kicking": 54,
+      "gk_reflexes": 55,
+      "gk_speed": 28,
+      "gk_positioning": 55
     }
   },
   {
@@ -70262,12 +70262,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 59,
+      "gk_handling": 50,
+      "gk_kicking": 50,
+      "gk_reflexes": 47,
+      "gk_speed": 22,
+      "gk_positioning": 51
     }
   },
   {
@@ -70873,12 +70873,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 59,
+      "gk_handling": 56,
+      "gk_kicking": 58,
+      "gk_reflexes": 61,
+      "gk_speed": 51,
+      "gk_positioning": 61
     }
   },
   {
@@ -71210,12 +71210,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 56,
+      "gk_handling": 53,
+      "gk_kicking": 52,
+      "gk_reflexes": 55,
+      "gk_speed": 26,
+      "gk_positioning": 53
     }
   },
   {
@@ -71549,12 +71549,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 62,
+      "gk_kicking": 61,
+      "gk_reflexes": 63,
+      "gk_speed": 28,
+      "gk_positioning": 64
     }
   },
   {
@@ -71954,12 +71954,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 58,
+      "gk_kicking": 53,
+      "gk_reflexes": 55,
+      "gk_speed": 58,
+      "gk_positioning": 58
     }
   },
   {
@@ -72123,12 +72123,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 54,
+      "gk_handling": 52,
+      "gk_kicking": 52,
+      "gk_reflexes": 53,
+      "gk_speed": 22,
+      "gk_positioning": 51
     }
   },
   {
@@ -72357,12 +72357,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 64,
+      "gk_kicking": 64,
+      "gk_reflexes": 64,
+      "gk_speed": 39,
+      "gk_positioning": 63
     }
   },
   {
@@ -72935,12 +72935,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 55,
+      "gk_kicking": 58,
+      "gk_reflexes": 60,
+      "gk_speed": 37,
+      "gk_positioning": 55
     }
   },
   {
@@ -73308,12 +73308,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 62,
+      "gk_kicking": 61,
+      "gk_reflexes": 63,
+      "gk_speed": 41,
+      "gk_positioning": 63
     }
   },
   {
@@ -73648,12 +73648,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 63,
+      "gk_kicking": 57,
+      "gk_reflexes": 60,
+      "gk_speed": 29,
+      "gk_positioning": 59
     }
   },
   {
@@ -74090,12 +74090,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 53,
+      "gk_handling": 50,
+      "gk_kicking": 50,
+      "gk_reflexes": 51,
+      "gk_speed": 23,
+      "gk_positioning": 51
     }
   },
   {
@@ -74940,12 +74940,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 55,
+      "gk_handling": 55,
+      "gk_kicking": 54,
+      "gk_reflexes": 56,
+      "gk_speed": 29,
+      "gk_positioning": 54
     }
   },
   {
@@ -75175,12 +75175,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 50,
+      "gk_handling": 54,
+      "gk_kicking": 50,
+      "gk_reflexes": 52,
+      "gk_speed": 28,
+      "gk_positioning": 49
     }
   },
   {
@@ -75647,12 +75647,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 62,
+      "gk_kicking": 58,
+      "gk_reflexes": 61,
+      "gk_speed": 41,
+      "gk_positioning": 60
     }
   },
   {
@@ -75814,12 +75814,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 61,
+      "gk_kicking": 60,
+      "gk_reflexes": 60,
+      "gk_speed": 21,
+      "gk_positioning": 60
     }
   },
   {
@@ -76017,12 +76017,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 56,
+      "gk_handling": 53,
+      "gk_kicking": 54,
+      "gk_reflexes": 55,
+      "gk_speed": 31,
+      "gk_positioning": 53
     }
   },
   {
@@ -76594,12 +76594,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 59,
+      "gk_kicking": 57,
+      "gk_reflexes": 62,
+      "gk_speed": 31,
+      "gk_positioning": 63
     }
   },
   {
@@ -76663,12 +76663,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 61,
+      "gk_kicking": 58,
+      "gk_reflexes": 61,
+      "gk_speed": 22,
+      "gk_positioning": 59
     }
   },
   {
@@ -77271,12 +77271,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 57,
+      "gk_handling": 63,
+      "gk_kicking": 64,
+      "gk_reflexes": 65,
+      "gk_speed": 43,
+      "gk_positioning": 62
     }
   },
   {
@@ -77855,12 +77855,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 55,
+      "gk_handling": 53,
+      "gk_kicking": 59,
+      "gk_reflexes": 60,
+      "gk_speed": 31,
+      "gk_positioning": 54
     }
   },
   {
@@ -77922,12 +77922,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 56,
+      "gk_handling": 52,
+      "gk_kicking": 55,
+      "gk_reflexes": 57,
+      "gk_speed": 34,
+      "gk_positioning": 54
     }
   },
   {
@@ -78265,12 +78265,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 59,
+      "gk_kicking": 60,
+      "gk_reflexes": 63,
+      "gk_speed": 50,
+      "gk_positioning": 61
     }
   },
   {
@@ -78678,12 +78678,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 56,
+      "gk_handling": 56,
+      "gk_kicking": 60,
+      "gk_reflexes": 58,
+      "gk_speed": 30,
+      "gk_positioning": 60
     }
   },
   {
@@ -79530,12 +79530,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 61,
+      "gk_kicking": 62,
+      "gk_reflexes": 63,
+      "gk_speed": 51,
+      "gk_positioning": 61
     }
   },
   {
@@ -79563,12 +79563,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 62,
+      "gk_kicking": 60,
+      "gk_reflexes": 63,
+      "gk_speed": 46,
+      "gk_positioning": 61
     }
   },
   {
@@ -79766,12 +79766,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 53,
+      "gk_handling": 46,
+      "gk_kicking": 48,
+      "gk_reflexes": 51,
+      "gk_speed": 25,
+      "gk_positioning": 52
     }
   },
   {
@@ -80167,12 +80167,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 59,
+      "gk_kicking": 56,
+      "gk_reflexes": 61,
+      "gk_speed": 46,
+      "gk_positioning": 59
     }
   },
   {
@@ -80269,12 +80269,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 61,
+      "gk_handling": 54,
+      "gk_kicking": 58,
+      "gk_reflexes": 61,
+      "gk_speed": 21,
+      "gk_positioning": 56
     }
   },
   {
@@ -80915,12 +80915,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 65,
+      "gk_handling": 61,
+      "gk_kicking": 62,
+      "gk_reflexes": 64,
+      "gk_speed": 42,
+      "gk_positioning": 64
     }
   },
   {
@@ -81561,12 +81561,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 55,
+      "gk_handling": 53,
+      "gk_kicking": 52,
+      "gk_reflexes": 53,
+      "gk_speed": 16,
+      "gk_positioning": 54
     }
   },
   {
@@ -81594,12 +81594,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 54,
+      "gk_handling": 52,
+      "gk_kicking": 51,
+      "gk_reflexes": 52,
+      "gk_speed": 39,
+      "gk_positioning": 50
     }
   },
   {
@@ -82134,12 +82134,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 58,
+      "gk_handling": 59,
+      "gk_kicking": 53,
+      "gk_reflexes": 58,
+      "gk_speed": 46,
+      "gk_positioning": 60
     }
   },
   {
@@ -82438,12 +82438,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 58,
+      "gk_handling": 55,
+      "gk_kicking": 55,
+      "gk_reflexes": 57,
+      "gk_speed": 25,
+      "gk_positioning": 56
     }
   },
   {
@@ -83151,12 +83151,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 58,
+      "gk_kicking": 58,
+      "gk_reflexes": 58,
+      "gk_speed": 27,
+      "gk_positioning": 61
     }
   },
   {
@@ -83252,12 +83252,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 59,
+      "gk_handling": 58,
+      "gk_kicking": 58,
+      "gk_reflexes": 60,
+      "gk_speed": 38,
+      "gk_positioning": 58
     }
   },
   {
@@ -84101,12 +84101,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 57,
+      "gk_handling": 55,
+      "gk_kicking": 59,
+      "gk_reflexes": 58,
+      "gk_speed": 48,
+      "gk_positioning": 56
     }
   },
   {
@@ -84134,12 +84134,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 57,
+      "gk_handling": 55,
+      "gk_kicking": 57,
+      "gk_reflexes": 58,
+      "gk_speed": 44,
+      "gk_positioning": 56
     }
   },
   {
@@ -84474,12 +84474,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 62,
+      "gk_handling": 61,
+      "gk_kicking": 62,
+      "gk_reflexes": 64,
+      "gk_speed": 27,
+      "gk_positioning": 62
     }
   },
   {
@@ -84950,12 +84950,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 58,
+      "gk_handling": 57,
+      "gk_kicking": 59,
+      "gk_reflexes": 59,
+      "gk_speed": 45,
+      "gk_positioning": 57
     }
   },
   {
@@ -85527,12 +85527,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 59,
+      "gk_kicking": 59,
+      "gk_reflexes": 61,
+      "gk_speed": 37,
+      "gk_positioning": 60
     }
   },
   {
@@ -85663,12 +85663,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 56,
+      "gk_handling": 57,
+      "gk_kicking": 56,
+      "gk_reflexes": 56,
+      "gk_speed": 27,
+      "gk_positioning": 58
     }
   },
   {
@@ -85831,12 +85831,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 55,
+      "gk_handling": 52,
+      "gk_kicking": 52,
+      "gk_reflexes": 54,
+      "gk_speed": 24,
+      "gk_positioning": 53
     }
   },
   {
@@ -86504,12 +86504,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 63,
+      "gk_handling": 55,
+      "gk_kicking": 56,
+      "gk_reflexes": 64,
+      "gk_speed": 38,
+      "gk_positioning": 61
     }
   },
   {
@@ -86608,12 +86608,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 60,
+      "gk_handling": 57,
+      "gk_kicking": 54,
+      "gk_reflexes": 62,
+      "gk_speed": 51,
+      "gk_positioning": 54
     }
   },
   {
@@ -86810,12 +86810,12 @@
       "dribbling": 0,
       "defending": 0,
       "physic": 0,
-      "gk_diving": 0,
-      "gk_handling": 0,
-      "gk_kicking": 0,
-      "gk_reflexes": 0,
-      "gk_speed": 0,
-      "gk_positioning": 0
+      "gk_diving": 50,
+      "gk_handling": 46,
+      "gk_kicking": 53,
+      "gk_reflexes": 51,
+      "gk_speed": 35,
+      "gk_positioning": 44
     }
   }
 ]
