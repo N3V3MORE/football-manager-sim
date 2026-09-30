@@ -19,7 +19,7 @@ type UpcomingFixturesCardProps = {
   onPress: () => void;
 };
 
-export function UpcomingFixturesCard({ rows, onPress }: UpcomingFixturesCardProps) {
+export const UpcomingFixturesCard = React.memo(function UpcomingFixturesCard({ rows, onPress }: UpcomingFixturesCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
       <Text style={styles.cardTitle}>Upcoming Fixtures</Text>
@@ -52,7 +52,7 @@ export function UpcomingFixturesCard({ rows, onPress }: UpcomingFixturesCardProp
       <Text style={styles.smallTapText}>Tap to view full calendar</Text>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

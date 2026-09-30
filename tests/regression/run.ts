@@ -1,21 +1,18 @@
-// Aggregated regression runner. Checks are split by domain into
-// ./calendar, ./match, ./transfer, ./board, ./persistence, ./live-match, ./squad.
-// Execution order matches the original scripts/regression_checks.ts runner.
-import { checkFormationSlotLookupUsesExactFormation, checkFormationMapRejectsWrongPositions, checkSeededFormationDiversity, checkRosterSizeConstraints, checkUnavailableBenchPlayersCanBeRemoved, checkRecoveredSelectedBenchDoesNotOverflow, checkLineupActionsPreserveBenchLimit, checkLineupInboxActionFiltersStaleFormationMap, checkTacticalAdaptationRunsOncePerPlayedCount, checkTacticalAdaptationIgnoresUnavailablePlayers } from './squad';
-import { checkAdministrativeResultsAreExcludedFromScoreLogMismatch, checkCleanSheetWindows, checkPossessionFlowIsNotStrictAlternation, checkBranchGuards, checkSanityMatchScores, checkDisciplineRatesArePlausible, checkQuickSimMatchSummaryIncludesStatsAndRatings, checkMatchRatingsIncludeIndividualOutput, checkCleanSheetRatingsUsePlayerWindow, checkPenaltyShootoutUsesIndividualKicks, checkQuickSimKnockoutUsesExtraTimeBeforePenalties, checkLeaguePlayoffFixtureDoesNotChangeTableStats } from './match';
+import { checkAiAutoplayCommandProducesReport } from './aiAutoplay';
+import { checkFormationSlotLookupUsesExactFormation, checkFormationMapRejectsWrongPositions, checkRosterSizeConstraints, checkUnavailableBenchPlayersCanBeRemoved, checkRecoveredSelectedBenchDoesNotOverflow, checkLineupActionsPreserveBenchLimit, checkLineupInboxActionFiltersStaleFormationMap, checkTacticalAdaptationRunsOncePerPlayedCount, checkTacticalAdaptationIgnoresUnavailablePlayers } from './squad';
+import { checkAdministrativeResultsAreExcludedFromScoreLogMismatch, checkCleanSheetWindows, checkQuickSimMatchSummaryIncludesStatsAndRatings, checkMatchRatingsIncludeIndividualOutput, checkCleanSheetRatingsUsePlayerWindow, checkPenaltyShootoutUsesIndividualKicks, checkQuickSimKnockoutUsesExtraTimeBeforePenalties, checkLeaguePlayoffFixtureDoesNotChangeTableStats } from './match';
 import { checkLiveSentOffMinutes, checkLiveSubstitutionsApplyBeforeFullTime, checkUserAiDoesNotSpendLiveSubstitutions, checkManualLiveSubstitutionAndShapeAreMatchLocal, checkManualLiveSubstitutionValidation, checkLiveMatchSummaryIncludesStatsAndRatings, checkLiveKnockoutExtraTimeTransition, checkActiveLiveMatchBlocksWeekAdvance, checkStaleLiveMatchRecovery, checkDirectFinishCompletesUnprocessedLiveMatch, checkZustandStoreLiveMatchCleanup } from './live-match';
-import { checkCompetitionPanelHandlesMissingTeam, checkDivisionBootstrap, checkPromotionRelegation, checkSeasonReportsUseCompetitionLifecycleAndLeagueTables, checkSeasonEndProgressionUpdatesMatchAbility, checkSeasonRolloverReplenishesMinimumSquadAndGoalkeepers, checkEflPlayoffsAreScheduledAfterRegularSeason, checkEflPlayoffSemiFinalsUseAggregateTiebreak, checkRolloverWaitsForPlayoffFinal } from './calendar';
-import { checkDeadStoreActionsAreRemoved, checkUserTeamProgressionDoesNotAdaptFormation, checkManagerProfilesLoaded, checkActiveCupRoundCountsAsReached, checkBoardObjectiveIdsAreStable, checkMidSeasonSackingTerminatesImmediately, checkNonTerminalSackingWarningDoesNotDismiss, checkSeasonEndSackingUsesSharedThreshold, checkUiContractsMatchEngineState, checkInitialGameSetupCanBeSeeded, checkStoreInitializesSelectedTeamDefaults } from './board';
-import { checkAcceptCounterMovesPlayerAndMarksNegotiationAccepted, checkActiveNegotiationsCanBeWithdrawnInUi, checkApproachCoreNeededPlayerRejectsWithoutNegotiation, checkApproachUnlistedBackupCreatesPendingNegotiation, checkListedUnderAskCreatesCounterNegotiationWithoutMove, checkManualTransfersRespectWindow, checkManualTransfersRejectNonFiniteMoney, checkManualFreeAgentSigningMovesPlayerDuringWindow, checkManualFreeAgentSigningWorksOutsideWindow, checkManualFreeAgentSigningRejectsFullSquad, checkRivalBidWinsWhenUserDoesNotMatch, checkWeeklyNegotiationsExpireAfterDeadline, checkAiTransferListingsExpireOutsideWindow, checkAiBuyerAtMaximumSquadSizeCannotBuy, checkAiSignsFreeAgentForUrgentSquadNeed, checkAiStaleListedTargetIsRevalidated, checkEliteAiRejectsUnderStandardTarget, checkExperiencedAiPrefersOlderEqualTarget, checkAiTransferRespectsOperatingWageAffordability, checkContractDeparturesPreferViableDestinations, checkSimultaneousExpiriesRecomputeAgainstProvisionalSquad, checkTransferFinanceHelpersLiveInTransferEngine } from './transfer';
-import { checkFreezeRecoveryControlsAreVisible, checkStaleFormationMapRecoveryModel, checkFreeAgentSaveReloadEquivalence, checkValidationCatchesPastUnplayedFixturesAndNonFiniteFinances } from './persistence';
+import { checkCompetitionPanelHandlesMissingTeam, checkDivisionBootstrap, checkPromotionRelegation, checkSeasonEndProgressionUpdatesMatchAbility, checkSeasonRolloverReplenishesMinimumSquadAndGoalkeepers, checkEflPlayoffsAreScheduledAfterRegularSeason, checkEflPlayoffSemiFinalsUseAggregateTiebreak, checkRolloverWaitsForPlayoffFinal } from './calendar';
+import { checkUserTeamProgressionDoesNotAdaptFormation, checkManagerProfilesLoaded, checkActiveCupRoundCountsAsReached, checkBoardObjectiveIdsAreStable, checkMidSeasonSackingTerminatesImmediately, checkNonTerminalSackingWarningDoesNotDismiss, checkInitialGameSetupCanBeSeeded, checkStoreInitializesSelectedTeamDefaults } from './board';
+import { checkAcceptCounterMovesPlayerAndMarksNegotiationAccepted, checkApproachCoreNeededPlayerRejectsWithoutNegotiation, checkApproachUnlistedBackupCreatesPendingNegotiation, checkListedUnderAskCreatesCounterNegotiationWithoutMove, checkManualTransfersRespectWindow, checkManualTransfersRejectNonFiniteMoney, checkManualFreeAgentSigningMovesPlayerDuringWindow, checkManualFreeAgentSigningWorksOutsideWindow, checkManualFreeAgentSigningRejectsFullSquad, checkRivalBidWinsWhenUserDoesNotMatch, checkWeeklyNegotiationsExpireAfterDeadline, checkAiTransferListingsExpireOutsideWindow, checkAiBuyerAtMaximumSquadSizeCannotBuy, checkAiSignsFreeAgentForUrgentSquadNeed, checkAiStaleListedTargetIsRevalidated, checkEliteAiRejectsUnderStandardTarget, checkExperiencedAiPrefersOlderEqualTarget, checkAiTransferRespectsOperatingWageAffordability, checkContractDeparturesPreferViableDestinations, checkSimultaneousExpiriesRecomputeAgainstProvisionalSquad } from './transfer';
+import { checkFreeAgentSaveReloadEquivalence } from './persistence';
 import { checkWeeklyTrainingFocusRaisesFocusedStat, checkTrainingRespectsPotentialCap, checkSeasonEndProgressionRespectsPotentialCap, checkYouthIntakeAssignsHiddenPotential } from './training';
-import { checkPlayerRoleCompatibilityMatrix, checkPlayerRoleEnergyDrainModifiers, checkRolePickerShowsRoleEffects, checkSlotKeyedPlayerRoleLookup, checkPlayerRolesAdjustShapeProfile, checkMatchRuntimeUsesPlayerRoles } from './roles';
+import { checkPlayerRoleCompatibilityMatrix, checkPlayerRoleEnergyDrainModifiers, checkSlotKeyedPlayerRoleLookup, checkPlayerRolesAdjustShapeProfile } from './roles';
 import { checkRelentlessTraitReducesFatiguePenalty, checkSeededPlayersNormalizeTraits, checkTraitBonusesExposeMechanicalEffects, checkTraitRegistryCoversSeededTraits, checkTraitTrainingFocusAddsXp } from './traits';
 import { checkWeeklyProgressionAppliesRevenueBreakdown, checkWeeklyRevenueUsesDivisionAndSponsorRates } from './finance';
 import { checkPlayerRatingUtilsPreserveSharedCurves } from './playerRatingUtils';
-import { checkAppendFixtureResultToStatePreservesPostMatchPatch, checkQuickSimActionLivesWithFixtureResolution } from './fixtureResolution';
-import { checkInboxHelpersUseConcreteModules, checkManagedTeamObjectivesAreInlined, checkSelectedComponentsUseDesignTokens } from './storeStructure';
-import { checkAiAutoplayCommandProducesReport, checkAiAutoplayRotationDoesNotReuseBenchPlayer, checkAiAutoplayRunnerScriptsExist } from './aiAutoplay';
+import { checkAppendFixtureResultToStatePreservesPostMatchPatch } from './fixtureResolution';
+import { checkAiAutoplayRotationDoesNotReuseBenchPlayer } from './aiAutoplay';
 import { checkNegotiationsRevalidateCurrentState } from './transfer';
 import { checkSeasonRunnerIgnoresSackingAndBoundsErrors } from './aiAutoplay';
 import { checkQuickSimAbandonmentStopsImmediately, checkZeroMoraleRemainsZeroAfterLoss } from './match';
@@ -26,237 +23,101 @@ import { checkGoalkeeperTrainingUsesKeeperStats } from './training';
 import { checkAiGoalkeeperTrainingAvoidsCappedStats } from './aiAutoplay';
 import { checkEmergencyGoalkeeperCanContinueAndSubstitute } from './live-match';
 
-const runRegressionChecks = () => {
-  console.log('--- ENGINE REGRESSION CHECKS ---');
-  checkNegotiationsRevalidateCurrentState();
-  checkZeroMoraleRemainsZeroAfterLoss();
-  checkQuickSimAbandonmentStopsImmediately();
-  checkAggregateLiveAndVoidRecovery();
-  checkUnemployedCareerRecovery();
-  checkGoalkeeperTrainingUsesKeeperStats();
-  checkAiGoalkeeperTrainingAvoidsCappedStats();
-  checkEmergencyGoalkeeperCanContinueAndSubstitute();
-  checkQuickLineupKeepsBackupKeeperOutfieldFree();
-  checkSeededGoalkeeperAttributes();
-  checkAssistantRotationPreservesFullLineup();
-  checkSeasonRunnerIgnoresSackingAndBoundsErrors();
-  console.log('[OK] Transfer revalidation, zero morale and injury-crisis lineup checks passed');
-  checkFormationSlotLookupUsesExactFormation();
-  console.log('[OK] Exact formation slot lookup passed');
-  checkCleanSheetWindows();
-  console.log('[OK] Clean-sheet window checks passed');
-  checkLiveSentOffMinutes();
-  console.log('[OK] Live sent-off minute check passed');
-  checkPossessionFlowIsNotStrictAlternation();
-  console.log('[OK] Possession flow variability guard passed');
-  checkAdministrativeResultsAreExcludedFromScoreLogMismatch();
-  console.log('[OK] Administrative score-log audit guard passed');
-  checkLiveSubstitutionsApplyBeforeFullTime();
-  console.log('[OK] Live in-match substitution check passed');
-  checkUserAiDoesNotSpendLiveSubstitutions();
-  console.log('[OK] User live AI-substitution guard passed');
-  checkManualLiveSubstitutionAndShapeAreMatchLocal();
-  console.log('[OK] Manual live substitution and shape locality passed');
-  checkManualLiveSubstitutionValidation();
-  console.log('[OK] Manual live substitution validation passed');
-  checkLiveMatchSummaryIncludesStatsAndRatings();
-  console.log('[OK] Live match summary checks passed');
-  checkLiveKnockoutExtraTimeTransition();
-  console.log('[OK] Live extra-time transition passed');
-  checkActiveLiveMatchBlocksWeekAdvance();
-  console.log('[OK] Active live match week-advance guard passed');
-  checkStaleLiveMatchRecovery();
-  console.log('[OK] Stale live-match recovery passed');
-  checkDirectFinishCompletesUnprocessedLiveMatch();
-  console.log('[OK] Direct live-match finish completion passed');
-  checkCompetitionPanelHandlesMissingTeam();
-  console.log('[OK] Competition panel missing-team fallback passed');
-  checkFreezeRecoveryControlsAreVisible();
-  console.log('[OK] Freeze recovery controls passed');
-  checkBranchGuards();
-  console.log('[OK] Second-yellow and shape parity guards passed');
-  checkUserTeamProgressionDoesNotAdaptFormation();
-  console.log('[OK] User team tactical adaptation guard passed');
-  checkDeadStoreActionsAreRemoved();
-  console.log('[OK] Dead public store action cleanup passed');
-  checkInboxHelpersUseConcreteModules();
-  console.log('[OK] Inbox helper file merge passed');
-  checkManagedTeamObjectivesAreInlined();
-  console.log('[OK] Managed team objectives wrapper removal passed');
-  checkSelectedComponentsUseDesignTokens();
-  console.log('[OK] Selected component color token migration passed');
-  checkAiAutoplayRunnerScriptsExist();
-  console.log('[OK] AI autoplay runner scripts passed');
-  checkAiAutoplayCommandProducesReport();
-  console.log('[OK] AI autoplay command report passed');
-  checkAiAutoplayRotationDoesNotReuseBenchPlayer();
-  console.log('[OK] AI autoplay rotation reuse guard passed');
-  checkManagerProfilesLoaded();
-  console.log('[OK] Manager profile loading passed');
-  checkDivisionBootstrap();
-  console.log('[OK] Division bootstrap check passed');
-  checkPromotionRelegation();
-  console.log('[OK] Promotion and relegation checks passed');
-  checkEflPlayoffsAreScheduledAfterRegularSeason();
-  console.log('[OK] EFL play-off scheduling checks passed');
-  checkEflPlayoffSemiFinalsUseAggregateTiebreak();
-  console.log('[OK] EFL play-off aggregate tiebreak checks passed');
-  checkRolloverWaitsForPlayoffFinal();
-  console.log('[OK] Play-off season extension check passed');
-  checkStaleFormationMapRecoveryModel();
-  console.log('[OK] Stale formation-map recovery model passed');
-  checkFormationMapRejectsWrongPositions();
-  console.log('[OK] Wrong-position formation-map recovery passed');
-  checkActiveCupRoundCountsAsReached();
-  console.log('[OK] Active cup-round objective recognition passed');
-  checkBoardObjectiveIdsAreStable();
-  console.log('[OK] Stable board objective IDs passed');
-  checkMidSeasonSackingTerminatesImmediately();
-  console.log('[OK] Mid-season terminal sacking passed');
-  checkNonTerminalSackingWarningDoesNotDismiss();
-  console.log('[OK] Non-terminal sacking warning passed');
-  checkSeasonEndSackingUsesSharedThreshold();
-  console.log('[OK] Shared season-end sacking threshold passed');
-  checkSeededFormationDiversity();
-  console.log('[OK] Seeded formation diversity check passed');
-
-  checkSanityMatchScores();
-  console.log('[OK] Sanity Match Scores check passed');
-  checkDisciplineRatesArePlausible();
-  console.log('[OK] Discipline rate plausibility passed');
-  checkQuickSimMatchSummaryIncludesStatsAndRatings();
-  console.log('[OK] Quick-sim match summary checks passed');
-  checkAppendFixtureResultToStatePreservesPostMatchPatch();
-  console.log('[OK] Shared fixture result append helper passed');
-  checkQuickSimActionLivesWithFixtureResolution();
-  console.log('[OK] Quick-sim action file merge passed');
-  checkPenaltyShootoutUsesIndividualKicks();
-  console.log('[OK] Individual penalty shootout checks passed');
-  checkQuickSimKnockoutUsesExtraTimeBeforePenalties();
-  console.log('[OK] Extra-time knockout tie checks passed');
-  checkLeaguePlayoffFixtureDoesNotChangeTableStats();
-  console.log('[OK] League play-off table accounting check passed');
-
-  checkZustandStoreLiveMatchCleanup();
-  console.log('[OK] Zustand Live Match cleanup check passed');
-
-  checkRosterSizeConstraints();
-  console.log('[OK] Roster Size constraints check passed');
-
-  checkManualTransfersRespectWindow();
-  console.log('[OK] Manual transfer window guard passed');
-  checkTransferFinanceHelpersLiveInTransferEngine();
-  console.log('[OK] Transfer finance helper merge passed');
-  checkManualTransfersRejectNonFiniteMoney();
-  console.log('[OK] Manual transfer finite money guard passed');
-  checkApproachUnlistedBackupCreatesPendingNegotiation();
-  console.log('[OK] Unlisted player approach negotiation passed');
-  checkApproachCoreNeededPlayerRejectsWithoutNegotiation();
-  console.log('[OK] Core-player approach rejection passed');
-  checkListedUnderAskCreatesCounterNegotiationWithoutMove();
-  console.log('[OK] Listed-player counter negotiation passed');
-  checkAcceptCounterMovesPlayerAndMarksNegotiationAccepted();
-  console.log('[OK] Accept transfer counter passed');
-  checkWeeklyNegotiationsExpireAfterDeadline();
-  console.log('[OK] Weekly negotiation expiry passed');
-  checkRivalBidWinsWhenUserDoesNotMatch();
-  console.log('[OK] Rival transfer bid resolution passed');
-  checkActiveNegotiationsCanBeWithdrawnInUi();
-  console.log('[OK] Active negotiation withdrawal UI passed');
-  checkManualFreeAgentSigningMovesPlayerDuringWindow();
-  console.log('[OK] Manual free-agent signing passed');
-  checkManualFreeAgentSigningWorksOutsideWindow();
-  console.log('[OK] Manual free-agent outside-window signing passed');
-  checkManualFreeAgentSigningRejectsFullSquad();
-  console.log('[OK] Manual free-agent squad-cap guard passed');
-  checkUnavailableBenchPlayersCanBeRemoved();
-  console.log('[OK] Unavailable bench player cleanup passed');
-  checkRecoveredSelectedBenchDoesNotOverflow();
-  console.log('[OK] Recovered selected bench overflow guard passed');
-  checkLineupActionsPreserveBenchLimit();
-  console.log('[OK] Lineup action bench limit passed');
-  checkPlayerRoleCompatibilityMatrix();
-  console.log('[OK] Player role compatibility matrix passed');
-  checkSlotKeyedPlayerRoleLookup();
-  console.log('[OK] Slot-keyed player role lookup passed');
-  checkPlayerRolesAdjustShapeProfile();
-  console.log('[OK] Player role shape adjustments passed');
-  checkMatchRuntimeUsesPlayerRoles();
-  console.log('[OK] Match runtime role integration guard passed');
-  checkPlayerRoleEnergyDrainModifiers();
-  console.log('[OK] Player role energy drain modifiers passed');
-  checkRolePickerShowsRoleEffects();
-  console.log('[OK] Role picker effect descriptions passed');
-  checkLineupInboxActionFiltersStaleFormationMap();
-  console.log('[OK] Lineup inbox stale formation map check passed');
-  checkSeasonReportsUseCompetitionLifecycleAndLeagueTables();
-  console.log('[OK] Season reporting lifecycle guards passed');
-  checkAiTransferListingsExpireOutsideWindow();
-  console.log('[OK] AI transfer listing expiry passed');
-  checkAiBuyerAtMaximumSquadSizeCannotBuy();
-  console.log('[OK] AI transfer maximum squad guard passed');
-  checkAiSignsFreeAgentForUrgentSquadNeed();
-  console.log('[OK] AI free-agent signing passed');
-  checkAiStaleListedTargetIsRevalidated();
-  console.log('[OK] AI stale listing revalidation passed');
-  checkEliteAiRejectsUnderStandardTarget();
-  console.log('[OK] AI elite target quality guard passed');
-  checkExperiencedAiPrefersOlderEqualTarget();
-  console.log('[OK] AI experienced target preference passed');
-  checkAiTransferRespectsOperatingWageAffordability();
-  console.log('[OK] AI wage affordability guard passed');
-  checkSeasonEndProgressionUpdatesMatchAbility();
-  console.log('[OK] Season-end player progression ability update passed');
-  checkWeeklyTrainingFocusRaisesFocusedStat();
-  console.log('[OK] Weekly training focus progression passed');
-  checkTrainingRespectsPotentialCap();
-  console.log('[OK] Training potential cap passed');
-  checkSeasonEndProgressionRespectsPotentialCap();
-  console.log('[OK] Season-end potential cap passed');
-  checkYouthIntakeAssignsHiddenPotential();
-  console.log('[OK] Youth hidden potential assignment passed');
-  checkPlayerRatingUtilsPreserveSharedCurves();
-  console.log('[OK] Shared player rating utility curves passed');
-  checkSeededPlayersNormalizeTraits();
-  console.log('[OK] Seeded trait normalization passed');
-  checkTraitRegistryCoversSeededTraits();
-  console.log('[OK] Trait registry seed coverage passed');
-  checkTraitBonusesExposeMechanicalEffects();
-  console.log('[OK] Trait mechanical effects passed');
-  checkTraitTrainingFocusAddsXp();
-  console.log('[OK] Trait training XP integration passed');
-  checkRelentlessTraitReducesFatiguePenalty();
-  console.log('[OK] Trait fatigue integration passed');
-  checkWeeklyRevenueUsesDivisionAndSponsorRates();
-  console.log('[OK] Weekly revenue breakdown passed');
-  checkWeeklyProgressionAppliesRevenueBreakdown();
-  console.log('[OK] Weekly finance progression passed');
-  checkContractDeparturesPreferViableDestinations();
-  console.log('[OK] Contract departure destination quality passed');
-  checkFreeAgentSaveReloadEquivalence();
-  console.log('[OK] Free-agent save/reload equivalence passed');
-  checkSeasonRolloverReplenishesMinimumSquadAndGoalkeepers();
-  console.log('[OK] Season rollover replenishment coverage passed');
-  checkSimultaneousExpiriesRecomputeAgainstProvisionalSquad();
-  console.log('[OK] Simultaneous contract expiry recomputation passed');
-  checkUiContractsMatchEngineState();
-  console.log('[OK] UI data contract checks passed');
-  checkInitialGameSetupCanBeSeeded();
-  console.log('[OK] Seeded initial game setup passed');
-  checkStoreInitializesSelectedTeamDefaults();
-  console.log('[OK] Selected team initialization defaults passed');
-  checkTacticalAdaptationRunsOncePerPlayedCount();
-  console.log('[OK] Tactical adaptation repeat guard passed');
-  checkTacticalAdaptationIgnoresUnavailablePlayers();
-  console.log('[OK] Tactical adaptation availability check passed');
-  checkMatchRatingsIncludeIndividualOutput();
-  console.log('[OK] Match rating contribution checks passed');
-  checkCleanSheetRatingsUsePlayerWindow();
-  console.log('[OK] Windowed clean-sheet rating check passed');
-  checkValidationCatchesPastUnplayedFixturesAndNonFiniteFinances();
-  console.log('[OK] Agent validation coverage checks passed');
-
-  console.log('--- REGRESSION CHECKS COMPLETE ---');
-};
-
-runRegressionChecks();
+export const domainChecks = [
+  { name: 'agent: autoplay command report schema', run: checkAiAutoplayCommandProducesReport },
+  { name: 'transfer: Negotiations Revalidate Current State', run: checkNegotiationsRevalidateCurrentState },
+  { name: 'match: Zero Morale Remains Zero After Loss', run: checkZeroMoraleRemainsZeroAfterLoss },
+  { name: 'match: Quick Sim Abandonment Stops Immediately', run: checkQuickSimAbandonmentStopsImmediately },
+  { name: 'calendar: Aggregate Live And Void Recovery', run: checkAggregateLiveAndVoidRecovery },
+  { name: 'board: Unemployed Career Recovery', run: checkUnemployedCareerRecovery },
+  { name: 'training: Goalkeeper Training Uses Keeper Stats', run: checkGoalkeeperTrainingUsesKeeperStats },
+  { name: 'aiAutoplay: Ai Goalkeeper Training Avoids Capped Stats', run: checkAiGoalkeeperTrainingAvoidsCappedStats },
+  { name: 'live-match: Emergency Goalkeeper Can Continue And Substitute', run: checkEmergencyGoalkeeperCanContinueAndSubstitute },
+  { name: 'squad: Quick Lineup Keeps Backup Keeper Outfield Free', run: checkQuickLineupKeepsBackupKeeperOutfieldFree },
+  { name: 'squad: Seeded Goalkeeper Attributes', run: checkSeededGoalkeeperAttributes },
+  { name: 'squad: Assistant Rotation Preserves Full Lineup', run: checkAssistantRotationPreservesFullLineup },
+  { name: 'aiAutoplay: Season Runner Ignores Sacking And Bounds Errors', run: checkSeasonRunnerIgnoresSackingAndBoundsErrors },
+  { name: 'squad: Formation Slot Lookup Uses Exact Formation', run: checkFormationSlotLookupUsesExactFormation },
+  { name: 'match: Clean Sheet Windows', run: checkCleanSheetWindows },
+  { name: 'live-match: Live Sent Off Minutes', run: checkLiveSentOffMinutes },
+  { name: 'match: Administrative Results Are Excluded From Score Log Mismatch', run: checkAdministrativeResultsAreExcludedFromScoreLogMismatch },
+  { name: 'live-match: Live Substitutions Apply Before Full Time', run: checkLiveSubstitutionsApplyBeforeFullTime },
+  { name: 'live-match: User Ai Does Not Spend Live Substitutions', run: checkUserAiDoesNotSpendLiveSubstitutions },
+  { name: 'live-match: Manual Live Substitution And Shape Are Match Local', run: checkManualLiveSubstitutionAndShapeAreMatchLocal },
+  { name: 'live-match: Manual Live Substitution Validation', run: checkManualLiveSubstitutionValidation },
+  { name: 'live-match: Live Match Summary Includes Stats And Ratings', run: checkLiveMatchSummaryIncludesStatsAndRatings },
+  { name: 'live-match: Live Knockout Extra Time Transition', run: checkLiveKnockoutExtraTimeTransition },
+  { name: 'live-match: Active Live Match Blocks Week Advance', run: checkActiveLiveMatchBlocksWeekAdvance },
+  { name: 'live-match: Stale Live Match Recovery', run: checkStaleLiveMatchRecovery },
+  { name: 'live-match: Direct Finish Completes Unprocessed Live Match', run: checkDirectFinishCompletesUnprocessedLiveMatch },
+  { name: 'calendar: Competition Panel Handles Missing Team', run: checkCompetitionPanelHandlesMissingTeam },
+  { name: 'board: User Team Progression Does Not Adapt Formation', run: checkUserTeamProgressionDoesNotAdaptFormation },
+  { name: 'aiAutoplay: Ai Autoplay Rotation Does Not Reuse Bench Player', run: checkAiAutoplayRotationDoesNotReuseBenchPlayer },
+  { name: 'board: Manager Profiles Loaded', run: checkManagerProfilesLoaded },
+  { name: 'calendar: Division Bootstrap', run: checkDivisionBootstrap },
+  { name: 'calendar: Promotion Relegation', run: checkPromotionRelegation },
+  { name: 'calendar: Efl Playoffs Are Scheduled After Regular Season', run: checkEflPlayoffsAreScheduledAfterRegularSeason },
+  { name: 'calendar: Efl Playoff Semi Finals Use Aggregate Tiebreak', run: checkEflPlayoffSemiFinalsUseAggregateTiebreak },
+  { name: 'calendar: Rollover Waits For Playoff Final', run: checkRolloverWaitsForPlayoffFinal },
+  { name: 'squad: Formation Map Rejects Wrong Positions', run: checkFormationMapRejectsWrongPositions },
+  { name: 'board: Active Cup Round Counts As Reached', run: checkActiveCupRoundCountsAsReached },
+  { name: 'board: Board Objective Ids Are Stable', run: checkBoardObjectiveIdsAreStable },
+  { name: 'board: Mid Season Sacking Terminates Immediately', run: checkMidSeasonSackingTerminatesImmediately },
+  { name: 'board: Non Terminal Sacking Warning Does Not Dismiss', run: checkNonTerminalSackingWarningDoesNotDismiss },
+  { name: 'match: Quick Sim Match Summary Includes Stats And Ratings', run: checkQuickSimMatchSummaryIncludesStatsAndRatings },
+  { name: 'fixtureResolution: Append Fixture Result To State Preserves Post Match Patch', run: checkAppendFixtureResultToStatePreservesPostMatchPatch },
+  { name: 'match: Penalty Shootout Uses Individual Kicks', run: checkPenaltyShootoutUsesIndividualKicks },
+  { name: 'match: Quick Sim Knockout Uses Extra Time Before Penalties', run: checkQuickSimKnockoutUsesExtraTimeBeforePenalties },
+  { name: 'match: League Playoff Fixture Does Not Change Table Stats', run: checkLeaguePlayoffFixtureDoesNotChangeTableStats },
+  { name: 'live-match: Zustand Store Live Match Cleanup', run: checkZustandStoreLiveMatchCleanup },
+  { name: 'squad: Roster Size Constraints', run: checkRosterSizeConstraints },
+  { name: 'transfer: Manual Transfers Respect Window', run: checkManualTransfersRespectWindow },
+  { name: 'transfer: Manual Transfers Reject Non Finite Money', run: checkManualTransfersRejectNonFiniteMoney },
+  { name: 'transfer: Approach Unlisted Backup Creates Pending Negotiation', run: checkApproachUnlistedBackupCreatesPendingNegotiation },
+  { name: 'transfer: Approach Core Needed Player Rejects Without Negotiation', run: checkApproachCoreNeededPlayerRejectsWithoutNegotiation },
+  { name: 'transfer: Listed Under Ask Creates Counter Negotiation Without Move', run: checkListedUnderAskCreatesCounterNegotiationWithoutMove },
+  { name: 'transfer: Accept Counter Moves Player And Marks Negotiation Accepted', run: checkAcceptCounterMovesPlayerAndMarksNegotiationAccepted },
+  { name: 'transfer: Weekly Negotiations Expire After Deadline', run: checkWeeklyNegotiationsExpireAfterDeadline },
+  { name: 'transfer: Rival Bid Wins When User Does Not Match', run: checkRivalBidWinsWhenUserDoesNotMatch },
+  { name: 'transfer: Manual Free Agent Signing Moves Player During Window', run: checkManualFreeAgentSigningMovesPlayerDuringWindow },
+  { name: 'transfer: Manual Free Agent Signing Works Outside Window', run: checkManualFreeAgentSigningWorksOutsideWindow },
+  { name: 'transfer: Manual Free Agent Signing Rejects Full Squad', run: checkManualFreeAgentSigningRejectsFullSquad },
+  { name: 'squad: Unavailable Bench Players Can Be Removed', run: checkUnavailableBenchPlayersCanBeRemoved },
+  { name: 'squad: Recovered Selected Bench Does Not Overflow', run: checkRecoveredSelectedBenchDoesNotOverflow },
+  { name: 'squad: Lineup Actions Preserve Bench Limit', run: checkLineupActionsPreserveBenchLimit },
+  { name: 'roles: Player Role Compatibility Matrix', run: checkPlayerRoleCompatibilityMatrix },
+  { name: 'roles: Slot Keyed Player Role Lookup', run: checkSlotKeyedPlayerRoleLookup },
+  { name: 'roles: Player Roles Adjust Shape Profile', run: checkPlayerRolesAdjustShapeProfile },
+  { name: 'roles: Player Role Energy Drain Modifiers', run: checkPlayerRoleEnergyDrainModifiers },
+  { name: 'squad: Lineup Inbox Action Filters Stale Formation Map', run: checkLineupInboxActionFiltersStaleFormationMap },
+  { name: 'transfer: Ai Transfer Listings Expire Outside Window', run: checkAiTransferListingsExpireOutsideWindow },
+  { name: 'transfer: Ai Buyer At Maximum Squad Size Cannot Buy', run: checkAiBuyerAtMaximumSquadSizeCannotBuy },
+  { name: 'transfer: Ai Signs Free Agent For Urgent Squad Need', run: checkAiSignsFreeAgentForUrgentSquadNeed },
+  { name: 'transfer: Ai Stale Listed Target Is Revalidated', run: checkAiStaleListedTargetIsRevalidated },
+  { name: 'transfer: Elite Ai Rejects Under Standard Target', run: checkEliteAiRejectsUnderStandardTarget },
+  { name: 'transfer: Experienced Ai Prefers Older Equal Target', run: checkExperiencedAiPrefersOlderEqualTarget },
+  { name: 'transfer: Ai Transfer Respects Operating Wage Affordability', run: checkAiTransferRespectsOperatingWageAffordability },
+  { name: 'calendar: Season End Progression Updates Match Ability', run: checkSeasonEndProgressionUpdatesMatchAbility },
+  { name: 'training: Weekly Training Focus Raises Focused Stat', run: checkWeeklyTrainingFocusRaisesFocusedStat },
+  { name: 'training: Training Respects Potential Cap', run: checkTrainingRespectsPotentialCap },
+  { name: 'training: Season End Progression Respects Potential Cap', run: checkSeasonEndProgressionRespectsPotentialCap },
+  { name: 'training: Youth Intake Assigns Hidden Potential', run: checkYouthIntakeAssignsHiddenPotential },
+  { name: 'playerRatingUtils: Player Rating Utils Preserve Shared Curves', run: checkPlayerRatingUtilsPreserveSharedCurves },
+  { name: 'traits: Seeded Players Normalize Traits', run: checkSeededPlayersNormalizeTraits },
+  { name: 'traits: Trait Registry Covers Seeded Traits', run: checkTraitRegistryCoversSeededTraits },
+  { name: 'traits: Trait Bonuses Expose Mechanical Effects', run: checkTraitBonusesExposeMechanicalEffects },
+  { name: 'traits: Trait Training Focus Adds Xp', run: checkTraitTrainingFocusAddsXp },
+  { name: 'traits: Relentless Trait Reduces Fatigue Penalty', run: checkRelentlessTraitReducesFatiguePenalty },
+  { name: 'finance: Weekly Revenue Uses Division And Sponsor Rates', run: checkWeeklyRevenueUsesDivisionAndSponsorRates },
+  { name: 'finance: Weekly Progression Applies Revenue Breakdown', run: checkWeeklyProgressionAppliesRevenueBreakdown },
+  { name: 'transfer: Contract Departures Prefer Viable Destinations', run: checkContractDeparturesPreferViableDestinations },
+  { name: 'persistence: Free Agent Save Reload Equivalence', run: checkFreeAgentSaveReloadEquivalence },
+  { name: 'calendar: Season Rollover Replenishes Minimum Squad And Goalkeepers', run: checkSeasonRolloverReplenishesMinimumSquadAndGoalkeepers },
+  { name: 'transfer: Simultaneous Expiries Recompute Against Provisional Squad', run: checkSimultaneousExpiriesRecomputeAgainstProvisionalSquad },
+  { name: 'board: Initial Game Setup Can Be Seeded', run: checkInitialGameSetupCanBeSeeded },
+  { name: 'board: Store Initializes Selected Team Defaults', run: checkStoreInitializesSelectedTeamDefaults },
+  { name: 'squad: Tactical Adaptation Runs Once Per Played Count', run: checkTacticalAdaptationRunsOncePerPlayedCount },
+  { name: 'squad: Tactical Adaptation Ignores Unavailable Players', run: checkTacticalAdaptationIgnoresUnavailablePlayers },
+  { name: 'match: Match Ratings Include Individual Output', run: checkMatchRatingsIncludeIndividualOutput },
+  { name: 'match: Clean Sheet Ratings Use Player Window', run: checkCleanSheetRatingsUsePlayerWindow },
+];

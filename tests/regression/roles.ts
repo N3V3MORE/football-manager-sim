@@ -1,7 +1,7 @@
-import { assert, buildTestPlayer, buildTestTeam, initGameData, readSource } from './shared';
-import type { PlayerRole } from '../../src/models/types';
-import { buildTeamShapeProfile } from '../../src/core/shapeEngine';
 import { getCompatiblePlayerRoles, getPlayerRoleForSlot, getRoleEnergyDrainMultiplier } from '../../src/core/playerRoleEngine';
+import { buildTeamShapeProfile } from '../../src/core/shapeEngine';
+import type { PlayerRole } from '../../src/models/types';
+import { assert, buildTestPlayer, buildTestTeam, initGameData } from './shared';
 
 export const checkPlayerRoleCompatibilityMatrix = () => {
   const data = initGameData('Arsenal');
@@ -56,30 +56,8 @@ export const checkPlayerRolesAdjustShapeProfile = () => {
   assert(roleShape.centralShield > baseShape.centralShield, 'Stay back should increase central shield');
 };
 
-export const checkMatchRuntimeUsesPlayerRoles = () => {
-  const source = readSource('src/core/matchRuntime.ts');
-  assert(/getCompatiblePlayerRoleForTeamSlot/.test(source), 'Match runtime should look up compatibility-safe slot-keyed player roles');
-  assert(/getRoleWeightMultiplier/.test(source), 'Match runtime should apply role weight modifiers');
-  assert(/getRoleStatBonus/.test(source), 'Match runtime should apply role stat modifiers');
-};
-
 export const checkPlayerRoleEnergyDrainModifiers = () => {
   assert(getRoleEnergyDrainMultiplier('boxToBox') > getRoleEnergyDrainMultiplier('default'), 'Box-to-box role should increase energy drain');
   assert(getRoleEnergyDrainMultiplier('getForward') > getRoleEnergyDrainMultiplier('default'), 'Get-forward role should increase energy drain');
   assert(getRoleEnergyDrainMultiplier('pressingForward') > getRoleEnergyDrainMultiplier('default'), 'Pressing forward role should increase energy drain');
-
-  const quickMatchSource = readSource('src/core/matchEngine.ts');
-  const liveMatchSource = readSource('src/store/liveMatchHelpers.ts');
-  assert(/getRoleEnergyDrainMultiplier/.test(quickMatchSource), 'Quick sim energy drain should apply role drain modifiers');
-  assert(/getRoleEnergyDrainMultiplier/.test(liveMatchSource), 'Live match energy drain should apply role drain modifiers');
-};
-
-export const checkRolePickerShowsRoleEffects = () => {
-  const squadSource = readSource('app/(tabs)/squad.tsx');
-  const pickerSource = readSource('components/squad/player-picker-modal.tsx');
-
-  assert(/PLAYER_ROLE_DESCRIPTIONS/.test(squadSource), 'Squad screen should pass player role effect descriptions to the picker');
-  assert(/description:\s*PLAYER_ROLE_DESCRIPTIONS\[role\]/.test(squadSource), 'Role options should carry effect descriptions');
-  assert(/description:\s*string/.test(pickerSource), 'Role picker option type should include effect descriptions');
-  assert(/option\.description/.test(pickerSource), 'Role picker should render the selected role effect description');
 };

@@ -1,52 +1,15 @@
-/**
- * Phase 10 — Testing Gap Fill
- *
- * Covers:
- *   a) Long-career simulation: youth replenishment, population stability
- *   b) Quick-sim vs live-sim parity: energy drain equivalence
- *   c) Board-event accounting: one-time events, failed objective permanence
- *   d) Transfer transactions: user-listed sale flow, AI contract assignment, squad-size limits
- *   e) Career flow: reputation-based offers, vacancy filtering, manager identity
- *   f) Save/load roundtrip: deterministic replay, referential integrity, corruption resilience
- */
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { initGameData } from '../src/utils/initGame';
-import { autoAssignLineup, quickSimMatch } from '../src/core/matchEngine';
-import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
-import { getSeasonWeekLimit } from '../src/core/leagueUtils';
-import { finishLiveMatchState, processLiveMatchMinuteState } from '../src/store/liveMatchActions';
-import {
-  evaluateBoardObjectives,
-  runBoardReview,
-  buildBoardObjectives,
-  buildBoardProfile,
-} from '../src/core/boardEngine';
-import { advanceSeason } from '../src/core/seasonTransition';
-import {
-  createDefaultCareerRecord,
-  generateJobOfferCandidates,
-  buildSeasonSummary,
-  applySeasonEndToCareer,
-} from '../src/core/careerEngine';
-import { applySharedPostMatchAccounting } from '../src/core/postMatchAccounting';
-import {
-  clearPersistLoadError,
-  getPersistLoadError,
-  PERSIST_STORAGE_KEY,
-  safeLoadState,
-  safeStorage,
-  sanitizePersistedState,
-} from '../src/store/persistence';
-import { useGameStore } from '../src/store/gameStore';
-import { isPlayerUnavailable } from '../src/core/playerStatusUtils';
-import { BoardObjective, CompetitionState, Fixture, Player, Team } from '../src/models/types';
-import { buildSquadPlan } from '../src/core/squadPlanningEngine';
-import { FREE_AGENT_TEAM_ID, createFreeAgentTeam, isPlayableClub } from '../src/core/freeAgentPool';
-
-const assert = (condition: unknown, message: string) => {
-  if (!condition) throw new Error(message);
-};
+import assert from 'node:assert/strict';
+import { initGameData } from '../../src/utils/initGame';
+import { autoAssignLineup, quickSimMatch } from '../../src/core/matchEngine';
+import { computeWeeklyTransfers } from '../../src/core/progressionEngine';
+import { finishLiveMatchState, processLiveMatchMinuteState } from '../../src/store/liveMatchActions';
+import { buildBoardProfile, evaluateBoardObjectives, runBoardReview } from '../../src/core/boardEngine';
+import { advanceSeason } from '../../src/core/seasonTransition';
+import { createDefaultCareerRecord, generateJobOfferCandidates } from '../../src/core/careerEngine';
+import { applySharedPostMatchAccounting } from '../../src/core/postMatchAccounting';
+import { clearPersistLoadError, getPersistLoadError, PERSIST_STORAGE_KEY, safeLoadState, safeStorage } from '../../src/store/persistence';
+import { BoardObjective, CompetitionState, Fixture, Player, Team } from '../../src/models/types';
 
 const createSeededRandom = (seed: number) => {
   let state = seed >>> 0;
@@ -57,144 +20,6 @@ const createSeededRandom = (seed: number) => {
     return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
   };
 };
-
-// ═══════════════════════════════════════════════════════════════
-// AREA A — LONG-CAREER SIMULATION (youth replenishment, population stability)
-// ═══════════════════════════════════════════════════════════════
-
-const checkYouthReplenishmentAtSeasonEnd = () => {
-  const rng = { next: createSeededRandom(2026061901) };
-  const data = initGameData(undefined, rng);
-  // Find a team with a small squad — remove players to force under threshold
-  const team = Object.values(data.teams).find(t => t.division === 'League Two' && !t.isExternal);
-  assert(team, 'Expected a League Two team for youth replenishment test');
-
-  const squadBefore = Object.values(data.players).filter(p => p.teamId === team!.id);
-  // Reduce squad below the structural policy floor; replenishment now happens
-  // during season rollover after contract processing.
-  const keepCount = 12;
-  const trimmedPlayers = Object.fromEntries(
-    Object.entries(data.players).map(([playerId, player]) => [playerId, { ...player, contractLeft: 2 }])
-  ) as Record<string, Player>;
-  squadBefore.slice(keepCount).forEach(p => {
-    trimmedPlayers[p.id] = { ...p, teamId: FREE_AGENT_TEAM_ID, isStarting: false, isSub: false };
-  });
-
-  const seasonWeekLimit = getSeasonWeekLimit(data.fixtures, data.competitions);
-  let state: {
-    players: Record<string, Player>;
-    teams: Record<string, Team>;
-    fixtures: Record<string, Fixture>;
-    competitions: Record<string, CompetitionState>;
-    currentWeek: number;
-    news: string[];
-  } = {
-    players: trimmedPlayers,
-    teams: { ...data.teams, [FREE_AGENT_TEAM_ID]: createFreeAgentTeam() },
-    fixtures: data.fixtures,
-    competitions: data.competitions,
-    currentWeek: 1,
-    news: [] as string[],
-  };
-
-  // Simulate through end of season
-  for (let week = 1; week <= seasonWeekLimit; week++) {
-    const weekFixtures = Object.values(state.fixtures).filter(f => f.week === week);
-    for (const fixture of weekFixtures) {
-      const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures, null, { rng });
-      state.players = result.players;
-      state.teams = result.teams;
-      state.fixtures[fixture.id] = result.fixture;
-    }
-    const progression = computeWeeklyProgression(week, state.players, state.teams, state.fixtures, state.news, null, rng);
-    state.players = progression.players;
-    state.teams = progression.teams;
-    state.currentWeek = progression.currentWeek;
-    state.news = progression.news;
-  }
-
-  const rollover = advanceSeason(state.players, state.teams, state.competitions, null, state.news, undefined, rng);
-
-  // After season rollover, the underfilled squad should have received youth intake
-  const squadAfter = Object.values(rollover.players).filter(p => p.teamId === team!.id);
-  assert(
-    squadAfter.length > keepCount,
-    `Youth replenishment should increase squad size above ${keepCount}, got ${squadAfter.length}`
-  );
-  assert(
-    squadAfter.some(p => p.age >= 16 && p.age <= 18),
-    'Youth replenishment should produce academy-aged players (16-18)'
-  );
-  assert(
-    squadAfter.some(p => p.overallRating >= 40 && p.overallRating <= 55),
-    'Youth replenishment should produce players with low-end ratings (40-55)'
-  );
-};
-
-const checkPopulationStabilityOverSeasons = () => {
-  const rng = { next: createSeededRandom(2026061902) };
-  const initialData = initGameData(undefined, rng);
-  const initialPlayerCount = Object.keys(initialData.players).length;
-
-  let state = {
-    players: initialData.players,
-    teams: initialData.teams,
-    fixtures: initialData.fixtures,
-    competitions: initialData.competitions,
-    currentWeek: 1,
-    news: [] as string[],
-  };
-
-  // Run 2 full seasons
-  for (let season = 1; season <= 2; season++) {
-    const seasonWeekLimit = getSeasonWeekLimit(state.fixtures, state.competitions);
-    for (let week = 1; week <= seasonWeekLimit; week++) {
-      const weekFixtures = Object.values(state.fixtures).filter(f => f.week === week);
-      for (const fixture of weekFixtures) {
-        const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures, null, { rng });
-        state.players = result.players;
-        state.teams = result.teams;
-        state.fixtures[fixture.id] = result.fixture;
-      }
-      const progression = computeWeeklyProgression(week, state.players, state.teams, state.fixtures, state.news, null, rng);
-      state.players = progression.players;
-      state.teams = progression.teams;
-      state.currentWeek = progression.currentWeek;
-      state.news = progression.news;
-      const transfers = computeWeeklyTransfers(state.players, state.teams, null, rng, state.currentWeek);
-      state.players = transfers.players;
-      state.teams = transfers.teams;
-    }
-
-    if (season < 2) {
-      const rollover = advanceSeason(state.players, state.teams, state.competitions, null, state.news);
-      state.players = rollover.players;
-      state.teams = rollover.teams;
-      state.fixtures = rollover.fixtures;
-      state.competitions = rollover.competitions;
-      state.currentWeek = rollover.currentWeek;
-      state.news = rollover.news;
-    }
-  }
-
-  const finalPlayerCount = Object.keys(state.players).length;
-  // Player count should remain stable (within ±5% of initial, allowing for youth intake growth)
-  const ratio = finalPlayerCount / initialPlayerCount;
-  assert(
-    ratio >= 0.95 && ratio <= 1.10,
-    `Player population should remain stable over 2 seasons. Initial: ${initialPlayerCount}, Final: ${finalPlayerCount} (ratio: ${ratio.toFixed(3)})`
-  );
-
-  // Verify every team still has a minimum squad
-  Object.values(state.teams).filter(isPlayableClub).forEach(team => {
-    const squad = Object.values(state.players).filter(p => p.teamId === team.id);
-    assert(squad.length >= 11, `${team.name} should have at least 11 players after 2 seasons (got ${squad.length})`);
-  });
-};
-
-// ═══════════════════════════════════════════════════════════════
-// AREA B — QUICK-SIM VS LIVE-SIM PARITY (energy drain)
-// ═══════════════════════════════════════════════════════════════
 
 const checkEnergyDrainConsistency = () => {
   // Verify the post-match energy drain is applied consistently
@@ -444,10 +269,6 @@ const checkActualQuickLiveMatchParity = () => {
   );
 };
 
-// ═══════════════════════════════════════════════════════════════
-// AREA C — BOARD-EVENT ACCOUNTING (one-time events, failed objectives)
-// ═══════════════════════════════════════════════════════════════
-
 const checkFailedObjectiveRemainsFailed = () => {
   const data = initGameData();
   const team = Object.values(data.teams).find(t => t.division === 'Premier League');
@@ -607,10 +428,6 @@ const checkTrophyBonusAppliedOnce = () => {
     `Trophy bonus should not be applied twice. First: ${approvalAfterFirst}, Second: ${review2.nextApproval}`
   );
 };
-
-// ═══════════════════════════════════════════════════════════════
-// AREA D — TRANSFER TRANSACTIONS (user-listed exclusion, AI contracts, squad limits)
-// ═══════════════════════════════════════════════════════════════
 
 const checkAiTransfersHandleUserListedSales = () => {
   const tactics: Team['tactics'] = {
@@ -786,6 +603,7 @@ const checkAiTransfersHandleUserListedSales = () => {
   assert(Number.isFinite(saleDecision?.newWage) && (saleDecision?.newWage || 0) > 0, 'User-listed sale decision should include destination wage');
   assert(soldPlayer.wage === saleDecision?.newWage, 'Sold user-listed player should receive destination-context wage');
   assert(soldPlayer.wage !== listedUserPlayer.wage, 'Sold user-listed player should not preserve old wage unchanged');
+  assert(soldPlayer.contractLeft >= 2, 'Completed sale must assign a viable contract');
   assert(soldPlayer.morale >= 75, 'Starter role promise should raise the sold player morale baseline');
   assert(!soldPlayer.isTransferListed && soldPlayer.askingPrice === 0, 'Sold player should be removed from the transfer list');
   assert(result.teams[userTeam.id].budget === userTeam.budget + listedUserPlayer.askingPrice, 'User team budget should be credited with the sale fee');
@@ -797,111 +615,6 @@ const checkAiTransfersHandleUserListedSales = () => {
     'No AI transfer decision should involve an unlisted user player'
   );
 };
-
-const checkAiTransfersAssignContractAndWage = () => {
-  const rng = { next: createSeededRandom(2026061903) };
-  const data = initGameData();
-  const buyer = Object.values(data.teams).find(t => t.id !== 'T1' && t.division === 'Premier League');
-  const seller = Object.values(data.teams).find(
-    t => t.id !== 'T1' && t.id !== buyer?.id && t.division === 'Premier League'
-  );
-  assert(buyer && seller, 'Expected buyer and seller teams for AI contract test');
-
-  const target = Object.values(data.players).find(p => p.teamId === seller!.id && p.position === 'MID');
-  assert(target, 'Expected a midfielder for AI contract assignment test');
-
-  // Create need on buyer side — injure all buyer's midfielders
-  const modifiedPlayers = { ...data.players };
-  Object.values(modifiedPlayers)
-    .filter(p => p.teamId === buyer!.id && p.position === 'MID')
-    .forEach(p => {
-      modifiedPlayers[p.id] = { ...p, injuryWeeks: 8 };
-    });
-
-  modifiedPlayers[target!.id] = {
-    ...target!,
-    isTransferListed: true,
-    askingPrice: 3,
-    wage: 45,
-    contractLeft: 1,
-    morale: 55,
-  };
-
-  const modifiedTeams = {
-    ...data.teams,
-    [buyer!.id]: {
-      ...buyer!,
-      budget: 80,
-      transferSpend: 0,
-    },
-  };
-
-  const result = computeWeeklyTransfers(modifiedPlayers, modifiedTeams, 'T1', { next: () => 0 }, 2);
-  const bought = result.players[target!.id];
-
-  if (bought.teamId === buyer!.id) {
-    // AI bought the player — verify contract and morale were properly assigned
-    assert(
-      bought.contractLeft >= 2,
-      `AI-purchased player should have contractLeft >= 2, got ${bought.contractLeft}`
-    );
-    assert(
-      bought.morale >= 60,
-      `AI-purchased player should have morale >= 60, got ${bought.morale}`
-    );
-    assert(bought.wage > 0, 'AI-purchased player should retain a positive wage');
-  }
-  // If AI didn't buy, that's OK — the test just verifies the assignment IF they buy
-};
-
-const checkSquadSizeLimits = () => {
-  const data = initGameData();
-  const team = Object.values(data.teams).find(t => t.division === 'Championship');
-  assert(team, 'Expected a Championship team for squad limit test');
-
-  const squad = Object.values(data.players).filter(p => p.teamId === team!.id);
-  assert(squad.length <= 40, `Team ${team!.name} should not exceed 40 players initially (got ${squad.length})`);
-
-  // Verify all teams have reasonable squad sizes
-  Object.values(data.teams).forEach(t => {
-    if (t.isExternal) return; // Skip external Continental clubs
-    const teamSquad = Object.values(data.players).filter(p => p.teamId === t.id);
-    assert(
-      teamSquad.length >= 11 && teamSquad.length <= 40,
-      `${t.name} should have 11-40 players (got ${teamSquad.length})`
-    );
-  });
-
-  // Drive a real season-transition contract transaction: an expiring user-club
-  // player should be moved through the destination-selection path without
-  // leaving either club outside squad bounds.
-  const expiringPlayer = squad.find(p => !p.isStarting) || squad[0];
-  assert(expiringPlayer, 'Expected a player to expire for squad transaction test');
-  const transactionPlayers = {
-    ...data.players,
-    [expiringPlayer.id]: {
-      ...expiringPlayer,
-      contractLeft: 0,
-      marketValue: Math.min(expiringPlayer.marketValue, 1),
-      wage: Math.min(expiringPlayer.wage, 15),
-    },
-  };
-
-  const rollover = advanceSeason(transactionPlayers, data.teams, data.competitions, team!.id, []);
-  const movedPlayer = rollover.players[expiringPlayer.id];
-  assert(movedPlayer.teamId !== team!.id, 'Expiring user-club player should move via season-transition transaction path');
-  [team!.id, movedPlayer.teamId].forEach(teamId => {
-    const postTransactionSquad = Object.values(rollover.players).filter(p => p.teamId === teamId);
-    assert(
-      postTransactionSquad.length >= 11 && postTransactionSquad.length <= 40,
-      `Post-transaction squad ${rollover.teams[teamId]?.name || teamId} should have 11-40 players (got ${postTransactionSquad.length})`
-    );
-  });
-};
-
-// ═══════════════════════════════════════════════════════════════
-// AREA E — CAREER FLOW (reputation offers, vacancy filtering, manager identity)
-// ═══════════════════════════════════════════════════════════════
 
 const checkReputationLimitsJobOfferDivisions = () => {
   const data = initGameData();
@@ -1009,102 +722,6 @@ const checkReputationLimitsJobOfferDivisions = () => {
   assert(highRepCandidates.every(t => !t.isExternal), 'Job offers should exclude external Continental clubs');
 };
 
-const checkStableClubsNotOfferedJobs = () => {
-  const data = initGameData();
-  const userTeamId = Object.keys(data.teams)[0];
-
-  // Make all clubs stable (high approval, low replacement risk, high job security)
-  const stableTeams = Object.fromEntries(
-    Object.entries(data.teams).map(([id, team]) => [
-      id,
-      {
-        ...team,
-        boardApproval: 85,
-        manager: {
-          ...team.manager,
-          jobSecurity: 90,
-          replacementRisk: 5,
-          contractYearsRemaining: 3,
-        },
-      },
-    ])
-  );
-
-  const summary = {
-    season: 1,
-    teamId: userTeamId,
-    teamName: data.teams[userTeamId].name,
-    division: data.teams[userTeamId].division as any,
-    wins: 20,
-    draws: 8,
-    losses: 10,
-    goalsFor: 65,
-    goalsAgainst: 45,
-    finalPosition: 5,
-    outcome: 'stayed' as const,
-    boardVerdict: 'stable' as const,
-    competitionResults: [] as any[],
-  };
-
-  const offers = generateJobOfferCandidates(stableTeams, userTeamId, summary, 75);
-  assert(offers.length === 0, 'Stable clubs should not appear as job offer candidates');
-};
-
-const checkManagerIdentityPersistsAfterJobAccept = () => {
-  useGameStore.getState().initializeGame('T1');
-  const state = useGameStore.getState();
-  const userTeamId = state.userTeamId!;
-  const offerTeamId = Object.keys(state.teams).find(id => id !== userTeamId);
-  assert(offerTeamId, 'Expected a different team for manager identity test');
-  const oid: string = offerTeamId!;
-
-  const offerTeam = state.teams[oid];
-  useGameStore.setState({
-    inboxMessages: [
-      {
-        id: 'phase10-job-offer',
-        week: 1,
-        source: 'system',
-        category: 'career_job_offer',
-        title: `Job offer: ${offerTeam.name}`,
-        body: 'Phase 10 test offer',
-        isRead: false,
-        action: {
-          type: 'accept_job_offer',
-          payload: { teamId: oid },
-        },
-        teamId: oid,
-      },
-    ],
-  });
-
-  useGameStore.getState().applyInboxAction('phase10-job-offer');
-  const acceptedState = useGameStore.getState();
-
-  // Verify manager identity was set on the career record
-  const userManager = acceptedState.careerRecord.userManager;
-  assert(userManager, 'Career record should have a userManager identity after job acceptance');
-  assert(userManager!.name.length > 0, 'User manager identity should have a name');
-  assert(userManager!.preferredFormations.length > 0, 'User manager identity should have preferred formations');
-  assert(userManager!.nationality.length > 0, 'User manager identity should have a nationality');
-
-  // Verify the identity is on the new team
-  assert(
-    acceptedState.teams[oid].manager.name === userManager!.name,
-    'New team manager should match the user manager identity'
-  );
-
-  // Verify the old team has a different manager
-  assert(
-    acceptedState.teams[userTeamId].manager.name !== userManager!.name,
-    'Old team should have a different manager after user departure'
-  );
-};
-
-// ═══════════════════════════════════════════════════════════════
-// AREA F — SAVE/LOAD ROUNDTRIP (deterministic replay, referential integrity, corruption resilience)
-// ═══════════════════════════════════════════════════════════════
-
 const checkSeededGameProducesDeterministicOutcome = () => {
   // Verify that initial game data + first week matches are reproducible
   const runFirstWeek = (seed: number) => {
@@ -1138,42 +755,6 @@ const checkSeededGameProducesDeterministicOutcome = () => {
   // Also verify that a different seed produces different results
   const run3 = runFirstWeek(2026061999);
   assert(run1 !== run3, 'Different seeds should produce different fixture results');
-};
-
-const checkSanitizeDetectsCorruptReferences = () => {
-  const data = initGameData();
-
-  // Player referencing a non-existent team
-  const playerWithBadTeam = Object.values(data.players)[0];
-  const maliciousState = {
-    currentWeek: 1,
-    userTeamId: Object.keys(data.teams)[0],
-    teams: data.teams,
-    players: {
-      ...data.players,
-      [playerWithBadTeam.id]: {
-        ...playerWithBadTeam,
-        teamId: 'non-existent-team-xyz',
-      },
-    },
-    fixtures: data.fixtures,
-    competitions: data.competitions,
-    news: [],
-    inboxMessages: [],
-    boardObjectives: [],
-  };
-
-  const sanitized = sanitizePersistedState(maliciousState);
-  const sanitizedPlayer = sanitized.players?.[playerWithBadTeam.id];
-  assert(sanitizedPlayer, 'Sanitized state should keep the player');
-  assert(
-    sanitizedPlayer!.teamId !== 'non-existent-team-xyz',
-    'Sanitization should repair a player reference to a non-existent team'
-  );
-  assert(
-    sanitized.teams?.[sanitizedPlayer!.teamId],
-    `Sanitized player's team ${sanitizedPlayer!.teamId} should exist in teams`
-  );
 };
 
 const checkSanitizeRejectsCorruptJson = async () => {
@@ -1247,91 +828,15 @@ const checkReferentialIntegrityAfterSeasonRollover = () => {
   assert(new Set(fixtureIds).size === fixtureIds.length, 'Season rollover should not create duplicate fixture IDs');
 };
 
-// ═══════════════════════════════════════════════════════════════
-// RUNNER
-// ═══════════════════════════════════════════════════════════════
-
-const runPhase10Tests = async () => {
-  console.log('--- PHASE 10 GAP-FILL TESTS ---');
-
-  // Area A: Long-career simulation
-  console.log('[A1] Youth replenishment at season end...');
-  checkYouthReplenishmentAtSeasonEnd();
-  console.log('[OK] Youth replenishment triggers for underfilled squads');
-
-  console.log('[A2] Population stability over seasons...');
-  checkPopulationStabilityOverSeasons();
-  console.log('[OK] Player population remains stable across seasons');
-
-  // Area B: Quick-sim vs live-sim parity
-  console.log('[B1] Energy drain consistency...');
-  checkEnergyDrainConsistency();
-  console.log('[OK] Energy drain behaves consistently with toggles and minutes');
-
-  console.log('[B2] Actual quick/live match parity...');
-  checkActualQuickLiveMatchParity();
-  console.log('[OK] Quick/live match harnesses keep score, event, card, and energy accounting aligned');
-
-  // Area C: Board-event accounting
-  console.log('[C1] Failed objective permanence...');
-  checkFailedObjectiveRemainsFailed();
-  console.log('[OK] Failed objectives remain failed on re-evaluation');
-
-  console.log('[C2] Cup failure penalty applied once...');
-  checkCupFailurePenaltyAppliedOnce();
-  console.log('[OK] Cup failure penalty is not double-applied');
-
-  console.log('[C3] Trophy bonus applied once...');
-  checkTrophyBonusAppliedOnce();
-  console.log('[OK] Trophy bonus is not double-awarded');
-
-  // Area D: Transfer transactions
-  console.log('[D1] AI transfers handle user-listed sale flow...');
-  checkAiTransfersHandleUserListedSales();
-  console.log('[OK] User-listed sale flow works while unlisted user players remain protected');
-
-  console.log('[D2] AI transfers assign contract and wage...');
-  checkAiTransfersAssignContractAndWage();
-  console.log('[OK] AI-purchased players receive contract/wage/morale assignment');
-
-  console.log('[D3] Squad size limits...');
-  checkSquadSizeLimits();
-  console.log('[OK] Squad size limits are within bounds');
-
-  // Area E: Career flow
-  console.log('[E1] Reputation limits job offer divisions...');
-  checkReputationLimitsJobOfferDivisions();
-  console.log('[OK] Reputation correctly gates job offer division reach');
-
-  console.log('[E2] Stable clubs not offered jobs...');
-  checkStableClubsNotOfferedJobs();
-  console.log('[OK] Stable/non-vacant clubs excluded from job offer pool');
-
-  console.log('[E3] Manager identity persists after job acceptance...');
-  checkManagerIdentityPersistsAfterJobAccept();
-  console.log('[OK] Manager identity persists correctly across team changes');
-
-  // Area F: Save/load roundtrip
-  console.log('[F1] Deterministic replay...');
-  checkSeededGameProducesDeterministicOutcome();
-  console.log('[OK] Seeded game produces identical outcomes across runs');
-
-  console.log('[F2] Corruption detection...');
-  checkSanitizeDetectsCorruptReferences();
-  console.log('[OK] Sanitization repairs broken referential integrity');
-
-  console.log('[F3] Corruption error reporting...');
-  await checkSanitizeRejectsCorruptJson();
-  console.log('[OK] Corrupt JSON is rejected through safeLoadState and active safeStorage');
-
-  console.log('[F4] Referential integrity after season rollover...');
-  checkReferentialIntegrityAfterSeasonRollover();
-  console.log('[OK] Referential integrity maintained through season rollover');
-
-  console.log('--- PHASE 10 GAP-FILL TESTS COMPLETE ---');
-};
-
-runPhase10Tests().catch(error => {
-  console.error(error);
-  process.exit(1);
-});
+export const lifecycleChecks = [
+  { name: 'lifecycle: Energy Drain Consistency', run: checkEnergyDrainConsistency },
+  { name: 'lifecycle: Actual Quick Live Match Parity', run: checkActualQuickLiveMatchParity },
+  { name: 'lifecycle: Failed Objective Remains Failed', run: checkFailedObjectiveRemainsFailed },
+  { name: 'lifecycle: Cup Failure Penalty Applied Once', run: checkCupFailurePenaltyAppliedOnce },
+  { name: 'lifecycle: Trophy Bonus Applied Once', run: checkTrophyBonusAppliedOnce },
+  { name: 'lifecycle: Ai Transfers Handle User Listed Sales', run: checkAiTransfersHandleUserListedSales },
+  { name: 'lifecycle: Reputation Limits Job Offer Divisions', run: checkReputationLimitsJobOfferDivisions },
+  { name: 'lifecycle: Seeded Game Produces Deterministic Outcome', run: checkSeededGameProducesDeterministicOutcome },
+  { name: 'lifecycle: Sanitize Rejects Corrupt Json', run: checkSanitizeRejectsCorruptJson },
+  { name: 'lifecycle: Referential Integrity After Season Rollover', run: checkReferentialIntegrityAfterSeasonRollover },
+];

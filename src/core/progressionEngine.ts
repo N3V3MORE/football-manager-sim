@@ -1,3 +1,4 @@
+import { createRosterIndex, RosterIndex } from './rosterIndex';
 import { Player, Team, Fixture } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { applyTacticalAdaptation } from './tacticalAdaptationEngine';
@@ -85,20 +86,21 @@ const getSeasonProgressionDelta = (
 
 const trimActiveSubstitutes = (
   players: Record<string, Player>,
-  teams: Record<string, Team>
+  teams: Record<string, Team>,
+  rosterIndex: RosterIndex
 ) => {
   Object.values(teams).filter(isPlayableClub).forEach(team => {
     const teamId = team.id;
-    Object.values(players)
-      .filter(player => player.teamId === teamId && player.isStarting && player.isSub)
+    rosterIndex.getPlayers(teamId, players)
+      .filter(player => player.isStarting && player.isSub)
       .forEach(player => {
         players[player.id] = { ...players[player.id], isSub: false };
       });
 
     // Enforce max 11 starters: if a team somehow has more, demote the lowest-rated extras.
     // Preserve one starting GK when present so trimming cannot leave a side without a keeper.
-    const activeStarters = Object.values(players)
-      .filter(player => player.teamId === teamId && player.isStarting)
+    const activeStarters = rosterIndex.getPlayers(teamId, players)
+      .filter(player => player.isStarting)
       .sort((a, b) => (b.overallRating + b.energy * 0.1) - (a.overallRating + a.energy * 0.1));
     if (activeStarters.length > 11) {
       const startingGoalkeeper = activeStarters.find(player => player.position === 'GK');
@@ -114,8 +116,8 @@ const trimActiveSubstitutes = (
       });
     }
 
-    const activeSubs = Object.values(players)
-      .filter(player => player.teamId === teamId && player.isSub && !isPlayerUnavailable(player))
+    const activeSubs = rosterIndex.getPlayers(teamId, players)
+      .filter(player => player.isSub && !isPlayerUnavailable(player))
       .sort((a, b) => {
         const scoreDelta = (b.overallRating + b.energy * 0.1) - (a.overallRating + a.energy * 0.1);
         if (scoreDelta !== 0) return scoreDelta;
@@ -169,6 +171,7 @@ export const computeWeeklyProgression = (
 
   const allPlayers = Object.values(players);
   const updatedPlayers = { ...players };
+  const rosterIndex = createRosterIndex(players);
   allPlayers.forEach(player => {
     const newEnergy = Math.min(100, player.energy + ENGINE_CONFIG.WEEKLY_ENERGY_RECOVERY);
     const shouldDecrementInjury = !player.injuryAppliedWeek || player.injuryAppliedWeek < currentWeek;
@@ -204,11 +207,11 @@ export const computeWeeklyProgression = (
       };
     }
   });
-  trimActiveSubstitutes(updatedPlayers, teams);
+  trimActiveSubstitutes(updatedPlayers, teams, rosterIndex);
 
   const updatedTeams = { ...teams };
   Object.values(updatedTeams).filter(isPlayableClub).forEach(team => {
-    const teamPlayers = Object.values(updatedPlayers).filter(player => player.teamId === team.id);
+    const teamPlayers = rosterIndex.getPlayers(team.id, updatedPlayers);
     const weeklyWageTotalThousand = teamPlayers.reduce((sum, player) => sum + (player.wage || 0), 0);
     const wageCostM = weeklyWageTotalThousand / 1000;
 
@@ -230,7 +233,8 @@ export const computeWeeklyProgression = (
     updatedPlayers,
     updatedTeams,
     new Set([...(userTeamId ? [userTeamId] : []), FREE_AGENT_TEAM_ID]),
-    rng
+    rng,
+    rosterIndex
   );
 
   const divisionPlayers = userDivision 

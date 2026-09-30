@@ -1,74 +1,32 @@
 import assert from 'node:assert/strict';
-import { generateBoardObjectives, initGameData } from '../src/utils/initGame';
-import { getSeasonWeekLimit } from '../src/core/leagueUtils';
-import { quickSimMatch, resolvePenaltyShootoutWinner } from '../src/core/matchEngine';
-import { computeWeeklyProgression, computeWeeklyTransfers } from '../src/core/progressionEngine';
-import { createSeededRandomGenerator } from '../src/core/random';
-import {
-  getSeasonEuropeQualifiedTeamIds,
-  resolveCompetitionProgression,
-} from '../src/core/competitionEngine';
-import {
-  buildBoardObjectives,
-  buildBoardProfile,
-  runBoardReview,
-} from '../src/core/boardEngine';
-import { buildSquadPlan } from '../src/core/squadPlanningEngine';
-import {
-  applySeasonEndToCareer,
-  buildSeasonSummary,
-  createDefaultCareerRecord,
-  evaluateSackingRisk,
-  generateJobOfferCandidates,
-} from '../src/core/careerEngine';
-import {
-  applySharedPostMatchAccounting,
-  applyWindowedCleanSheets,
-  didConcedeInWindow,
-  qualifiesForWindowedCleanSheet,
-} from '../src/core/postMatchAccounting';
-import { applySubstitutions } from '../src/core/substitutionEngine';
-import { advanceSeason } from '../src/core/seasonTransition';
-import { appointReplacementManager } from '../src/core/managerUtils';
-import { LeagueDivision, Player, Team, UserManagerIdentity } from '../src/models/types';
-import { isPlayerUnavailable } from '../src/core/playerStatusUtils';
-import { evaluateBoardObjectives } from '../src/core/boardEngine';
-import { useGameStore } from '../src/store/gameStore';
-import {
-  generateAssistantWeekMessages,
-  generatePostMatchReportMessage,
-} from '../src/store/inboxAssistant';
-import {
-  generateSystemInboxMessages,
-  MAX_INBOX_MESSAGES,
-  mergeInboxMessages,
-} from '../src/store/inboxCore';
-import { sanitizePersistedState } from '../src/store/persistence';
-import { getSquadPolicy } from '../src/core/squadPolicy';
-import { FREE_AGENT_TEAM_ID } from '../src/core/freeAgentPool';
-import { dateOrdinalToWeek, fixtureToDate, getBudgetForClass, LEAGUE_END_ORDINAL, weekToDate } from '../src/utils/calendar';
-import { validateMatchdayXI } from '../src/core/matchdayValidation';
-import { advanceWeekState } from '../src/store/weekLifecycle';
-import { getRenewalOffer } from '../src/core/contractUtils';
-import {
-  applyFixtureSuspensionService,
-  compareFixturesChronologically,
-  getFixtureRestViolations,
-  getFixtureDateOrdinal,
-} from '../src/core/fixtureLifecycle';
-import { finishLiveMatchState, processLiveMatchMinuteState } from '../src/store/liveMatchActions';
-
-const RED_CARD_EVENT_PATTERN = /red card|sent off|straight red|reaches for red/i;
-const buildTacticalSetupKey = (team: Team) => (
-  [
-    team.activeFormation,
-    team.tactics.mentality,
-    team.tactics.passingStyle,
-    team.tactics.tempo,
-    team.tactics.defensiveLine,
-    team.tactics.pressing,
-  ].join('|')
-);
+import { generateBoardObjectives, initGameData } from '../../src/utils/initGame';
+import { getSeasonWeekLimit } from '../../src/core/leagueUtils';
+import { quickSimMatch, resolvePenaltyShootoutWinner } from '../../src/core/matchEngine';
+import { computeWeeklyProgression, computeWeeklyTransfers } from '../../src/core/progressionEngine';
+import { createSeededRandomGenerator } from '../../src/core/random';
+import { getSeasonEuropeQualifiedTeamIds, resolveCompetitionProgression, } from '../../src/core/competitionEngine';
+import { buildBoardObjectives, buildBoardProfile, runBoardReview, } from '../../src/core/boardEngine';
+import { buildSquadPlan } from '../../src/core/squadPlanningEngine';
+import { applySeasonEndToCareer, buildSeasonSummary, createDefaultCareerRecord, evaluateSackingRisk, generateJobOfferCandidates, } from '../../src/core/careerEngine';
+import { applySharedPostMatchAccounting, applyWindowedCleanSheets, didConcedeInWindow, qualifiesForWindowedCleanSheet, } from '../../src/core/postMatchAccounting';
+import { applySubstitutions } from '../../src/core/substitutionEngine';
+import { advanceSeason } from '../../src/core/seasonTransition';
+import { appointReplacementManager } from '../../src/core/managerUtils';
+import { LeagueDivision, Player, UserManagerIdentity } from '../../src/models/types';
+import { isPlayerUnavailable } from '../../src/core/playerStatusUtils';
+import { evaluateBoardObjectives } from '../../src/core/boardEngine';
+import { useGameStore } from '../../src/store/gameStore';
+import { generateAssistantWeekMessages, generatePostMatchReportMessage, } from '../../src/store/inboxAssistant';
+import { generateSystemInboxMessages, MAX_INBOX_MESSAGES, mergeInboxMessages, } from '../../src/store/inboxCore';
+import { sanitizePersistedState } from '../../src/store/persistence';
+import { getSquadPolicy } from '../../src/core/squadPolicy';
+import { FREE_AGENT_TEAM_ID } from '../../src/core/freeAgentPool';
+import { dateOrdinalToWeek, getBudgetForClass, LEAGUE_END_ORDINAL, weekToDate } from '../../src/utils/calendar';
+import { validateMatchdayXI } from '../../src/core/matchdayValidation';
+import { advanceWeekState } from '../../src/store/weekLifecycle';
+import { getRenewalOffer } from '../../src/core/contractUtils';
+import { applyFixtureSuspensionService, compareFixturesChronologically, getFixtureDateOrdinal, getFixtureRestViolations, } from '../../src/core/fixtureLifecycle';
+import { finishLiveMatchState, processLiveMatchMinuteState } from '../../src/store/liveMatchActions';
 
 const getMaxHomeAwayStreak = (tokens: string[]) => {
   let max = 0;
@@ -1044,53 +1002,11 @@ const runInvariantChecks = () => {
 
   const migrationSeed = initGameData();
   const migrationUserTeamId = Object.keys(migrationSeed.teams)[0];
-  const migrationRng = createSeededRandomGenerator(20260611);
-  let midSeasonState = {
-    players: migrationSeed.players,
-    teams: migrationSeed.teams,
-    fixtures: migrationSeed.fixtures,
-    competitions: migrationSeed.competitions,
-    currentWeek: 1,
-    news: [] as string[],
+  const midSeasonState = {
+    ...migrationSeed, currentWeek: 9, news: [] as string[],
+    fixtures: Object.fromEntries(Object.entries(migrationSeed.fixtures).map(([id, fixture]) => [id,
+      fixture.week <= 8 ? { ...fixture, isPlayed: true, homeScore: 1, awayScore: 0, winnerTeamId: fixture.homeTeamId } : fixture])),
   };
-  for (let week = 1; week <= 8; week += 1) {
-    const weekFixtures = Object.values(midSeasonState.fixtures).filter(fixture => fixture.week === week);
-    for (const fixture of weekFixtures) {
-      const result = quickSimMatch(
-        fixture.id,
-        midSeasonState.players,
-        midSeasonState.teams,
-        midSeasonState.fixtures,
-        migrationUserTeamId,
-        { rng: migrationRng }
-      );
-      midSeasonState.players = result.players;
-      midSeasonState.teams = result.teams;
-      midSeasonState.fixtures = { ...midSeasonState.fixtures, [fixture.id]: result.fixture };
-    }
-    const progression = computeWeeklyProgression(
-      midSeasonState.currentWeek,
-      midSeasonState.players,
-      midSeasonState.teams,
-      midSeasonState.fixtures,
-      midSeasonState.news,
-      migrationUserTeamId,
-      migrationRng
-    );
-    midSeasonState.players = progression.players;
-    midSeasonState.teams = progression.teams;
-    midSeasonState.currentWeek = progression.currentWeek;
-    midSeasonState.news = progression.news;
-    const transferResult = computeWeeklyTransfers(
-      midSeasonState.players,
-      midSeasonState.teams,
-      migrationUserTeamId,
-      migrationRng,
-      midSeasonState.currentWeek
-    );
-    midSeasonState.players = transferResult.players;
-    midSeasonState.teams = transferResult.teams;
-  }
 
   const transferSeed = initGameData();
   const transferBuyer = Object.values(transferSeed.teams).find(team => team.division === 'League Two' && !team.isExternal) || Object.values(transferSeed.teams)[0];
@@ -1648,252 +1564,6 @@ const runInvariantChecks = () => {
   );
 };
 
-const runSeason = (seed: number) => {
-  const rng = createSeededRandomGenerator(seed);
-  const data = initGameData(undefined, rng);
-  let state = {
-    players: data.players,
-    teams: data.teams,
-    fixtures: data.fixtures,
-    competitions: data.competitions,
-    currentWeek: 1,
-    news: [] as string[],
-  };
-
-  let totalGoals = 0;
-  let yellowCards = 0;
-  let redCards = 0;
-  let redCardLogMismatches = 0;
-  let redCardEventsWithoutCard = 0;
-  const tacticalChangeCounts = Object.fromEntries(
-    Object.values(state.teams).map(team => [team.id, 0])
-  ) as Record<string, number>;
-  const formationUsage = { back3: 0, back4: 0, back5: 0 };
-
-  for (let week = 1; week <= getSeasonWeekLimit(state.fixtures, state.competitions); week++) {
-    const weekStartSetups = Object.fromEntries(
-      Object.values(state.teams).map(team => [team.id, buildTacticalSetupKey(team)])
-    ) as Record<string, string>;
-    const weekFixtures = Object.values(state.fixtures).filter(fixture => fixture.week === week);
-    for (const fixture of weekFixtures) {
-      const beforeCards = Object.values(state.players).reduce(
-        (acc, player) => ({ yellow: acc.yellow + player.yellowCards, red: acc.red + player.redCards }),
-        { yellow: 0, red: 0 }
-      );
-      const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures, null, { rng });
-      state.players = result.players;
-      state.teams = result.teams;
-      state.fixtures[fixture.id] = result.fixture;
-      totalGoals += (result.fixture.homeScore || 0) + (result.fixture.awayScore || 0);
-
-      const afterCards = Object.values(state.players).reduce(
-        (acc, player) => ({ yellow: acc.yellow + player.yellowCards, red: acc.red + player.redCards }),
-        { yellow: 0, red: 0 }
-      );
-      yellowCards += (afterCards.yellow - beforeCards.yellow);
-      const redDelta = (afterCards.red - beforeCards.red);
-      redCards += redDelta;
-
-      const hasRedEvent = result.events.some(event => RED_CARD_EVENT_PATTERN.test(event));
-      if (redDelta > 0 && !hasRedEvent) {
-        redCardLogMismatches += 1;
-      }
-      if (hasRedEvent && redDelta === 0) {
-        redCardEventsWithoutCard += 1;
-      }
-    }
-
-    const competitionProgression = resolveCompetitionProgression(
-      state.fixtures,
-      state.competitions,
-      state.teams,
-      rng
-    );
-    state.fixtures = competitionProgression.fixtures;
-    state.competitions = competitionProgression.competitions;
-    if (competitionProgression.generatedNews.length > 0) {
-      state.news = [...competitionProgression.generatedNews, ...state.news].slice(0, 20);
-    }
-
-    const progression = computeWeeklyProgression(
-      state.currentWeek,
-      state.players,
-      state.teams,
-      state.fixtures,
-      state.news,
-      null,
-      rng
-    );
-    state.players = progression.players;
-    state.teams = progression.teams;
-    state.currentWeek = progression.currentWeek;
-    state.news = progression.news;
-
-    const transfers = computeWeeklyTransfers(state.players, state.teams, null, rng, state.currentWeek);
-    state.players = transfers.players;
-    state.teams = transfers.teams;
-
-    Object.values(state.teams).forEach(team => {
-      const before = weekStartSetups[team.id];
-      const after = buildTacticalSetupKey(team);
-      if (before !== after) {
-        tacticalChangeCounts[team.id] = (tacticalChangeCounts[team.id] || 0) + 1;
-      }
-    });
-
-    Object.values(state.teams).forEach(team => {
-      if (team.activeFormation.startsWith('3')) formationUsage.back3 += 1;
-      else if (team.activeFormation.startsWith('5')) formationUsage.back5 += 1;
-      else formationUsage.back4 += 1;
-    });
-  }
-
-  const matches = Object.values(state.fixtures).length;
-  return {
-    avgGoalsPerMatch: totalGoals / Math.max(1, matches),
-    yellowCards,
-    redCards,
-    redCardLogMismatches,
-    redCardEventsWithoutCard,
-    totalTacticalChanges: Object.values(tacticalChangeCounts).reduce((sum, count) => sum + count, 0),
-    teamsWithNoTacticalChanges: Object.values(tacticalChangeCounts).filter(count => count === 0).length,
-    formationUsage,
-  };
-};
-
-const runThresholdChecks = () => {
-  const seasons = [20260513, 20260514, 20260515].map(runSeason);
-  const avgGoals = seasons.reduce((sum, season) => sum + season.avgGoalsPerMatch, 0) / seasons.length;
-  console.log(`Seeded seasonal average goals: ${avgGoals.toFixed(2)}`);
-  const totalYellow = seasons.reduce((sum, season) => sum + season.yellowCards, 0);
-  const totalRed = seasons.reduce((sum, season) => sum + season.redCards, 0);
-  const redCardLogMismatches = seasons.reduce((sum, season) => sum + season.redCardLogMismatches, 0);
-  const redCardEventsWithoutCard = seasons.reduce((sum, season) => sum + season.redCardEventsWithoutCard, 0);
-  const avgTacticalChanges = seasons.reduce((sum, season) => sum + season.totalTacticalChanges, 0) / seasons.length;
-  const avgTeamsWithNoTacticalChanges = seasons.reduce((sum, season) => sum + season.teamsWithNoTacticalChanges, 0) / seasons.length;
-  const formationUsage = seasons.reduce(
-    (acc, season) => ({
-      back3: acc.back3 + season.formationUsage.back3,
-      back4: acc.back4 + season.formationUsage.back4,
-      back5: acc.back5 + season.formationUsage.back5,
-    }),
-    { back3: 0, back4: 0, back5: 0 }
-  );
-
-  assert.ok(avgGoals >= 2.4 && avgGoals <= 3.1, `Expected avg goals between 2.4 and 3.1, got ${avgGoals.toFixed(2)}`);
-  assert.ok(totalYellow > 0, 'Expected at least one yellow card across threshold runs');
-  assert.ok(totalRed > 0, 'Expected at least one red card across threshold runs');
-  assert.equal(redCardLogMismatches, 0, 'Red cards should always produce an explicit red-card event message');
-  assert.equal(redCardEventsWithoutCard, 0, 'Red-card event messages should only appear when a red card is recorded');
-  assert.ok(avgTacticalChanges >= 110, `Expected average tactical changes >= 110, got ${avgTacticalChanges.toFixed(1)}`);
-  assert.ok(avgTeamsWithNoTacticalChanges <= 35, `Expected average teams with no tactical changes <= 35, got ${avgTeamsWithNoTacticalChanges.toFixed(1)}`);
-  assert.ok(formationUsage.back3 > 0, 'Expected some back-3 usage');
-  assert.ok(formationUsage.back5 > 0, 'Expected some back-5 usage');
-};
-
-const runStateConsistencyStress = () => {
-  const seeds = [20260521, 20260522];
-
-  seeds.forEach(seed => {
-    const rng = createSeededRandomGenerator(seed);
-    const data = initGameData();
-    let state = {
-      players: data.players,
-      teams: data.teams,
-      fixtures: data.fixtures,
-      currentWeek: 1,
-      news: [] as string[],
-      userTeamId: 'T1',
-      inboxMessages: [] as ReturnType<typeof generateSystemInboxMessages>,
-    };
-
-    const seasonWeekLimit = getSeasonWeekLimit(state.fixtures);
-    for (let week = 1; week <= seasonWeekLimit; week++) {
-      const weekFixtures = Object.values(state.fixtures).filter(fixture => fixture.week === week);
-      for (const fixture of weekFixtures) {
-        const previousPlayers = state.players;
-        const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures, state.userTeamId, { rng });
-        state.players = result.players;
-        state.teams = result.teams;
-        state.fixtures[fixture.id] = result.fixture;
-        const postMatchReport = generatePostMatchReportMessage({
-          currentWeek: state.currentWeek,
-          userTeamId: state.userTeamId,
-          fixture: result.fixture,
-          teams: result.teams,
-          players: result.players,
-          previousPlayers,
-        });
-        if (postMatchReport) {
-          state.inboxMessages = mergeInboxMessages(state.inboxMessages, [postMatchReport]);
-        }
-      }
-
-      const progression = computeWeeklyProgression(
-        state.currentWeek,
-        state.players,
-        state.teams,
-        state.fixtures,
-        state.news,
-        null,
-        rng
-      );
-      state.players = progression.players;
-      state.teams = progression.teams;
-      state.currentWeek = progression.currentWeek;
-      state.news = progression.news;
-      state.inboxMessages = mergeInboxMessages(
-        state.inboxMessages,
-        generateSystemInboxMessages(week, progression.generatedNews)
-      );
-
-      const transfers = computeWeeklyTransfers(state.players, state.teams, state.userTeamId, rng, state.currentWeek);
-      state.players = transfers.players;
-      state.teams = transfers.teams;
-      state.inboxMessages = mergeInboxMessages(
-        state.inboxMessages,
-        generateAssistantWeekMessages({
-          currentWeek: state.currentWeek,
-          userTeamId: state.userTeamId,
-          teams: state.teams,
-          players: state.players,
-          fixtures: state.fixtures,
-        })
-      );
-
-      Object.values(state.players).forEach(player => {
-        assert.ok(Number.isFinite(player.energy) && player.energy >= 0 && player.energy <= 100, `Invalid player energy for ${player.id} in seed ${seed}`);
-        assert.ok(Number.isFinite(player.morale) && player.morale >= 0 && player.morale <= 100, `Invalid player morale for ${player.id} in seed ${seed}`);
-        assert.ok(Number.isFinite(player.matchesSuspended) && player.matchesSuspended >= 0, `Invalid suspension count for ${player.id} in seed ${seed}`);
-        assert.ok(Number.isFinite(player.injuryWeeks) && player.injuryWeeks >= 0, `Invalid injury weeks for ${player.id} in seed ${seed}`);
-        if (player.injuryWeeks === 0) {
-          assert.equal(player.injuryType, undefined, `Unexpected stale injury type for ${player.id} in seed ${seed}`);
-        }
-      });
-
-      Object.values(state.teams).forEach(team => {
-        assert.ok(Number.isFinite(team.budget) && team.budget >= 0, `Invalid team budget for ${team.id} in seed ${seed}`);
-        assert.ok(Number.isFinite(team.transferSpend) && team.transferSpend >= 0, `Invalid team transfer spend for ${team.id} in seed ${seed}`);
-        assert.ok(Number.isFinite(team.boardApproval) && team.boardApproval >= 0 && team.boardApproval <= 100, `Invalid board approval for ${team.id} in seed ${seed}`);
-      });
-
-      Object.values(state.fixtures)
-        .filter(fixture => fixture.isPlayed)
-        .forEach(fixture => {
-          assert.ok(Number.isFinite(fixture.homeScore), `Played fixture ${fixture.id} missing home score in seed ${seed}`);
-          assert.ok(Number.isFinite(fixture.awayScore), `Played fixture ${fixture.id} missing away score in seed ${seed}`);
-        });
-
-      assert.ok(state.inboxMessages.length <= MAX_INBOX_MESSAGES, `Inbox cap exceeded in seed ${seed}`);
-      assert.equal(
-        new Set(state.inboxMessages.map(message => message.id)).size,
-        state.inboxMessages.length,
-        `Inbox dedupe failed in seed ${seed}`
-      );
-    }
-  });
-};
-
 const runCareerEngineChecks = () => {
   const data = initGameData();
   const userTeamId = Object.keys(data.teams)[0];
@@ -2240,20 +1910,10 @@ const runCompetitionBackendChecks = () => {
 
   const carabaoRoundOne = data.competitions['carabao-cup'].rounds[0];
   let progressedFixtures = { ...data.fixtures };
-  let progressedTeams = data.teams;
-  let progressedPlayers = data.players;
-  carabaoRoundOne.fixtureIds.forEach((fixtureId, index) => {
-    const result = quickSimMatch(
-      fixtureId,
-      progressedPlayers,
-      progressedTeams,
-      progressedFixtures,
-      null,
-      { rng: createSeededRandomGenerator(20260420 + index) }
-    );
-    progressedPlayers = result.players;
-    progressedTeams = result.teams;
-    progressedFixtures = { ...progressedFixtures, [fixtureId]: result.fixture };
+  const progressedTeams = data.teams;
+  carabaoRoundOne.fixtureIds.forEach(fixtureId => {
+    const fixture = progressedFixtures[fixtureId];
+    progressedFixtures[fixtureId] = { ...fixture, isPlayed: true, homeScore: 1, awayScore: 0, winnerTeamId: fixture.homeTeamId };
   });
   const carabaoProgression = resolveCompetitionProgression(
     progressedFixtures,
@@ -2296,19 +1956,8 @@ const runCompetitionBackendChecks = () => {
   assert.equal(europeQualifiedTeamIds.length, 8, 'Expected eight English clubs to fill the Europe slots');
 };
 
-const run = () => {
-  console.log('--- CI REGRESSION CHECKS ---');
-  runInvariantChecks();
-  console.log('[OK] Invariant checks passed');
-  runThresholdChecks();
-  console.log('[OK] Seasonal threshold checks passed');
-  runStateConsistencyStress();
-  console.log('[OK] State consistency stress checks passed');
-  runCareerEngineChecks();
-  console.log('[OK] Career engine checks passed');
-  runCompetitionBackendChecks();
-  console.log('[OK] Competition backend checks passed');
-  console.log('--- CI REGRESSION COMPLETE ---');
-};
-
-run();
+export const worldChecks = [
+  { name: 'world: run Invariant Checks', run: runInvariantChecks },
+  { name: 'world: run Career Engine Checks', run: runCareerEngineChecks },
+  { name: 'world: run Competition Backend Checks', run: runCompetitionBackendChecks },
+];

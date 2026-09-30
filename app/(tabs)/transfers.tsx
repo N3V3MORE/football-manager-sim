@@ -38,17 +38,21 @@ export default function TransfersScreen() {
   const [dialog, setDialog] = useState<TransferDialogState>(null);
   const showAlert = useConfirmStore(s => s.showAlert);
 
-  const marketPlayers = useMemo(() => sortPlayersByPositionGroup(Object.values(players).filter(p => p.isTransferListed && p.teamId !== userTeamId)), [players, userTeamId]);
-  const allPlayers = useMemo(() => sortPlayersByPositionGroup(Object.values(players).filter(p => (
-    p.teamId !== userTeamId &&
-    p.teamId !== FREE_AGENT_TEAM_ID &&
-    !p.isTransferListed
-  ))), [players, userTeamId]);
-  const freeAgentPlayers = useMemo(() => sortPlayersByPositionGroup(Object.values(players).filter(p => p.teamId === FREE_AGENT_TEAM_ID)), [players]);
-  const mySquad = useMemo(() => sortPlayersByPositionGroup(Object.values(players).filter(p => p.teamId === userTeamId)), [players, userTeamId]);
+  const categories = useMemo(() => {
+    const result: Record<TransferTab, Player[]> = { market: [], allPlayers: [], freeAgents: [], squad: [] };
+    for (const player of Object.values(players)) {
+      if (player.teamId === userTeamId) result.squad.push(player);
+      if (player.teamId === FREE_AGENT_TEAM_ID) result.freeAgents.push(player);
+      if (player.teamId !== userTeamId) {
+        if (player.isTransferListed) result.market.push(player);
+        else if (player.teamId !== FREE_AGENT_TEAM_ID) result.allPlayers.push(player);
+      }
+    }
+    return result;
+  }, [players, userTeamId]);
+  const visiblePlayers = useMemo(() => sortPlayersByPositionGroup(categories[tab]), [categories, tab]);
   if (!userTeamId || !teams[userTeamId]) return <Screen scroll={false} />;
   const userTeam = teams[userTeamId];
-  const visiblePlayers = tab === 'market' ? marketPlayers : tab === 'allPlayers' ? allPlayers : tab === 'freeAgents' ? freeAgentPlayers : mySquad;
   const activeNegotiations = pendingNegotiations.filter(item => (
     item.buyerTeamId === userTeamId &&
     (item.status === 'pending' || item.status === 'countered')
@@ -196,9 +200,9 @@ export default function TransfersScreen() {
 
       <TransferTabs
         activeTab={tab}
-        marketCount={marketPlayers.length}
-        allPlayersCount={allPlayers.length}
-        freeAgentCount={freeAgentPlayers.length}
+        marketCount={categories.market.length}
+        allPlayersCount={categories.allPlayers.length}
+        freeAgentCount={categories.freeAgents.length}
         onChange={setTab}
       />
 

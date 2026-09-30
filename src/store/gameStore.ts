@@ -88,7 +88,13 @@ interface GameStore extends GameState {
 
 export const useGameStore = create<GameStore>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      const setChanged = (update: (state: GameStore) => Partial<GameStore>) => {
+        const state = get();
+        const patch = update(state);
+        if (Object.entries(patch).some(([key, value]) => !Object.is(state[key as keyof GameStore], value))) set(patch);
+      };
+      return ({
       ...DEFAULT_GAME_STATE,
       liveMatches: {},
       boardReviewAppliedWeek: 0,
@@ -158,22 +164,23 @@ export const useGameStore = create<GameStore>()(
       },
 
       markInboxMessageRead: (messageId: string) => {
-        set(state => ({
-          inboxMessages: state.inboxMessages.map(message => (
+        setChanged(state => ({
+          inboxMessages: state.inboxMessages.some(message => message.id === messageId && !message.isRead) ? state.inboxMessages.map(message => (
             message.id === messageId ? { ...message, isRead: true } : message
-          )),
+          )) : state.inboxMessages,
         }));
       },
 
       dismissInboxMessage: (messageId: string) => {
-        set(state => ({
-          inboxMessages: state.inboxMessages.filter(message => message.id !== messageId),
+        setChanged(state => ({
+          inboxMessages: state.inboxMessages.some(message => message.id === messageId)
+            ? state.inboxMessages.filter(message => message.id !== messageId) : state.inboxMessages,
         }));
       },
 
       renewPlayerContract: (playerId: string, years: number, wage: number) => {
         let result: StoreActionResult = { success: false, message: '' };
-        set(state => {
+        setChanged(state => {
           const update = renewPlayerContractState(state, playerId, years, wage);
           result = update.result;
           return update.patch;
@@ -182,16 +189,16 @@ export const useGameStore = create<GameStore>()(
       },
 
       applyInboxAction: (messageId: string) => {
-        set(state => applyInboxActionState(state, messageId));
+        setChanged(state => applyInboxActionState(state, messageId));
       },
 
       playMatch: (fixtureId: string) => {
-        set(state => playMatchState(state, fixtureId));
+        setChanged(state => playMatchState(state, fixtureId));
       },
 
       processMatchMinute: (fixtureId: string, minute: number) => {
         let eventMsg: string | null = null;
-        set(state => {
+        setChanged(state => {
           const update = processLiveMatchMinuteState(state, fixtureId, minute);
           eventMsg = update.event;
           return update.patch;
@@ -200,12 +207,12 @@ export const useGameStore = create<GameStore>()(
       },
 
       finishLiveMatch: (fixtureId: string) => {
-        set(state => finishLiveMatchState(state, fixtureId));
+        setChanged(state => finishLiveMatchState(state, fixtureId));
       },
 
       makeLiveSubstitutions: (fixtureId, replacements) => {
         let result = { success: false, message: '' };
-        set(state => {
+        setChanged(state => {
           const update = makeLiveSubstitutionsState(state, fixtureId, replacements);
           result = update.result;
           return update.patch;
@@ -215,7 +222,7 @@ export const useGameStore = create<GameStore>()(
 
       setLiveMatchFormation: (fixtureId, teamId, formation) => {
         let result = { success: false, message: '' };
-        set(state => {
+        setChanged(state => {
           const update = setLiveMatchFormationState(state, fixtureId, teamId, formation);
           result = update.result;
           return update.patch;
@@ -224,7 +231,7 @@ export const useGameStore = create<GameStore>()(
       },
 
       advanceWeek: () => {
-        set(state => {
+        setChanged(state => {
           const next = advanceWeekState(state);
           // Ensure free-agent team exists if any player was moved there during
           // squad trimming or contract expiry (durable representation for
@@ -235,25 +242,26 @@ export const useGameStore = create<GameStore>()(
       },
 
       setFormation: (teamId, formation) => {
-        set(state => setFormationState(state, teamId, formation));
+        setChanged(state => setFormationState(state, teamId, formation));
       },
 
       setTactics: (teamId: string, tactics: Partial<TeamTactics>) => {
-        set(state => setTacticsState(state, teamId, tactics));
+        setChanged(state => setTacticsState(state, teamId, tactics));
       },
 
       toggleStarting: (playerId: string) => {
-        set(state => toggleStartingState(state, playerId));
+        setChanged(state => toggleStartingState(state, playerId));
       },
 
       markAsSub: (playerId: string) => {
-        set(state => markAsSubState(state, playerId));
+        setChanged(state => markAsSubState(state, playerId));
       },
 
       setTrainingFocus: (playerId: string, focus: StatKey | null) => {
-        set(state => {
+        setChanged(state => {
           const player = state.players[playerId];
           if (!player || player.teamId !== state.userTeamId) return state;
+          if (player.trainingFocus === focus && player.trainingXp !== undefined && player.trainingStatProgress !== undefined && player.trainingStatGains !== undefined) return state;
           return {
             players: {
               ...state.players,
@@ -270,16 +278,16 @@ export const useGameStore = create<GameStore>()(
       },
 
       setPlayerRole: (teamId: string, slotKey: string, role: PlayerRole) => {
-        set(state => setPlayerRoleState(state, teamId, slotKey, role));
+        setChanged(state => setPlayerRoleState(state, teamId, slotKey, role));
       },
 
       skipToEndOfSeason: () => {
-        set(state => skipToEndOfSeasonState(state));
+        setChanged(state => skipToEndOfSeasonState(state));
       },
 
       clearStuckLiveMatches: () => {
         let clearedCount = 0;
-        set(state => {
+        setChanged(state => {
           const prunedLiveMatches = pruneInvalidLiveMatches(state.liveMatches || {}, {
             currentWeek: state.currentWeek,
             fixtures: state.fixtures,
@@ -302,20 +310,20 @@ export const useGameStore = create<GameStore>()(
       },
 
       swapPlayer: (removeId: string | null, addId: string, slotKey?: string) => {
-        set(state => swapPlayerState(state, removeId, addId, slotKey));
+        setChanged(state => swapPlayerState(state, removeId, addId, slotKey));
       },
 
       swapStartingSlots: (teamId: string, slotA: string, slotB: string) => {
-        set(state => swapStartingSlotsState(state, teamId, slotA, slotB));
+        setChanged(state => swapStartingSlotsState(state, teamId, slotA, slotB));
       },
 
       changeTeam: (teamId: string) => {
-        set(state => changeTeamState(state, teamId));
+        setChanged(state => changeTeamState(state, teamId));
       },
 
       approachPlayer: (playerId: string) => {
         let result: StoreActionResult = { success: false, message: '' };
-        set(state => {
+        setChanged(state => {
           const update = approachPlayerState(state, playerId);
           result = update.result;
           return update.patch;
@@ -325,7 +333,7 @@ export const useGameStore = create<GameStore>()(
 
       buyPlayer: (playerId: string, fee: number, wageOffered: number) => {
         let result: StoreActionResult = { success: false, message: '' };
-        set(state => {
+        setChanged(state => {
           const update = buyPlayerState(state, playerId, fee, wageOffered);
           result = update.result;
           return update.patch;
@@ -335,7 +343,7 @@ export const useGameStore = create<GameStore>()(
 
       submitTransferBid: (negotiationId: string, fee: number, wageOffered: number) => {
         let result: StoreActionResult = { success: false, message: '' };
-        set(state => {
+        setChanged(state => {
           const update = submitBidState(state, negotiationId, fee, wageOffered);
           result = update.result;
           return update.patch;
@@ -345,7 +353,7 @@ export const useGameStore = create<GameStore>()(
 
       acceptTransferCounter: (negotiationId: string) => {
         let result: StoreActionResult = { success: false, message: '' };
-        set(state => {
+        setChanged(state => {
           const update = acceptTransferCounterState(state, negotiationId);
           result = update.result;
           return update.patch;
@@ -354,12 +362,13 @@ export const useGameStore = create<GameStore>()(
       },
 
       withdrawTransferNegotiation: (negotiationId: string) => {
-        set(state => withdrawTransferNegotiationState(state, negotiationId));
+        if (!get().pendingNegotiations?.some(item => item.id === negotiationId && (item.status === 'pending' || item.status === 'countered'))) return;
+        setChanged(state => withdrawTransferNegotiationState(state, negotiationId));
       },
 
       signFreeAgent: (playerId: string, wageOffered: number) => {
         let result: StoreActionResult = { success: false, message: '' };
-        set(state => {
+        setChanged(state => {
           const update = signFreeAgentState(state, playerId, wageOffered);
           result = update.result;
           return update.patch;
@@ -368,13 +377,14 @@ export const useGameStore = create<GameStore>()(
       },
 
       listPlayerForSale: (playerId: string, askingPrice: number) => {
-        set(state => listPlayerForSaleState(state, playerId, askingPrice));
+        setChanged(state => listPlayerForSaleState(state, playerId, askingPrice));
       },
 
       unlistPlayer: (playerId: string) => {
-        set(state => unlistPlayerState(state, playerId));
+        setChanged(state => unlistPlayerState(state, playerId));
       },
-    }),
+      });
+    },
     {
       name: PERSIST_STORAGE_KEY,
       storage: createJSONStorage(() => safeStorage),

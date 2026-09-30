@@ -1,10 +1,10 @@
+import seedPlayers from '../../src/data/english_league_players.json';
 import {
   Player,
   assert,
   buildTestPlayer,
   createSeededRandom,
   initGameData,
-  readSource,
 } from './shared';
 import { computeWeeklyTraining } from '../../src/core/trainingEngine';
 import { scaleLineupForMatch } from '../../src/core/matchUtils';
@@ -29,7 +29,7 @@ export const checkSeededPlayersNormalizeTraits = () => {
 };
 
 export const checkTraitRegistryCoversSeededTraits = () => {
-  const seedRows = JSON.parse(readSource('src/data/english_league_players.json')) as Array<{ playerTraits?: unknown }>;
+  const seedRows = seedPlayers as Array<{ playerTraits?: unknown }>;
   const seedTraits = new Set(seedRows.flatMap(row => normalizePlayerTraits(row.playerTraits)));
   const missing = [...seedTraits].filter(trait => !TRAIT_REGISTRY[trait]);
 

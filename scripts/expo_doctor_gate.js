@@ -33,19 +33,27 @@ if (doctor.error) {
 const output = `${doctor.stdout || ''}${doctor.stderr || ''}`;
 process.stdout.write(output);
 
-if (doctor.status === 0) process.exit(0);
+const plainOutput = output.replace(/\u001b\[[0-9;]*m/g, '');
+if (doctor.status === 0) {
+  const completion = plainOutput.match(/(\d+)\/(\d+) checks passed\. No issues detected!/);
+  if (completion && Number(completion[1]) > 0 && completion[1] === completion[2]) process.exit(0);
+  console.error('Expo Doctor did not complete all release checks successfully.');
+  process.exit(1);
+}
 
-const checkNames = [...output.matchAll(/Unexpected error while running '([^']+)' check:/g)]
+const checkNames = [...plainOutput.matchAll(/Unexpected error while running '([^']+)' check:/g)]
   .map(match => match[1]);
-const explainPackages = [...output.matchAll(/Failed to find dependency tree for ([^:]+): npm explain/g)]
+const explainPackages = [...plainOutput.matchAll(/Failed to find dependency tree for ([^:]+): npm explain/g)]
   .map(match => match[1]);
 
+const failedChecks = plainOutput.match(/(\d+) checks? failed, indicating possible issues with the project\./);
 const onlyKnownDoctorBug = (
+  failedChecks && Number(failedChecks[1]) === checkNames.length &&
   checkNames.length > 0 &&
   checkNames.every(checkName => knownBrokenChecks.has(checkName)) &&
   explainPackages.length > 0 &&
   explainPackages.every(packageName => legacyPackages.has(packageName)) &&
-  !output.includes('\n\u2716 ')
+  !plainOutput.includes('\n\u2716 ')
 );
 
 const packageIsAbsent = (packageName) => {

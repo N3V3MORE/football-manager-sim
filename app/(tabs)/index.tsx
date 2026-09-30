@@ -41,18 +41,6 @@ type CompetitionPanelItem = {
 
 const weekToDate = (week: number, season: number): string => formatShortDate(week, season);
 
-const getStatValue = (player: Player, stat: 'goals' | 'assists' | 'cleanSheets'): number => {
-  if (stat === 'goals') return player.goals;
-  if (stat === 'assists') return player.assists;
-  return player.cleanSheets || 0;
-};
-
-const getTopPlayerByStat = (allPlayers: Player[], stat: 'goals' | 'assists' | 'cleanSheets'): Player | undefined => (
-  [...allPlayers]
-    .filter(player => getStatValue(player, stat) > 0)
-    .sort((a, b) => getStatValue(b, stat) - getStatValue(a, stat))[0]
-);
-
 export default function HubScreen() {
   const router = useRouter();
   const currentWeek = useGameStore(state => state.currentWeek);
@@ -67,6 +55,10 @@ export default function HubScreen() {
   const news = useGameStore(state => state.news);
   const careerRecord = useGameStore(state => state.careerRecord);
   const seasonNumber = getInboxSeason(competitions);
+  const openLeague = useCallback(() => router.push('/league'), [router]);
+  const openCalendar = useCallback(() => router.push('/calendar'), [router]);
+  const openStats = useCallback(() => router.push('/stats'), [router]);
+  const openBoard = useCallback(() => router.push('/board'), [router]);
 
   const myTeam = userTeamId ? teams[userTeamId] : null;
   const myDivision = myTeam?.division ?? 'Premier League';
@@ -158,18 +150,18 @@ export default function HubScreen() {
     })
   ), [currentWeek, upcomingFixtures, teams, userTeamId, seasonNumber]);
 
-  const allPlayers = useMemo(() => {
-    return Object.values(players).filter(player => {
-      const playerTeam = teams[player.teamId];
-      return playerTeam && playerTeam.division === myDivision;
-    });
+  const { topScorer, topAssister, topCS } = useMemo(() => {
+    let topScorer: Player | undefined;
+    let topAssister: Player | undefined;
+    let topCS: Player | undefined;
+    for (const player of Object.values(players)) {
+      if (teams[player.teamId]?.division !== myDivision) continue;
+      if (player.goals > (topScorer?.goals ?? 0)) topScorer = player;
+      if (player.assists > (topAssister?.assists ?? 0)) topAssister = player;
+      if (player.position === 'GK' && (player.cleanSheets || 0) > (topCS?.cleanSheets || 0)) topCS = player;
+    }
+    return { topScorer, topAssister, topCS };
   }, [players, teams, myDivision]);
-  const topScorer = useMemo(() => getTopPlayerByStat(allPlayers, 'goals'), [allPlayers]);
-  const topAssister = useMemo(() => getTopPlayerByStat(allPlayers, 'assists'), [allPlayers]);
-  const topCS = useMemo(
-    () => getTopPlayerByStat(allPlayers.filter(player => player.position === 'GK'), 'cleanSheets'),
-    [allPlayers]
-  );
   const unreadInboxCount = useMemo(
     () => inboxMessages.filter(message => !message.isRead).length,
     [inboxMessages]
@@ -196,7 +188,7 @@ export default function HubScreen() {
             <Text style={styles.emptyInboxText}>Advance Week · W{currentWeek}</Text>
           </TouchableOpacity>
           {careerRecord.seasonsManaged > 0 ? (
-            <CareerStatsCard careerRecord={careerRecord} onPress={() => router.push('/board')} />
+            <CareerStatsCard careerRecord={careerRecord} onPress={openBoard} />
           ) : null}
           <TouchableOpacity
             style={styles.emptyInboxButton}
@@ -251,25 +243,25 @@ export default function HubScreen() {
             title={myDivision}
             rows={miniTableData.rows}
             userTeamId={userTeamId}
-            onPress={() => router.push('/league')}
+            onPress={openLeague}
           />
 
           <CompetitionPanelsCard items={competitionPanels} />
 
-          <UpcomingFixturesCard rows={upcomingFixtureRows} onPress={() => router.push('/calendar')} />
+          <UpcomingFixturesCard rows={upcomingFixtureRows} onPress={openCalendar} />
 
-          <SeasonStatsCard leaders={seasonLeaders} onPress={() => router.push('/stats')} />
+          <SeasonStatsCard leaders={seasonLeaders} onPress={openStats} />
 
           <BoardRoomCard
             boardApproval={myTeam.boardApproval}
             managerName={myTeam.manager.name}
-            onPress={() => router.push('/board')}
+            onPress={openBoard}
           />
 
           {careerRecord && careerRecord.seasonsManaged > 0 && (
             <CareerStatsCard
               careerRecord={careerRecord}
-              onPress={() => router.push('/board')}
+              onPress={openBoard}
             />
           )}
 

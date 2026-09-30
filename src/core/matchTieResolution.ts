@@ -4,13 +4,17 @@ import { RandomGenerator, resolveRandom } from './random';
 import { clamp } from './matchUtils';
 import { getTraitBonuses } from './traitEngine';
 
-export const getDecisiveTieScore = (fixture: Fixture, fixtures: Record<string, Fixture>) => {
-  const firstLeg = fixture.competitionType === 'league' && fixture.round === 'semi_final'
+export const resolveFirstLegId = (fixture: Fixture, fixtures: Record<string, Fixture>): string | null => ( fixture.competitionType === 'league' && fixture.round === 'semi_final'
     ? Object.values(fixtures).find(candidate => candidate.id !== fixture.id &&
       candidate.competitionId === fixture.competitionId && candidate.round === 'semi_final' &&
       candidate.homeTeamId === fixture.awayTeamId && candidate.awayTeamId === fixture.homeTeamId &&
       compareFixturesChronologically(candidate, fixture) < 0)
-    : undefined;
+    ?.id ?? null
+    : null
+);
+
+export const getDecisiveTieScore = (fixture: Fixture, fixtures: Record<string, Fixture>, firstLegId = resolveFirstLegId(fixture, fixtures)) => {
+  const firstLeg = firstLegId ? fixtures[firstLegId] : undefined;
   return {
     isVoid: fixture.resolution === 'void' || firstLeg?.resolution === 'void',
     isDecisive: fixture.isKnockout || Boolean(firstLeg),

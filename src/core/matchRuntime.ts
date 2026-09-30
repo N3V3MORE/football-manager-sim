@@ -19,7 +19,7 @@ import {
   getRoleStatBonus,
   getRoleWeightMultiplier,
 } from './playerRoleEngine';
-import { getTraitBonuses } from './traitEngine';
+import { getTraitBonuses, TraitBonuses, TraitPhase } from './traitEngine';
 
 const LOW_INTENSITY_COMMENTARY_CHANCE = 0.04;
 
@@ -241,8 +241,29 @@ export const simulatePossession = (
   if (attPlayers.length === 0 || defPlayers.length === 0) return { goal: false, event: null };
   const attRoles = getRoleGroups(attPlayers);
   const defRoles = getRoleGroups(defPlayers);
-  const attackerRoleFor = (player: Player) => getCompatiblePlayerRoleForTeamSlot(attacker, player);
-  const defenderRoleFor = (player: Player) => getCompatiblePlayerRoleForTeamSlot(defender, player);
+  const attackerRoles = new Map<Player, ReturnType<typeof getCompatiblePlayerRoleForTeamSlot>>();
+  const defenderRoles = new Map<Player, ReturnType<typeof getCompatiblePlayerRoleForTeamSlot>>();
+  const attackerRoleFor = (player: Player) => {
+    const cached = attackerRoles.get(player);
+    if (cached !== undefined) return cached;
+    const role = getCompatiblePlayerRoleForTeamSlot(attacker, player);
+    attackerRoles.set(player, role);
+    return role;
+  };
+  const defenderRoleFor = (player: Player) => {
+    const cached = defenderRoles.get(player);
+    if (cached !== undefined) return cached;
+    const role = getCompatiblePlayerRoleForTeamSlot(defender, player);
+    defenderRoles.set(player, role);
+    return role;
+  };
+  const traits = new Map<Player, Partial<Record<TraitPhase, TraitBonuses>>>();
+  const traitBonusesFor = (player: Player, phase: TraitPhase) => {
+    let phases = traits.get(player);
+    if (!phases) { phases = {}; traits.set(player, phases); }
+    if (!phases[phase]) phases[phase] = getTraitBonuses(player, phase);
+    return phases[phase]!;
+  };
   const uniquePlayers = (...pools: Player[][]) => Array.from(new Map(
     pools.flat().map(player => [player.id, player])
   ).values());
@@ -339,7 +360,7 @@ export const simulatePossession = (
       const roleMult = role === 'DM' ? 1.1 : (role === 'CM' ? 1.25 : (role === 'AM' ? 1.3 : 1.0));
       const playerRole = attackerRoleFor(p);
       const roleBonus = getRoleStatBonus(playerRole, 'buildUp');
-      const traitBonus = getTraitBonuses(p, 'buildUp');
+      const traitBonus = traitBonusesFor(p, 'buildUp');
       return (
         roleAdjustedStat(traitAdjustedStat(p.stats.passing, traitBonus.statBonus.passing), roleBonus.passing) +
         roleAdjustedStat(traitAdjustedStat(p.stats.dribbling, traitBonus.statBonus.dribbling), roleBonus.dribbling) * 0.4 +
@@ -356,7 +377,7 @@ export const simulatePossession = (
     ? (defensiveWall.reduce((sum, p) => {
       const playerRole = defenderRoleFor(p);
       const roleBonus = getRoleStatBonus(playerRole, 'defending');
-      const traitBonus = getTraitBonuses(p, 'defense');
+      const traitBonus = traitBonusesFor(p, 'defense');
       const pressure = playerRole === 'pressingForward'
         ? traitAdjustedStat(p.stats.pace, traitBonus.statBonus.pace) * 0.15 + traitAdjustedStat(p.stats.physical, traitBonus.statBonus.physical) * 0.15
         : 0;
@@ -379,7 +400,7 @@ export const simulatePossession = (
   // UNDERDOG BUFF: Increased Chaos Factor (from 0.15 to 0.25) so lower teams get through more often
   const buildOutEdge = attShape.buildOutSupport - defShape.centralShield;
   const activeMidBuildBonus = getRoleStatBonus(attackerRoleFor(activeMid), 'buildUp');
-  const activeMidTraitBonus = getTraitBonuses(activeMid, 'buildUp');
+  const activeMidTraitBonus = traitBonusesFor(activeMid, 'buildUp');
   const phaseOneAttack = roleAdjustedStat(
     traitAdjustedStat(activeMid.stats.passing, activeMidTraitBonus.statBonus.passing),
     activeMidBuildBonus.passing
@@ -410,7 +431,7 @@ export const simulatePossession = (
     .filter(player => ['wingBack', 'wideMidfielder'].includes(attackerRoleFor(player)))
     .length * 0.04;
   const wideTraitBias = uniquePlayers(attRoles.FB, attRoles.WB, attRoles.WIDE_MID, attRoles.WINGER)
-    .reduce((sum, player) => sum + getTraitBonuses(player, 'creation').wideRouteBonus, 0);
+    .reduce((sum, player) => sum + traitBonusesFor(player, 'creation').wideRouteBonus, 0);
   const wideRouteChance = clamp(
     ENGINE_CONFIG.WIDE_ROUTE_BASE_CHANCE + (wideAttackWidth - centralAttackWidth) * 0.04 + shapeWideDelta - shapeCentralPenalty + invertedWingerBias + wideRoleBias + Math.min(0.2, wideTraitBias),
     ENGINE_CONFIG.WIDE_ROUTE_MIN_CHANCE,
@@ -432,7 +453,7 @@ export const simulatePossession = (
       const roleBoost = role === 'AM' ? 1.25 : (role === 'CM' ? 1.1 : 1.0);
       const playerRole = attackerRoleFor(p);
       const roleBonus = getRoleStatBonus(playerRole, 'creation');
-      const traitBonus = getTraitBonuses(p, 'creation');
+      const traitBonus = traitBonusesFor(p, 'creation');
       return (
         roleAdjustedStat(traitAdjustedStat(p.stats.passing, traitBonus.statBonus.passing), roleBonus.passing) * 0.9 +
         roleAdjustedStat(traitAdjustedStat(p.stats.dribbling, traitBonus.statBonus.dribbling), roleBonus.dribbling) * 0.8 +
@@ -447,7 +468,7 @@ export const simulatePossession = (
   const activeDefender = defenderPool.length > 0
     ? weightedPick(defenderPool, p => {
       const roleBonus = getRoleStatBonus(defenderRoleFor(p), 'defending');
-      const traitBonus = getTraitBonuses(p, 'defense');
+      const traitBonus = traitBonusesFor(p, 'defense');
       return (
         roleAdjustedStat(traitAdjustedStat(p.stats.defending || 50, traitBonus.statBonus.defending), roleBonus.defending) +
         traitAdjustedStat(p.stats.pace, traitBonus.statBonus.pace) * 0.15
@@ -458,7 +479,7 @@ export const simulatePossession = (
   const creatorRole = inferRoleTag(creator);
   const creatorPlayerRole = attackerRoleFor(creator);
   const creatorRoleBonus = getRoleStatBonus(creatorPlayerRole, 'creation');
-  const creatorTraitBonus = getTraitBonuses(creator, 'creation');
+  const creatorTraitBonus = traitBonusesFor(creator, 'creation');
   const shieldStrength = avgStat([...defRoles.DM, ...defRoles.CM], p => (p.stats.defending || 50), 55);
   const throughBallSkill = creator.stats.passing > 70 ? 1.0 : 0.9;
   const roleThroughBallBoost = (creatorRole === 'AM' || creatorRole === 'CM' ? 1.08 : 1.0) * (1 + (creatorRoleBonus.throughBall || 0));
@@ -487,7 +508,7 @@ export const simulatePossession = (
     : (1 + clamp((attShape.centralShield - defShape.centralShield) * 0.02, -0.08, 0.1));
   creationStat *= routeShapeBoost;
   const activeDefenderBonus = getRoleStatBonus(defenderRoleFor(activeDefender), 'defending');
-  const activeDefenderTraitBonus = getTraitBonuses(activeDefender, 'defense');
+  const activeDefenderTraitBonus = traitBonusesFor(activeDefender, 'defense');
   let defenderStat = roleAdjustedStat(
     traitAdjustedStat(activeDefender.stats.defending || 60, activeDefenderTraitBonus.statBonus.defending),
     activeDefenderBonus.defending
@@ -512,7 +533,7 @@ export const simulatePossession = (
     .filter(player => getRoleWeightMultiplier(attackerRoleFor(player), 'finishing') > 0);
   const possibleFinishers = attackingOptions.length > 0 ? attackingOptions : attPlayers;
   const finisher = weightedPick(possibleFinishers, p => {
-    const traitBonus = getTraitBonuses(p, 'finishing');
+    const traitBonus = traitBonusesFor(p, 'finishing');
     const shooting = traitAdjustedStat(p.stats.shooting || 50, traitBonus.statBonus.shooting);
     const role = inferRoleTag(p);
     const roleMultiplier =
@@ -524,7 +545,7 @@ export const simulatePossession = (
   }, rng);
 
   const gk = gkDef[0] || defPlayers[0];
-  const finisherTraitBonus = getTraitBonuses(finisher, 'finishing');
+  const finisherTraitBonus = traitBonusesFor(finisher, 'finishing');
   let shotStat = traitAdjustedStat(finisher.stats.shooting || 70, finisherTraitBonus.statBonus.shooting) * shootingBonus;
   shotStat *= 1 + (getRoleStatBonus(attackerRoleFor(finisher), 'finishing').shooting || 0);
   shotStat *= finisherTraitBonus.weightMultiplier;

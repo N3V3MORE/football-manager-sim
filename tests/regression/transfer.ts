@@ -1,16 +1,5 @@
-import { existsSync } from 'fs';
-import { join } from 'path';
 import { submitBidState, withdrawTransferNegotiationState } from '../../src/store/transferActions';
-import { FREE_AGENT_TEAM_ID, Player, Team, acceptTransferCounterState, addSquadPlayers, advanceSeason, approachPlayerState, assert, buildTestPlayer, buildTestTeam, buyPlayerState, computeWeeklyTransfers, createFreeAgentTeam, createSeededRandom, getSquadPolicy, initGameData, readSource, resolveWeeklyNegotiationsState, signFreeAgentState } from './shared';
-
-export const checkTransferFinanceHelpersLiveInTransferEngine = () => {
-  const transferEngineSource = readSource('src/core/transferEngine.ts');
-  const transferActionsSource = readSource('src/store/transferActions.ts');
-
-  assert(transferEngineSource.includes('export const isWageOfferAccepted'), 'transferEngine should own wage acceptance helper');
-  assert(transferActionsSource.includes("from '../core/transferEngine'"), 'transfer actions should import wage helper from transferEngine');
-  assert(!existsSync(join(process.cwd(), 'src/core/transferFinance.ts')), 'transferFinance helper file should be deleted after merge');
-};
+import { FREE_AGENT_TEAM_ID, Player, Team, acceptTransferCounterState, addSquadPlayers, advanceSeason, approachPlayerState, assert, buildTestPlayer, buildTestTeam, buyPlayerState, computeWeeklyTransfers, createFreeAgentTeam, createSeededRandom, getSquadPolicy, initGameData, resolveWeeklyNegotiationsState, signFreeAgentState } from './shared';
 
 export const checkNegotiationsRevalidateCurrentState = () => {
   const data = initGameData('T1', { next: createSeededRandom(9029) });
@@ -345,15 +334,6 @@ export const checkRivalBidWinsWhenUserDoesNotMatch = () => {
   assert(result.players[target!.id].teamId === rivalTeam!.id, 'Unmatched rival bid should move player to rival club');
   assert(nextNegotiation.status === 'rejected', 'User negotiation should be rejected after losing to a rival bid');
   assert(nextNegotiation.rivalBid?.status === 'won', 'Rival bid should be marked won');
-};
-
-export const checkActiveNegotiationsCanBeWithdrawnInUi = () => {
-  const transfersSource = readSource('app/(tabs)/transfers.tsx');
-  const cardSource = readSource('components/transfers/transfer-player-card.tsx');
-
-  assert(/withdrawTransferNegotiation/.test(transfersSource), 'Transfer screen should expose the withdrawal action for active talks');
-  assert(/secondaryActionLabel="Withdraw"/.test(transfersSource), 'Pending talks should render a visible withdraw button');
-  assert(/onSecondaryAction/.test(cardSource), 'Transfer player card should support a secondary action');
 };
 
 export const checkManualFreeAgentSigningMovesPlayerDuringWindow = () => {

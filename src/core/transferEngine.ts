@@ -1,3 +1,4 @@
+import { createRosterIndex, RosterIndex } from './rosterIndex';
 import { Player, Team } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { RandomGenerator, resolveRandom } from './random';
@@ -120,9 +121,10 @@ const calculateDestinationWage = (
   player: Player,
   buyerTeam: Team,
   allPlayers: Record<string, Player>,
-  severity: PlanningSeverity
+  severity: PlanningSeverity,
+  rosterIndex?: RosterIndex
 ): number => {
-  const buyerSquad = Object.values(allPlayers).filter(p => p.teamId === buyerTeam.id && p.id !== player.id);
+  const buyerSquad = (rosterIndex?.getPlayers(buyerTeam.id, allPlayers) ?? Object.values(allPlayers).filter(p => p.teamId === buyerTeam.id)).filter(p => p.id !== player.id);
   const avgWage = buyerSquad.length > 0
     ? buyerSquad.reduce((sum, p) => sum + p.wage, 0) / buyerSquad.length
     : player.wage;
@@ -160,17 +162,17 @@ const getPositionCounts = (squad: Player[]) => (
   }, { GK: 0, DEF: 0, MID: 0, FWD: 0 })
 );
 
-const sellerCanLosePlayer = (seller: Team | undefined, target: Player, allPlayers: Record<string, Player>) => {
+const sellerCanLosePlayer = (seller: Team | undefined, target: Player, allPlayers: Record<string, Player>, rosterIndex?: RosterIndex) => {
   if (!seller) return true;
   const policy = getSquadPolicy(seller);
-  const squadAfterSale = Object.values(allPlayers).filter(player => player.teamId === seller.id && player.id !== target.id);
+  const squadAfterSale = (rosterIndex?.getPlayers(seller.id, allPlayers) ?? Object.values(allPlayers).filter(player => player.teamId === seller.id)).filter(player => player.id !== target.id);
   const counts = getPositionCounts(squadAfterSale);
   return squadAfterSale.length >= policy.structuralMinimum && counts[target.position] >= policy.positionalMinimums[target.position];
 };
 
-const buyerHasCapacity = (buyer: Team, allPlayers: Record<string, Player>) => {
+const buyerHasCapacity = (buyer: Team, allPlayers: Record<string, Player>, rosterIndex?: RosterIndex) => {
   const policy = getSquadPolicy(buyer);
-  const squadSize = Object.values(allPlayers).filter(player => player.teamId === buyer.id).length;
+  const squadSize = (rosterIndex?.getPlayers(buyer.id, allPlayers) ?? Object.values(allPlayers).filter(player => player.teamId === buyer.id)).length;
   return squadSize < policy.maximumSquadSize;
 };
 
@@ -199,6 +201,7 @@ const isValidPurchase = ({
   newWage,
   buyerSquadAvgRating,
   severity,
+  rosterIndex,
 }: {
   buyer: Team;
   seller?: Team;
@@ -207,9 +210,10 @@ const isValidPurchase = ({
   newWage: number;
   buyerSquadAvgRating: number;
   severity: PlanningSeverity;
+  rosterIndex?: RosterIndex;
 }) => (
-  buyerHasCapacity(buyer, allPlayers) &&
-  sellerCanLosePlayer(seller, target, allPlayers) &&
+  buyerHasCapacity(buyer, allPlayers, rosterIndex) &&
+  sellerCanLosePlayer(seller, target, allPlayers, rosterIndex) &&
   meetsTargetQuality(buyer, target, buyerSquadAvgRating, severity) &&
   canAffordWage(buyer, newWage)
 );
@@ -395,13 +399,14 @@ export const computeWeeklyTransfers = (
   let updatedPlayers = { ...players };
   let updatedTeams = { ...teams };
   const decisions: AITransferDecision[] = [];
+  const rosterIndex = createRosterIndex(players);
 
   const aiTeams = Object.values(updatedTeams).filter(t => isPlayableClub(t) && t.id !== userTeamId);
 
   // Phase 1: All AI Teams evaluate their squads and list players
   aiTeams.forEach(team => {
-    const squad = Object.values(updatedPlayers).filter(p => p.teamId === team.id);
-    const squadPlan = buildSquadPlan(team, updatedPlayers);
+    const squad = rosterIndex.getPlayers(team.id, updatedPlayers);
+    const squadPlan = buildSquadPlan(team, updatedPlayers, squad);
     const needByPosition = squadPlan.needs.reduce<Record<PositionKey, typeof squadPlan.needs[number]>>((acc, need) => {
       acc[need.position] = need;
       return acc;
@@ -487,7 +492,7 @@ export const computeWeeklyTransfers = (
 
   // Phase 2: All AI Teams attempt to satisfy their weaknesses from the Global Pool
   aiTeams.forEach(team => {
-    const squadPlan = buildSquadPlan(team, updatedPlayers);
+    const squadPlan = buildSquadPlan(team, updatedPlayers, rosterIndex.getPlayers(team.id, updatedPlayers));
     const priorityNeed = [...squadPlan.needs]
       .filter(need => NEED_SEVERITY_VALUE[need.severity] >= NEED_SEVERITY_VALUE.need)
       .sort((a, b) => {
@@ -511,7 +516,7 @@ export const computeWeeklyTransfers = (
 
     if (targets.length > 0) {
       const identityProfile = getManagerIdentityProfile(team.manager.transferIdentity);
-      const buyerSquad = Object.values(updatedPlayers).filter(p => p.teamId === team.id);
+      const buyerSquad = rosterIndex.getPlayers(team.id, updatedPlayers);
       const buyerSquadAvgRating = buyerSquad.length > 0
         ? buyerSquad.reduce((sum, p) => sum + p.overallRating, 0) / buyerSquad.length
         : 70;
@@ -533,7 +538,7 @@ export const computeWeeklyTransfers = (
       
       if (random() < buyChance) {
         const rolePromise = determineRolePromise(priorityNeed.severity, bestTarget.overallRating, buyerSquadAvgRating);
-        const newWage = calculateDestinationWage(bestTarget, updatedTeams[team.id], updatedPlayers, priorityNeed.severity);
+        const newWage = calculateDestinationWage(bestTarget, updatedTeams[team.id], updatedPlayers, priorityNeed.severity, rosterIndex);
         const moraleBase = rolePromise === 'starter' ? 75 : rolePromise === 'rotation' ? 65 : 55;
 
         const buyer = updatedTeams[team.id];
@@ -546,6 +551,7 @@ export const computeWeeklyTransfers = (
           newWage,
           buyerSquadAvgRating,
           severity: priorityNeed.severity,
+          rosterIndex,
         })) return;
         const moved = movePlayerToTeam(
           updatedPlayers,
@@ -562,6 +568,7 @@ export const computeWeeklyTransfers = (
         );
         updatedPlayers = moved.players;
         updatedTeams = moved.teams;
+        rosterIndex.movePlayer(bestTarget.id, bestTarget.teamId, team.id);
         decisions.push({
           week: currentWeek,
           action: 'bought',
@@ -584,7 +591,7 @@ export const computeWeeklyTransfers = (
   const freeAgentPlayers = Object.values(updatedPlayers).filter(player => player.teamId === FREE_AGENT_TEAM_ID);
   if (freeAgentPlayers.length > 0) {
     aiTeams.forEach(team => {
-      const squadPlan = buildSquadPlan(team, updatedPlayers);
+      const squadPlan = buildSquadPlan(team, updatedPlayers, rosterIndex.getPlayers(team.id, updatedPlayers));
       const priorityNeed = [...squadPlan.needs]
         .filter(need => NEED_SEVERITY_VALUE[need.severity] >= NEED_SEVERITY_VALUE.need)
         .sort((a, b) => {
@@ -596,7 +603,7 @@ export const computeWeeklyTransfers = (
       if (!priorityNeed) return;
 
       const buyer = updatedTeams[team.id];
-      const buyerSquad = Object.values(updatedPlayers).filter(p => p.teamId === team.id);
+      const buyerSquad = rosterIndex.getPlayers(team.id, updatedPlayers);
       const buyerSquadAvgRating = buyerSquad.length > 0
         ? buyerSquad.reduce((sum, p) => sum + p.overallRating, 0) / buyerSquad.length
         : 70;
@@ -609,7 +616,7 @@ export const computeWeeklyTransfers = (
 
       const bestTarget = targets
         .map(target => {
-          const newWage = calculateDestinationWage(target, buyer, updatedPlayers, priorityNeed.severity);
+          const newWage = calculateDestinationWage(target, buyer, updatedPlayers, priorityNeed.severity, rosterIndex);
           const ageScore = getAgeScore(target.age, identityProfile.agePreference);
           const value = target.overallRating * 3 * identityProfile.ratingWeight
             - ageScore * identityProfile.ageSensitivity
@@ -623,6 +630,7 @@ export const computeWeeklyTransfers = (
           newWage: candidate.newWage,
           buyerSquadAvgRating,
           severity: priorityNeed.severity,
+          rosterIndex,
         }))
         .sort((a, b) => b.value - a.value)[0];
 
@@ -646,6 +654,7 @@ export const computeWeeklyTransfers = (
       );
       updatedPlayers = moved.players;
       updatedTeams = moved.teams;
+      rosterIndex.movePlayer(bestTarget.target.id, bestTarget.target.teamId, team.id);
       decisions.push({
         week: currentWeek,
         action: 'bought',
@@ -670,7 +679,7 @@ export const computeWeeklyTransfers = (
 
     if (userListedPlayers.length > 0) {
       aiTeams.forEach(team => {
-        const squadPlan = buildSquadPlan(team, updatedPlayers);
+        const squadPlan = buildSquadPlan(team, updatedPlayers, rosterIndex.getPlayers(team.id, updatedPlayers));
         const priorityNeed = [...squadPlan.needs]
           .filter(need => NEED_SEVERITY_VALUE[need.severity] >= NEED_SEVERITY_VALUE.need)
           .sort((a, b) => {
@@ -691,7 +700,7 @@ export const computeWeeklyTransfers = (
 
         if (matchingUserTargets.length > 0) {
           const identityProfile = getManagerIdentityProfile(team.manager.transferIdentity);
-          const buyerSquad = Object.values(updatedPlayers).filter(p => p.teamId === team.id);
+          const buyerSquad = rosterIndex.getPlayers(team.id, updatedPlayers);
           const buyerSquadAvgRating = buyerSquad.length > 0
             ? buyerSquad.reduce((sum, p) => sum + p.overallRating, 0) / buyerSquad.length
             : 70;
@@ -713,7 +722,7 @@ export const computeWeeklyTransfers = (
 
           if (random() < buyChance) {
             const rolePromise = determineRolePromise(priorityNeed.severity, bestUserTarget.overallRating, buyerSquadAvgRating);
-            const newWage = calculateDestinationWage(bestUserTarget, updatedTeams[team.id], updatedPlayers, priorityNeed.severity);
+            const newWage = calculateDestinationWage(bestUserTarget, updatedTeams[team.id], updatedPlayers, priorityNeed.severity, rosterIndex);
             const moraleBase = rolePromise === 'starter' ? 75 : rolePromise === 'rotation' ? 65 : 55;
 
             const buyer = updatedTeams[team.id];
@@ -726,6 +735,7 @@ export const computeWeeklyTransfers = (
               newWage,
               buyerSquadAvgRating,
               severity: priorityNeed.severity,
+              rosterIndex,
             })) return;
             const moved = movePlayerToTeam(
               updatedPlayers,
@@ -742,6 +752,7 @@ export const computeWeeklyTransfers = (
             );
             updatedPlayers = moved.players;
             updatedTeams = moved.teams;
+            rosterIndex.movePlayer(bestUserTarget.id, bestUserTarget.teamId, team.id);
 
             decisions.push({
               week: currentWeek,

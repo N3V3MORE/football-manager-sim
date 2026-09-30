@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity
 } from 'react-native';
@@ -104,8 +105,9 @@ const TACTIC_SECTIONS: TacticConfig[] = [
 
 export default function SquadScreen() {
   const userTeamId    = useGameStore(s => s.userTeamId);
-  const players       = useGameStore(s => s.players);
-  const teams         = useGameStore(s => s.teams);
+  const myTeam = useGameStore(s => s.userTeamId ? s.teams[s.userTeamId] : undefined);
+  const mySquad = useGameStore(useShallow(s => Object.values(s.players).filter(player => player.teamId === s.userTeamId)));
+  const players = useMemo(() => Object.fromEntries(mySquad.map(player => [player.id, player])), [mySquad]);
   const setFormation  = useGameStore(s => s.setFormation);
   const setTactics    = useGameStore(s => s.setTactics);
   const swapPlayer    = useGameStore(s => s.swapPlayer);
@@ -124,19 +126,16 @@ export default function SquadScreen() {
   const slotRefs = useRef<Record<string, View | null>>({});
   const slotBounds = useRef<Record<string, SlotBounds>>({});
 
-  const myTeam  = userTeamId ? teams[userTeamId] : undefined;
-  const mySquad = userTeamId
-    ? Object.values(players).filter(p => p.teamId === userTeamId)
-    : [];
-
-  const sortedSquad = sortPlayersByPositionGroup(mySquad);
+  const sortedSquad = useMemo(() => sortPlayersByPositionGroup(mySquad), [mySquad]);
 
   const activeFormation = myTeam?.activeFormation || '4-3-3';
   const slots = getSlotsForFormation(activeFormation);
 
-  const starters  = sortedSquad.filter(player => player.isStarting && !isPlayerUnavailable(player));
-  const bench     = sortedSquad.filter(p => p.isSub && !isPlayerUnavailable(p));
-  const reserves  = sortedSquad.filter(p => !p.isStarting && (!p.isSub || isPlayerUnavailable(p)));
+  const { starters, bench, reserves } = useMemo(() => ({
+    starters: sortedSquad.filter(player => player.isStarting && !isPlayerUnavailable(player)),
+    bench: sortedSquad.filter(player => player.isSub && !isPlayerUnavailable(player)),
+    reserves: sortedSquad.filter(player => !player.isStarting && (!player.isSub || isPlayerUnavailable(player))),
+  }), [sortedSquad]);
 
   const formationMap = useMemo(() => myTeam?.formationMap || {}, [myTeam?.formationMap]);
   const hasMap = Object.keys(formationMap).length > 0;

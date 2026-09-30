@@ -1,3 +1,4 @@
+import { createRosterIndex } from '../core/rosterIndex';
 import { Fixture, GameState, Player, Team } from '../models/types';
 import { resolveCompetitionProgression } from '../core/competitionEngine';
 import { quickSimMatch } from '../core/matchEngine';
@@ -69,6 +70,7 @@ export const playMatchState = (
 ): Partial<WeeklyLifecycleState> => {
   const previousPlayers = state.players;
   const seedFixture = state.fixtures[fixtureId];
+  if (seedFixture?.isPlayed) return state;
   const season = seedFixture ? state.competitions[seedFixture.competitionId]?.season || 1 : 1;
   const rng = createFixtureEventRandomGenerator(fixtureId, 0, state.rngState ?? 1, season, 'quick');
   const { players, teams, fixture } = quickSimMatch(fixtureId, state.players, state.teams, state.fixtures, state.userTeamId, { rng });
@@ -90,6 +92,7 @@ export const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(sta
     fixture => fixture.week <= state.currentWeek && !fixture.isPlayed
   ).sort(compareFixturesChronologically);
 
+  const rosterIndex = createRosterIndex(state.players);
   let updatedPlayers = state.players;
   let updatedTeams = state.teams;
   let updatedFixtures = state.fixtures;
@@ -113,7 +116,7 @@ export const playCurrentWeekFixtures = <TState extends WeeklyLifecycleState>(sta
       updatedTeams,
       updatedFixtures,
       state.userTeamId,
-      { rng }
+      { rng, rosterIndex }
     );
     const appendPatch = appendFixtureResultToState({
       ...state,

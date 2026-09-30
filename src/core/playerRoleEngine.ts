@@ -116,6 +116,7 @@ export const getPlayerRoleForSlot = (team: Team, playerId: string): PlayerRole =
 };
 
 export const getCompatiblePlayerRoleForTeamSlot = (team: Team, player: Player): PlayerRole => {
+  if (!team.playerRoles) return 'default';
   const role = getPlayerRoleForSlot(team, player.id);
   const slotLabel = getSlotLabelForPlayer(team, player.id);
   return isPlayerRoleCompatible(player, role, slotLabel) ? role : 'default';

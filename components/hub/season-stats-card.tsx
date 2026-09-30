@@ -13,7 +13,7 @@ type SeasonStatsCardProps = {
   onPress: () => void;
 };
 
-export function SeasonStatsCard({ leaders, onPress }: SeasonStatsCardProps) {
+export const SeasonStatsCard = React.memo(function SeasonStatsCard({ leaders, onPress }: SeasonStatsCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
       <Text style={styles.cardTitle}>Season Stats</Text>
@@ -29,7 +29,7 @@ export function SeasonStatsCard({ leaders, onPress }: SeasonStatsCardProps) {
       <Text style={styles.smallTapText}>Tap for full stats</Text>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

@@ -148,11 +148,11 @@ export const isRecoverableLiveMatch = (
 export const pruneInvalidLiveMatches = (
   liveMatches: Record<string, LiveMatchState>,
   context: LiveMatchRecoveryContext
-) => Object.fromEntries(
-  Object.entries(liveMatches).filter(([fixtureId, liveState]) => (
-    isRecoverableLiveMatch(fixtureId, liveState, context)
-  ))
-) as Record<string, LiveMatchState>;
+) => {
+  const entries = Object.entries(liveMatches);
+  const valid = entries.filter(([fixtureId, liveState]) => isRecoverableLiveMatch(fixtureId, liveState, context));
+  return valid.length === entries.length ? liveMatches : Object.fromEntries(valid);
+};
 
 export const updateTeamStats = (
   team: Team,

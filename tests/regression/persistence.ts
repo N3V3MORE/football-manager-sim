@@ -1,56 +1,4 @@
-import { FREE_AGENT_TEAM_ID, assert, buildTestPlayer, getSlotsForFormation, initGameData, readSource, sanitizePersistedState } from './shared';
-
-export const checkFreezeRecoveryControlsAreVisible = () => {
-  const gameStore = readSource('src/store/gameStore.ts');
-  const weekLifecycle = readSource('src/store/weekLifecycle.ts');
-  const devTools = readSource('components/settings/dev-tools-card.tsx');
-  const settings = readSource('app/(tabs)/settings.tsx');
-
-  assert(
-    /catch \(error\)[\s\S]*console\.warn/.test(weekLifecycle),
-    'skipToEndOfSeason should warn when week advancement fails'
-  );
-  assert(
-    /clearStuckLiveMatches/.test(gameStore) &&
-      /Clear Stuck Live Match/.test(devTools) &&
-      /clearStuckLiveMatches/.test(settings),
-    'Dev tools should expose a stuck live-match recovery action'
-  );
-};
-
-export const checkStaleFormationMapRecoveryModel = () => {
-  const data = initGameData();
-  const team = Object.values(data.teams)[0];
-  const starters = Object.values(data.players).filter(player => player.teamId === team.id && player.isStarting);
-  const slots = getSlotsForFormation('4-3-3');
-  const staleMap: Record<string, string> = {
-    '0-0': starters[0]?.id,
-    '0-1': 'missing-player-id',
-  };
-  const mappedStarterIds = new Set<string>();
-  const rendered = slots.map(row => row.map(() => null as string | null));
-
-  slots.forEach((row, rowIndex) => {
-    row.forEach((_, colIndex) => {
-      const playerId = staleMap[`${rowIndex}-${colIndex}`];
-      const mappedStarter = playerId ? starters.find(player => player.id === playerId) : null;
-      if (mappedStarter) {
-        rendered[rowIndex][colIndex] = mappedStarter.id;
-        mappedStarterIds.add(mappedStarter.id);
-      }
-    });
-  });
-
-  const missingStarters = starters.filter(player => !mappedStarterIds.has(player.id));
-  rendered.forEach(row => {
-    row.forEach((playerId, colIndex) => {
-      if (!playerId && missingStarters.length > 0) row[colIndex] = missingStarters.shift()?.id || null;
-    });
-  });
-
-  const renderedIds = new Set(rendered.flat().filter(Boolean));
-  assert(renderedIds.size === Math.min(starters.length, slots.flat().length), 'Stale formation maps should not hide starters');
-};
+import { FREE_AGENT_TEAM_ID, assert, buildTestPlayer, initGameData, sanitizePersistedState } from './shared';
 
 export const checkFreeAgentSaveReloadEquivalence = () => {
   const data = initGameData('Arsenal');
@@ -109,16 +57,4 @@ export const checkFreeAgentSaveReloadEquivalence = () => {
     'Players repaired into the free-agent pool should not retain club selection or listing flags'
   );
   assert(summarize(sanitizedOnce) === summarize(sanitizedTwice), 'Free-agent save sanitation should be stable across reloads');
-};
-
-export const checkValidationCatchesPastUnplayedFixturesAndNonFiniteFinances = () => {
-  const validator = readSource('src/dev/agentGameHandler.ts');
-  assert(
-    /fixture\.week < current\.currentWeek[\s\S]*!fixture\.isPlayed/.test(validator),
-    'Agent validation should catch unplayed fixtures left in past weeks'
-  );
-  assert(
-    /Number\.isFinite\(team\.budget\)/.test(validator) && /Number\.isFinite\(team\.transferSpend\)/.test(validator),
-    'Agent validation should catch non-finite team finance values'
-  );
 };

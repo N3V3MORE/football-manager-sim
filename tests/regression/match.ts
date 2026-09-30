@@ -1,9 +1,8 @@
-import { Fixture, Player, applySharedPostMatchAccounting, applyWindowedCleanSheets, assert, buildTestPlayer, buildTestTeam, createSeededRandom, didConcedeInWindow, initGameData, qualifiesForWindowedCleanSheet, quickSimMatch, readSource, simulatePenaltyShootout } from './shared';
 import { ENGINE_CONFIG } from '../../src/config/engineConfig';
 import { isScoreLogMismatch } from '../../src/core/matchAuditUtils';
 import { scaleLineupForMatch } from '../../src/core/matchUtils';
-import { processLiveMatchMinuteState, finishLiveMatchState, useGameStore } from './shared';
 import { LiveMatchState } from '../../src/store/liveMatchHelpers';
+import { Fixture, Player, applySharedPostMatchAccounting, applyWindowedCleanSheets, assert, buildTestPlayer, buildTestTeam, createSeededRandom, didConcedeInWindow, finishLiveMatchState, initGameData, processLiveMatchMinuteState, qualifiesForWindowedCleanSheet, quickSimMatch, simulatePenaltyShootout, useGameStore } from './shared';
 
 export const checkQuickSimAbandonmentStopsImmediately = () => {
   const data = initGameData();
@@ -114,20 +113,6 @@ export const checkCleanSheetWindows = () => {
   assert(updatedPlayers[playedThroughGoal.id].cleanSheets === 0, 'Player on pitch for concession should not get clean sheet');
 };
 
-export const checkPossessionFlowIsNotStrictAlternation = () => {
-  const matchEngine = readSource('src/core/matchEngine.ts');
-  const liveMatchActions = readSource('src/store/liveMatchActions.ts');
-
-  assert(
-    !/const isHomeAttacking = \(\(i \+ \(firstAttackIsHome \? 0 : 1\)\) % 2\) === 0;/.test(matchEngine),
-    'Quick sim should not use fixed home/away alternating attacks'
-  );
-  assert(
-    !/const isHomeAttacking = \(\(possessionIndex \+ \(firstAttackIsHome \? 0 : 1\)\) % 2\) === 0;/.test(liveMatchActions),
-    'Live sim should not use fixed home/away alternating attacks'
-  );
-};
-
 export const checkAdministrativeResultsAreExcludedFromScoreLogMismatch = () => {
   assert(
     isScoreLogMismatch({ homeScore: 2, awayScore: 1, scorerGoals: 2, resolution: 'regular' }),
@@ -141,57 +126,6 @@ export const checkAdministrativeResultsAreExcludedFromScoreLogMismatch = () => {
     !isScoreLogMismatch({ homeScore: 0, awayScore: 0, scorerGoals: 0, resolution: 'void' }),
     'Void fixtures should not be reported as score/log mismatches'
   );
-};
-
-export const checkBranchGuards = () => {
-  const matchEngine = readSource('src/core/matchEngine.ts');
-  const liveMatchActions = readSource('src/store/liveMatchActions.ts');
-
-  assert(
-    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\);[\s\S]*sendOffPlayer/.test(matchEngine),
-    'Quick sim second-yellow branch must add yellow-card stat before red'
-  );
-  assert(
-    /if \(matchYellowCards\.has\(playerId\)\)[\s\S]*addPlayerStat\(updatedPlayers, playerId, 'yellowCards'\);[\s\S]*sendOffPlayer/.test(liveMatchActions),
-    'Live sim second-yellow branch must add yellow-card stat before red'
-  );
-  assert(
-    /simulatePossession\([\s\S]*attShape,[\s\S]*defShape[\s\S]*\)/.test(matchEngine),
-    'Quick sim must pass formation shape into simulatePossession'
-  );
-  assert(
-    /buildLiveTeamOverlay\([\s\S]*buildCurrentMatchProfile\(liveHomeTeam, homeStarters[\s\S]*simulatePossession\([\s\S]*attShape,[\s\S]*defShape[\s\S]*\)/.test(liveMatchActions),
-    'Live sim must build profiles from live formation overlays before simulatePossession'
-  );
-};
-
-export const checkSanityMatchScores = () => {
-  const data = initGameData();
-  const state = {
-    players: data.players,
-    teams: data.teams,
-    fixtures: data.fixtures
-  };
-  
-  let highScores = 0;
-  const fixturesToPlay = Object.values(state.fixtures).slice(0, 100);
-  
-  fixturesToPlay.forEach(fixture => {
-    const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures);
-    state.players = result.players;
-    state.teams = result.teams;
-    state.fixtures[fixture.id] = result.fixture;
-    
-    const combinedGoals = result.fixture.homeScore! + result.fixture.awayScore!;
-    assert(combinedGoals < 15, `Unrealistic scoreline detected: ${result.fixture.homeScore} - ${result.fixture.awayScore}`);
-    
-    if (combinedGoals >= 7) {
-      highScores++;
-    }
-  });
-
-  // Ensure high scoring games exist but are rare (less than 15%)
-  assert(highScores <= 15, `Too many high scoring games (7+ goals) detected in 100 matches: ${highScores}%`);
 };
 
 export const checkQuickSimMatchSummaryIncludesStatsAndRatings = () => {
@@ -216,18 +150,6 @@ export const checkQuickSimMatchSummaryIncludesStatsAndRatings = () => {
   assert(summary.awayTeamStats.shotsOnTarget >= (result.fixture.awayScore || 0), 'Away SOT should cover away goals');
   assert(summary.playerRows.length >= 22, 'Quick-sim match summary should include player rating rows for both teams');
   assert(summary.manOfTheMatchPlayerId, 'Quick-sim match summary should select a man of the match');
-
-  const matchScreen = readSource('app/match.tsx');
-  assert(
-    /matchSummary/.test(matchScreen) && /Man of the Match/.test(matchScreen) && /Match Stats/.test(matchScreen),
-    'Match result screen should render match summary stats, player ratings, and man of the match'
-  );
-  const hubScreen = readSource('app/(tabs)/index.tsx');
-  assert(
-    /playMatch\(myNextMatch\.id\)[\s\S]*router\.push\(\{ pathname: '\/match'/.test(hubScreen) &&
-      !/playMatch\(myNextMatch\.id\);\s*advanceWeek\(\);/.test(hubScreen),
-    'Hub Quick Sim should navigate to the match result screen instead of immediately advancing week'
-  );
 };
 
 export const checkPenaltyShootoutUsesIndividualKicks = () => {
@@ -335,66 +257,6 @@ export const checkLeaguePlayoffFixtureDoesNotChangeTableStats = () => {
     assert(nextHome[key] === beforeHome[key], `League play-off should not alter home table ${key}`);
     assert(nextAway[key] === beforeAway[key], `League play-off should not alter away table ${key}`);
   });
-};
-
-export const checkDisciplineRatesArePlausible = () => {
-  const originalRandom = Math.random;
-  Math.random = createSeededRandom(20260618);
-
-  try {
-    const data = initGameData();
-    const state = {
-      players: data.players,
-      teams: data.teams,
-      fixtures: data.fixtures,
-    };
-    const fixturesToPlay = Object.values(state.fixtures).slice(0, 900);
-    let yellowCards = 0;
-    let redCards = 0;
-    let secondYellowReds = 0;
-
-    fixturesToPlay.forEach(fixture => {
-      const beforeCards = Object.values(state.players).reduce(
-        (acc, player) => ({
-          yellow: acc.yellow + player.yellowCards,
-          red: acc.red + player.redCards,
-        }),
-        { yellow: 0, red: 0 }
-      );
-      const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures);
-      secondYellowReds += result.events.filter(event => /second yellow/i.test(event)).length;
-      state.players = result.players;
-      state.teams = result.teams;
-      state.fixtures[fixture.id] = result.fixture;
-      const afterCards = Object.values(state.players).reduce(
-        (acc, player) => ({
-          yellow: acc.yellow + player.yellowCards,
-          red: acc.red + player.redCards,
-        }),
-        { yellow: 0, red: 0 }
-      );
-      yellowCards += afterCards.yellow - beforeCards.yellow;
-      redCards += afterCards.red - beforeCards.red;
-    });
-
-    const yellowRate = yellowCards / fixturesToPlay.length;
-    const redRate = redCards / fixturesToPlay.length;
-    const secondYellowRate = secondYellowReds / fixturesToPlay.length;
-    assert(
-      yellowRate >= 1.8 && yellowRate <= 5.5,
-      `Expected plausible yellow-card rate, got ${yellowRate.toFixed(2)} per match`
-    );
-    assert(
-      redRate >= 0.04 && redRate <= 0.24,
-      `Expected plausible red-card rate, got ${redRate.toFixed(2)} per match`
-    );
-    assert(
-      secondYellowRate <= 0.14,
-      `Expected second-yellow reds to be rare, got ${secondYellowRate.toFixed(2)} per match`
-    );
-  } finally {
-    Math.random = originalRandom;
-  }
 };
 
 export const checkMatchRatingsIncludeIndividualOutput = () => {

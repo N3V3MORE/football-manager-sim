@@ -1,3 +1,4 @@
+import { createRosterIndex, RosterIndex } from './rosterIndex';
 import { Team, Player, Fixture } from '../models/types';
 import { ENGINE_CONFIG } from '../config/engineConfig';
 import { getTeamMatchBench, getTeamMatchStarters } from './lineupEngine';
@@ -23,7 +24,7 @@ import {
   selectPossessionAttacker,
   simulatePossession,
 } from './matchRuntime';
-import { getDecisiveTieScore, simulatePenaltyShootout } from './matchTieResolution';
+import { getDecisiveTieScore, resolveFirstLegId, simulatePenaltyShootout } from './matchTieResolution';
 import { getCompatiblePlayerRoleForTeamSlot, getRoleEnergyDrainMultiplier } from './playerRoleEngine';
 
 export { autoAssignLineup } from './lineupEngine';
@@ -112,32 +113,34 @@ export const quickSimMatch = (
   teams: Record<string, Team>,
   fixtures: Record<string, Fixture>,
   userTeamId?: string | null,
-  options?: { rng?: RandomGenerator }
+  options?: { rng?: RandomGenerator; rosterIndex?: RosterIndex }
 ): QuickSimMatchResult => {
   const rng = options?.rng ?? createFixtureEventRandomGenerator(fixtureId, 0);
   const fixture = fixtures[fixtureId];
   const emptyMatchStats = buildQuickSimMatchStats(0, 0);
   if (!fixture) throw new RangeError(`Unknown fixture: ${fixtureId}`);
-  if (fixture.resolution === 'void' || (!fixture.isPlayed && getDecisiveTieScore(fixture, fixtures).isVoid)) return { players, teams, fixture: buildVoidFixture(fixture), events: [], matchStats: emptyMatchStats };
+  const firstLegId = resolveFirstLegId(fixture, fixtures);
+  if (fixture.resolution === 'void' || (!fixture.isPlayed && getDecisiveTieScore(fixture, fixtures, firstLegId).isVoid)) return { players, teams, fixture: buildVoidFixture(fixture), events: [], matchStats: emptyMatchStats };
   if (fixture.isPlayed) return { players, teams, fixture, events: [], matchStats: emptyMatchStats };
 
+  const rosterIndex = options?.rosterIndex ?? createRosterIndex(players);
   const updatedPlayers = { ...players };
   const updatedTeams = { ...teams };
   const matchEvents: string[] = [];
 
-  const homeStarters = getTeamMatchStarters(fixture.homeTeamId, userTeamId, updatedPlayers, updatedTeams, isPlayerUnavailable, rebuildFormationMap);
-  const awayStarters = getTeamMatchStarters(fixture.awayTeamId, userTeamId, updatedPlayers, updatedTeams, isPlayerUnavailable, rebuildFormationMap);
+  const homeStarters = getTeamMatchStarters(fixture.homeTeamId, userTeamId, updatedPlayers, updatedTeams, isPlayerUnavailable, rebuildFormationMap, rosterIndex);
+  const awayStarters = getTeamMatchStarters(fixture.awayTeamId, userTeamId, updatedPlayers, updatedTeams, isPlayerUnavailable, rebuildFormationMap, rosterIndex);
   let homeTeam = updatedTeams[fixture.homeTeamId];
   let awayTeam = updatedTeams[fixture.awayTeamId];
 
-  const homeBench = getTeamMatchBench(fixture.homeTeamId, homeStarters, updatedPlayers, isPlayerUnavailable);
-  const awayBench = getTeamMatchBench(fixture.awayTeamId, awayStarters, updatedPlayers, isPlayerUnavailable);
+  const homeBench = getTeamMatchBench(fixture.homeTeamId, homeStarters, updatedPlayers, isPlayerUnavailable, rosterIndex);
+  const awayBench = getTeamMatchBench(fixture.awayTeamId, awayStarters, updatedPlayers, isPlayerUnavailable, rosterIndex);
 
   const homeValidation = validateMatchdayXI(homeStarters, { teamId: fixture.homeTeamId });
   const awayValidation = validateMatchdayXI(awayStarters, { teamId: fixture.awayTeamId });
   if (!homeValidation.ok || !awayValidation.ok) {
     const finalized = resolveAdministrativeFixture(
-      { ...fixture, isKnockout: getDecisiveTieScore(fixture, fixtures).isDecisive },
+      { ...fixture, isKnockout: getDecisiveTieScore(fixture, fixtures, firstLegId).isDecisive },
       homeValidation.ok,
       awayValidation.ok,
       updatedTeams,
@@ -202,7 +205,7 @@ export const quickSimMatch = (
   let regulationAwayScore = 0;
   let penaltyShootout: Fixture['penaltyShootout'] | undefined;
   let extraTimePlayed = false;
-  const getTieScore = () => getDecisiveTieScore({ ...fixture, homeScore: hScore, awayScore: aScore }, fixtures);
+  const getTieScore = () => getDecisiveTieScore({ ...fixture, homeScore: hScore, awayScore: aScore }, fixtures, firstLegId);
   const addContribution = (playerId: string, key: keyof PlayerMatchContribution) => {
     matchContributions[playerId] = {
       ...matchContributions[playerId],

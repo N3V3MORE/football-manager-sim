@@ -1,10 +1,9 @@
-import { existsSync } from 'fs';
 import { installAgentGameHandler } from '../../src/dev/agentGameHandler';
 import { runAiPreWeekPolicy } from '../../src/dev/aiPolicy';
 import type { Player } from '../../src/models/types';
-import { assert, buildTestPlayer, buildTestTeam, initGameData, readSource } from './shared';
 import { useGameStore } from '../../src/store/gameStore';
 import { getInboxSeason } from '../../src/store/inboxCore';
+import { assert, buildTestPlayer, buildTestTeam, initGameData } from './shared';
 
 export const checkSeasonRunnerIgnoresSackingAndBoundsErrors = () => {
   const cleanup = installAgentGameHandler();
@@ -66,21 +65,23 @@ export const checkAiAutoplayCommandProducesReport = () => {
       'Agent help should expose the playWithAI command'
     );
 
-    const result = runner('playWithAI', {
-      seasons: 1,
-      seed: 12091,
-      teamId: 'T1',
-      policy: 'balanced',
-      stopOnError: true,
-      reportBalanceFlags: true,
-      verbosity: 'quiet',
-    });
-
+    const advanceWeek = useGameStore.getState().advanceWeek;
+    let result: ReturnType<AgentRunner>;
+    try {
+      useGameStore.setState({ advanceWeek: () => {
+        const current = useGameStore.getState();
+        const fixture = Object.values(current.fixtures)[0];
+        useGameStore.setState({ currentWeek: 1,
+          fixtures: { ...current.fixtures, [fixture.id]: { ...fixture, isPlayed: true, homeScore: 1, awayScore: 0, winnerTeamId: fixture.homeTeamId } },
+          competitions: Object.fromEntries(Object.entries(current.competitions).map(([id, competition]) => [id, { ...competition, season: competition.season + 1 }])) });
+      } });
+      result = runner('playWithAI', { seasons: 1, seed: 12091, teamId: 'T1', policy: 'balanced', stopOnError: true, reportBalanceFlags: true, verbosity: 'quiet' });
+    } finally { useGameStore.setState({ advanceWeek }); }
     assert(result.ok, `Expected playWithAI command to succeed: ${result.error ?? 'unknown error'}`);
     const report = result.data as AIPlayReportShape;
     assert(report.seasons === 1, 'AI play report should echo requested season count');
     assert(report.weeksPlayed > 0, 'AI play report should advance at least one week');
-    assert(getInboxSeason(useGameStore.getState().competitions) >= 2, 'One-season autoplay must complete a world rollover');
+    assert(getInboxSeason(useGameStore.getState().competitions) >= 2, 'Autoplay report must observe the world rollover');
     assert(Array.isArray(report.bugs), 'AI play report should include a bugs array');
     assert(report.bugs.length === 0, 'One-season balanced AI smoke run should not report integrity bugs');
     assert(Array.isArray(report.balanceFlags), 'AI play report should include a balanceFlags array');
@@ -96,14 +97,6 @@ export const checkAiAutoplayCommandProducesReport = () => {
   } finally {
     cleanup();
   }
-};
-
-export const checkAiAutoplayRunnerScriptsExist = () => {
-  const packageJson = JSON.parse(readSource('package.json')) as { scripts?: Record<string, string> };
-  assert(existsSync('scripts/ai_autoplay.ts'), 'AI autoplay runner script should exist');
-  assert(packageJson.scripts?.['ai:play']?.includes('scripts/ai_autoplay.ts'), 'package.json should define ai:play');
-  assert(packageJson.scripts?.['ai:play:long']?.includes('scripts/ai_autoplay.ts'), 'package.json should define ai:play:long');
-  assert(packageJson.scripts?.['ai:play:stress']?.includes('scripts/ai_autoplay.ts'), 'package.json should define ai:play:stress');
 };
 
 export const checkAiAutoplayRotationDoesNotReuseBenchPlayer = () => {

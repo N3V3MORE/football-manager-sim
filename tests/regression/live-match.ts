@@ -205,7 +205,7 @@ export const checkUserAiDoesNotSpendLiveSubstitutions = () => {
   assert(liveMatch, 'Live match should exist after processing user fixture minutes');
 
   assert(
-    JSON.stringify(liveMatch[userKeys.currentIdsKey]) === JSON.stringify(userKeys.isHome ? liveMatch.homeStarterIds : liveMatch.awayStarterIds),
+    JSON.stringify(liveMatch[userKeys.currentIdsKey]) === JSON.stringify((userKeys.isHome ? liveMatch.homeStarterIds : liveMatch.awayStarterIds).filter((id: string) => !liveMatch.sentOffPlayerIds.includes(id))),
     'Scheduled AI substitutions should not change the user active XI during live matches'
   );
   const userSubState = liveMatch[userKeys.substitutionStateKey];

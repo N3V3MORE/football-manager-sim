@@ -1,9 +1,8 @@
-import { FREE_AGENT_TEAM_ID, Player, advanceSeason, assert, computeMarketValue, computeWeeklyProgression, createFreeAgentTeam, createSeededRandom, getCompetitionPanelForTeam, getSeasonWeekLimit, getSquadPolicy, initGameData, readSource, resolveCompetitionProgression } from './shared';
-import { quickSimMatch, useGameStore, processLiveMatchMinuteState, finishLiveMatchState, sanitizePersistedState, advanceWeekState } from './shared';
 import { ENGINE_CONFIG } from '../../src/config/engineConfig';
-import { getDecisiveTieScore } from '../../src/core/matchTieResolution';
 import { buildVoidFixture } from '../../src/core/fixtureLifecycle';
+import { getDecisiveTieScore } from '../../src/core/matchTieResolution';
 import { playCurrentWeekFixtures } from '../../src/store/fixtureResolution';
+import { FREE_AGENT_TEAM_ID, Player, advanceSeason, advanceWeekState, assert, computeMarketValue, computeWeeklyProgression, createFreeAgentTeam, createSeededRandom, finishLiveMatchState, getCompetitionPanelForTeam, getSeasonWeekLimit, getSquadPolicy, initGameData, processLiveMatchMinuteState, quickSimMatch, resolveCompetitionProgression, sanitizePersistedState, useGameStore } from './shared';
 
 export const checkCompetitionPanelHandlesMissingTeam = () => {
   const data = initGameData('Arsenal');
@@ -306,40 +305,6 @@ export const checkRolloverWaitsForPlayoffFinal = () => {
   assert(seasonWeekLimit > oldSeasonWeekLimit, 'Season week limit should extend while play-offs are unresolved');
 };
 
-export const checkSeasonReportsUseCompetitionLifecycleAndLeagueTables = () => {
-  const detailedReport = readSource('scripts/detailed_season_sim.ts');
-  const trackerReport = readSource('scripts/season_tracker.ts');
-
-  [detailedReport, trackerReport].forEach((source, index) => {
-    const label = index === 0 ? 'Detailed season report' : 'Season tracker';
-    assert(
-      /resolveCompetitionProgression/.test(source),
-      `${label} should advance knockout competition rounds during season simulation`
-    );
-    assert(
-      /getSeasonWeekLimit\(state\.fixtures,\s*state\.competitions\)/.test(source),
-      `${label} should include competition state when calculating season length`
-    );
-  });
-
-  assert(
-    /Object\.values\(state\.teams\)\.filter\(.*division === 'Premier League'/.test(detailedReport.replace(/\s+/g, ' ')),
-    'Detailed report should filter the Premier League table to Premier League clubs'
-  );
-  assert(
-    /division:\s*team\.division/.test(trackerReport),
-    'Season tracker table rows should include team division'
-  );
-  assert(
-    /team\.played > 0[\s\S]*team\.goalsFor < 20/.test(trackerReport),
-    'Season tracker low-scoring audit should ignore inactive external teams'
-  );
-  assert(
-    /red card\|sent off\|straight red\|reaches for red/i.test(detailedReport),
-    'Detailed report red-card audit should use the same event pattern as tracker and CI'
-  );
-};
-
 export const checkSeasonEndProgressionUpdatesMatchAbility = () => {
   const data = initGameData();
   const seasonWeekLimit = getSeasonWeekLimit(data.fixtures, data.competitions);
@@ -410,6 +375,11 @@ export const checkSeasonRolloverReplenishesMinimumSquadAndGoalkeepers = () => {
     undefined,
     { next: createSeededRandom(2026062201) }
   );
+  for (const player of Object.values(rollover.players)) {
+    if (players[player.id]) continue;
+    assert(player.age >= 16 && player.age <= 18, 'Youth intake age must stay in its established range');
+    assert(player.overallRating >= 40 && player.overallRating <= 55, 'Youth intake rating must stay in its established range');
+  }
   const nextTeam = rollover.teams[team!.id];
   const policy = getSquadPolicy(nextTeam);
   const squad = Object.values(rollover.players).filter(player => player.teamId === nextTeam.id);

@@ -1,3 +1,4 @@
+import { createRosterIndex, RosterIndex } from './rosterIndex';
 import { Formation, Player, Team } from '../models/types';
 import { getSlotsForFormation } from '../constants/formations';
 import { RandomGenerator, resolveRandom } from './random';
@@ -116,14 +117,15 @@ const pickAdaptiveFormation = (
 const applyAtomicFormationChange = (
   team: Team,
   formation: Formation,
-  updatedPlayers: Record<string, Player>
+  updatedPlayers: Record<string, Player>,
+  rosterIndex: RosterIndex
 ): Team => {
-  const lineupUpdates = buildQuickSimLineup(team.id, updatedPlayers, formation);
+  const lineupUpdates = buildQuickSimLineup(team.id, updatedPlayers, formation, rosterIndex.getPlayers(team.id, updatedPlayers));
   Object.entries(lineupUpdates).forEach(([playerId, updates]) => {
     const player = updatedPlayers[playerId];
     if (player) updatedPlayers[playerId] = { ...player, ...updates };
   });
-  const starters = Object.values(updatedPlayers).filter(player => player.teamId === team.id && player.isStarting && !isPlayerUnavailable(player));
+  const starters = rosterIndex.getPlayers(team.id, updatedPlayers).filter(player => player.isStarting && !isPlayerUnavailable(player));
   return {
     ...team,
     activeFormation: formation,
@@ -136,7 +138,8 @@ export const applyTacticalAdaptation = (
   updatedPlayers: Record<string, Player>,
   updatedTeams: Record<string, Team>,
   excludedTeamIds = new Set<string>(),
-  rng?: RandomGenerator
+  rng?: RandomGenerator,
+  rosterIndex = createRosterIndex(updatedPlayers)
 ) => {
   const random = resolveRandom(rng);
   Object.values(updatedTeams).forEach(team => {
@@ -234,22 +237,22 @@ export const applyTacticalAdaptation = (
       )
     );
     if (shouldTryFormationChange) {
-      const teamPlayers = Object.values(updatedPlayers)
-        .filter(player => player.teamId === team.id && !isPlayerUnavailable(player));
+      const teamPlayers = rosterIndex.getPlayers(team.id, updatedPlayers)
+        .filter(player => !isPlayerUnavailable(player));
       const candidate = pickAdaptiveFormation(nextTeam, teamPlayers, formationMode!, rng);
       if (candidate && candidate !== nextTeam.activeFormation) {
-        nextTeam = applyAtomicFormationChange(nextTeam, candidate, updatedPlayers);
+        nextTeam = applyAtomicFormationChange(nextTeam, candidate, updatedPlayers, rosterIndex);
         teamChanged = true;
       }
     }
 
     if (!teamChanged && pressureScore >= 68 && team.played % 4 === 0 && random() < 0.24) {
-      const teamPlayers = Object.values(updatedPlayers)
-        .filter(player => player.teamId === team.id && !isPlayerUnavailable(player));
+      const teamPlayers = rosterIndex.getPlayers(team.id, updatedPlayers)
+        .filter(player => !isPlayerUnavailable(player));
       const pressureMode: 'attack' | 'defense' = goalsAgainstPerGame >= goalsForPerGame ? 'defense' : 'attack';
       const candidate = pickAdaptiveFormation(nextTeam, teamPlayers, pressureMode, rng);
       if (candidate && candidate !== nextTeam.activeFormation) {
-        nextTeam = applyAtomicFormationChange(nextTeam, candidate, updatedPlayers);
+        nextTeam = applyAtomicFormationChange(nextTeam, candidate, updatedPlayers, rosterIndex);
         teamChanged = true;
       }
     }

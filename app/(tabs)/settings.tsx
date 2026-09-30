@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow';
 import React, { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
@@ -18,7 +19,8 @@ import { space } from '@/src/design/tokens';
 export default function SettingsScreen() {
   const userTeamId = useGameStore(state => state.userTeamId);
   const teams = useGameStore(state => state.teams);
-  const players = useGameStore(state => state.players);
+  const userSquad = useGameStore(useShallow(state => Object.values(state.players).filter(player => player.teamId === state.userTeamId)));
+  const players = useMemo(() => Object.fromEntries(userSquad.map(player => [player.id, player])), [userSquad]);
   const advanceWeek = useGameStore(state => state.advanceWeek);
   const skipToEndOfSeason = useGameStore(state => state.skipToEndOfSeason);
   const clearStuckLiveMatches = useGameStore(state => state.clearStuckLiveMatches);
@@ -33,10 +35,6 @@ export default function SettingsScreen() {
   const sortedTeams = useMemo(
     () => sortTeamsByDivisionAndName(Object.values(teams).filter(team => !team.isExternal)),
     [teams]
-  );
-  const userSquad = useMemo(
-    () => userTeamId ? Object.values(players).filter(player => player.teamId === userTeamId) : [],
-    [players, userTeamId]
   );
   const injuredCount = useMemo(
     () => userSquad.filter(player => isPlayerInjured(player)).length,

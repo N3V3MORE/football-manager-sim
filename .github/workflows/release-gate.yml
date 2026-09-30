@@ -1,30 +1,25 @@
-name: Release Gate
+name: CI and Release Gate
 
 on:
   pull_request:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
 
 jobs:
-  release-gate:
+  verify:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run CI
+      - run: npm ci
+      - name: Fast CI
+        if: github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')
         run: npm run ci
-
-      - name: Run release gate
+      - name: Complete release gate
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: npm run gate:release

@@ -1,47 +1,30 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { initGameData } from '../../src/utils/initGame';
+import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../../src/constants/formations';
+import { buildBoardObjectives, buildBoardProfile } from '../../src/core/boardEngine';
+import { getCompetitionPanelForTeam, hasReachedCompetitionRound, resolveCompetitionProgression } from '../../src/core/competitionEngine';
+import { rebuildFormationMap, rebuildFormationSlotPlayers } from '../../src/core/formationMapUtils';
+import { FREE_AGENT_TEAM_ID, createFreeAgentTeam } from '../../src/core/freeAgentPool';
+import { getSeasonWeekLimit } from '../../src/core/leagueUtils';
 import { quickSimMatch } from '../../src/core/matchEngine';
 import { simulatePenaltyShootout } from '../../src/core/matchTieResolution';
+import { isPlayerUnavailable } from '../../src/core/playerStatusUtils';
+import { applySharedPostMatchAccounting, applyWindowedCleanSheets, didConcedeInWindow, qualifiesForWindowedCleanSheet, } from '../../src/core/postMatchAccounting';
 import { computeWeeklyProgression, computeWeeklyTransfers } from '../../src/core/progressionEngine';
-import { getSeasonWeekLimit } from '../../src/core/leagueUtils';
-import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../../src/constants/formations';
-import { rebuildFormationMap, rebuildFormationSlotPlayers } from '../../src/core/formationMapUtils';
-import { getCompetitionPanelForTeam, hasReachedCompetitionRound, resolveCompetitionProgression } from '../../src/core/competitionEngine';
-import { buildBoardObjectives, buildBoardProfile } from '../../src/core/boardEngine';
-import {
-  applySharedPostMatchAccounting,
-  didConcedeInWindow,
-  applyWindowedCleanSheets,
-  qualifiesForWindowedCleanSheet,
-} from '../../src/core/postMatchAccounting';
 import { advanceSeason } from '../../src/core/seasonTransition';
+import { getSquadPolicy } from '../../src/core/squadPolicy';
 import { applyTacticalAdaptation } from '../../src/core/tacticalAdaptationEngine';
 import { Fixture, Formation, InboxMessage, Player, Position, Team } from '../../src/models/types';
 import { useGameStore } from '../../src/store/gameStore';
-import { markAsSubState, toggleStartingState } from '../../src/store/lineupActions';
-import {
-  acceptTransferCounterState,
-  approachPlayerState,
-  buyPlayerState,
-  resolveWeeklyNegotiationsState,
-  signFreeAgentState,
-} from '../../src/store/transferActions';
-import { computeMarketValue } from '../../src/utils/calendar';
 import { applyInboxActionState } from '../../src/store/inboxActions';
-import { advanceWeekState } from '../../src/store/weekLifecycle';
+import { markAsSubState, toggleStartingState } from '../../src/store/lineupActions';
 import { finishLiveMatchState, makeLiveSubstitutionsState, processLiveMatchMinuteState, setLiveMatchFormationState } from '../../src/store/liveMatchActions';
 import { sanitizePersistedState } from '../../src/store/persistence';
-import { isPlayerUnavailable } from '../../src/core/playerStatusUtils';
-import { FREE_AGENT_TEAM_ID, createFreeAgentTeam } from '../../src/core/freeAgentPool';
-import { getSquadPolicy } from '../../src/core/squadPolicy';
+import { acceptTransferCounterState, approachPlayerState, buyPlayerState, resolveWeeklyNegotiationsState, signFreeAgentState, } from '../../src/store/transferActions';
+import { advanceWeekState } from '../../src/store/weekLifecycle';
 import { applySackingRisk } from '../../src/store/weeklyAccounting';
+import { computeMarketValue } from '../../src/utils/calendar';
+import { initGameData } from '../../src/utils/initGame';
 
-export const assert = (condition: unknown, message: string) => {
-  if (!condition) {
-    throw new Error(message);
-  }
-};
+export { default as assert } from 'node:assert/strict';
 
 export const createSeededRandom = (seed: number) => {
   let state = seed >>> 0;
@@ -52,8 +35,6 @@ export const createSeededRandom = (seed: number) => {
     return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
   };
 };
-
-export const readSource = (filePath: string) => fs.readFileSync(path.join(process.cwd(), filePath), 'utf8');
 
 export const POSITION_META: Record<Position, { subPosition: string; altPositions: string[] }> = {
   GK: { subPosition: 'GK', altPositions: ['GK'] },
@@ -167,6 +148,4 @@ export const addSquadPlayers = (
   });
 };
 
-export {
-  initGameData, quickSimMatch, simulatePenaltyShootout, computeWeeklyProgression, computeWeeklyTransfers, getSeasonWeekLimit, BASE_FORMATION_SLOTS, getSlotsForFormation, rebuildFormationMap, rebuildFormationSlotPlayers, getCompetitionPanelForTeam, hasReachedCompetitionRound, resolveCompetitionProgression, buildBoardObjectives, buildBoardProfile, applySharedPostMatchAccounting, didConcedeInWindow, applyWindowedCleanSheets, qualifiesForWindowedCleanSheet, advanceSeason, applyTacticalAdaptation, Fixture, Formation, InboxMessage, Player, Position, Team, useGameStore, markAsSubState, toggleStartingState, acceptTransferCounterState, approachPlayerState, buyPlayerState, resolveWeeklyNegotiationsState, signFreeAgentState, computeMarketValue, applyInboxActionState, advanceWeekState, finishLiveMatchState, makeLiveSubstitutionsState, processLiveMatchMinuteState, setLiveMatchFormationState, sanitizePersistedState, isPlayerUnavailable, FREE_AGENT_TEAM_ID, createFreeAgentTeam, getSquadPolicy, applySackingRisk,
-};
+export { BASE_FORMATION_SLOTS,FREE_AGENT_TEAM_ID,Fixture,Formation,InboxMessage,Player,Position,Team,acceptTransferCounterState,advanceSeason,advanceWeekState,applyInboxActionState,applySackingRisk,applySharedPostMatchAccounting,applyTacticalAdaptation,applyWindowedCleanSheets,approachPlayerState,buildBoardObjectives,buildBoardProfile,buyPlayerState,computeMarketValue,computeWeeklyProgression,computeWeeklyTransfers,createFreeAgentTeam,didConcedeInWindow,finishLiveMatchState,getCompetitionPanelForTeam,getSeasonWeekLimit,getSlotsForFormation,getSquadPolicy,hasReachedCompetitionRound,initGameData,isPlayerUnavailable,makeLiveSubstitutionsState,markAsSubState,processLiveMatchMinuteState,qualifiesForWindowedCleanSheet,quickSimMatch,rebuildFormationMap,rebuildFormationSlotPlayers,resolveCompetitionProgression,resolveWeeklyNegotiationsState,sanitizePersistedState,setLiveMatchFormationState,signFreeAgentState,simulatePenaltyShootout,toggleStartingState,useGameStore };

@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
@@ -13,7 +14,7 @@ import { color } from '@/src/design/tokens';
 import { useConfirmStore } from '@/src/store/confirmStore';
 import { SUPPORTED_FORMATIONS } from '@/src/constants/formations';
 import * as Haptics from 'expo-haptics';
-import { getDecisiveTieScore } from '@/src/core/matchTieResolution';
+import { getDecisiveTieScore, resolveFirstLegId } from '@/src/core/matchTieResolution';
 
 // B4: extend haptics beyond the tab bar. A light tick on primary match actions
 // and a medium impact at full-time give the live sim some physical feedback.
@@ -28,10 +29,23 @@ export default function MatchScreen() {
   const router = useRouter();
   const { fixtureId } = useLocalSearchParams<{ fixtureId: string }>();
   
-  const fixtures = useGameStore(state => state.fixtures);
-  const teams = useGameStore(state => state.teams);
-  const players = useGameStore(state => state.players);
-  const liveMatches = useGameStore(state => state.liveMatches);
+  const fixture = useGameStore(state => state.fixtures[fixtureId]);
+  const firstLeg = useGameStore(state => {
+    const current = state.fixtures[fixtureId];
+    const id = current ? resolveFirstLegId(current, state.fixtures) : null;
+    return id ? state.fixtures[id] : undefined;
+  });
+  const liveMatchState = useGameStore(state => state.liveMatches?.[fixtureId]);
+  const teams = useGameStore(useShallow(state => {
+    const current = state.fixtures[fixtureId];
+    const ids = [current?.homeTeamId, current?.awayTeamId, state.userTeamId].filter((id): id is string => Boolean(id));
+    return Object.fromEntries(ids.map(id => [id, state.teams[id]]));
+  }));
+  const players = useGameStore(useShallow(state => {
+    const current = state.fixtures[fixtureId];
+    const takerIds = new Set(current?.penaltyShootout?.kicks.map(kick => kick.takerPlayerId) ?? []);
+    return Object.fromEntries(Object.entries(state.players).filter(([, player]) => current && (player.teamId === current.homeTeamId || player.teamId === current.awayTeamId || takerIds.has(player.id))));
+  }));
   const userTeamId = useGameStore(state => state.userTeamId);
   const setTactics = useGameStore(state => state.setTactics);
   const processMatchMinute = useGameStore(state => state.processMatchMinute);
@@ -40,12 +54,10 @@ export default function MatchScreen() {
   const setLiveMatchFormation = useGameStore(state => state.setLiveMatchFormation);
   const advanceWeek = useGameStore(state => state.advanceWeek);
 
-  const fixture = fixtures[fixtureId];
-  const liveMatchState = liveMatches?.[fixtureId];
   const liveProcessedMinutes = liveMatchState?.processedMinutes || [];
   const liveProcessedCount = liveProcessedMinutes.length;
   const liveProcessedMax = liveProcessedCount > 0 ? Math.max(...liveProcessedMinutes) : 0;
-  const tieScore = fixture ? getDecisiveTieScore(fixture, fixtures) : null;
+  const tieScore = fixture ? getDecisiveTieScore(fixture, firstLeg ? { [firstLeg.id]: firstLeg } : {}, firstLeg?.id ?? null) : null;
   const liveKnockoutNeedsExtraTime = Boolean(
     !fixture?.isPlayed && tieScore?.isDecisive &&
     (
@@ -85,8 +97,8 @@ export default function MatchScreen() {
   useEffect(() => {
     if (isPlaying || appliedRestoreKeyRef.current === restoreStateKey) return;
 
-    const liveState = liveMatches?.[fixtureId];
-    const fixtureData = fixtures[fixtureId];
+    const liveState = liveMatchState;
+    const fixtureData = fixture;
     appliedRestoreKeyRef.current = restoreStateKey;
 
     if (liveState && liveState.initialized && !fixtureData?.isPlayed) {
@@ -116,7 +128,7 @@ export default function MatchScreen() {
       setMatchFinished(false);
       setLogs(['Match is ready to start!']);
     }
-  }, [fixtureId, restoreStateKey, isPlaying, liveMatches, fixtures, liveMatchEndMinute]);
+  }, [fixtureId, restoreStateKey, isPlaying, liveMatchState, fixture, liveMatchEndMinute]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -330,9 +342,7 @@ export default function MatchScreen() {
         message: 'The remaining minutes will be quick-simulated and the result finalized.',
         confirmText: 'Sim & Exit',
         onConfirm: () => {
-          for (let m = minute + 1; m <= liveMatchEndMinute; m++) {
-            processMatchMinute(fixtureId, m);
-          }
+          setIsPlaying(false);
           finishLiveMatch(fixtureId);
           router.back();
         },
@@ -342,7 +352,7 @@ export default function MatchScreen() {
     router.back();
   };
 
-  const currentFixture = fixtures[fixtureId];
+  const currentFixture = fixture;
 
   // Tactical overlay config
   const TACTIC_SECTIONS: { key: keyof TeamTactics; title: string; options: string[]; descriptions: Record<string, string> }[] = [

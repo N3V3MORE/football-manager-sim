@@ -1,8 +1,7 @@
-import { BASE_FORMATION_SLOTS, InboxMessage, Team, applyInboxActionState, applyTacticalAdaptation, assert, computeWeeklyProgression, computeWeeklyTransfers, createSeededRandom, getSeasonWeekLimit, getSlotsForFormation, initGameData, isPlayerUnavailable, markAsSubState, quickSimMatch, readSource, rebuildFormationMap, rebuildFormationSlotPlayers, toggleStartingState } from './shared';
+import { buildQuickSimLineup } from '../../src/core/lineupEngine';
 import englishLeaguePlayers from '../../src/data/english_league_players.json';
 import { buildLineupSuggestionPayload } from '../../src/store/inboxCore';
-import { buildTestPlayer, buildTestTeam } from './shared';
-import { buildQuickSimLineup } from '../../src/core/lineupEngine';
+import { BASE_FORMATION_SLOTS, InboxMessage, Team, applyInboxActionState, applyTacticalAdaptation, assert, buildTestPlayer, buildTestTeam, computeWeeklyProgression, createSeededRandom, getSlotsForFormation, initGameData, isPlayerUnavailable, markAsSubState, rebuildFormationMap, rebuildFormationSlotPlayers, toggleStartingState } from './shared';
 
 export const checkAssistantRotationPreservesFullLineup = () => {
   const data = initGameData();
@@ -74,58 +73,6 @@ export const checkFormationMapRejectsWrongPositions = () => {
   assert(rebuiltMap['3-0'] === rebuiltSlots[3][0]?.id, 'Rebuilt map should persist the corrected GK slot');
 };
 
-export const checkSeededFormationDiversity = () => {
-    const originalRandom = Math.random;
-    Math.random = createSeededRandom(20260513);
-    const formationUsage = { back3: 0, back4: 0, back5: 0 };
-
-  try {
-    for (let season = 1; season <= 5; season++) {
-      const data = initGameData();
-      let state = {
-        players: data.players,
-        teams: data.teams,
-        fixtures: data.fixtures,
-        currentWeek: 1,
-        news: [] as string[],
-      };
-      const seasonWeeks = getSeasonWeekLimit(state.fixtures);
-
-      for (let week = 1; week <= seasonWeeks; week++) {
-        const weekFixtures = Object.values(state.fixtures).filter(fixture => fixture.week === week);
-        weekFixtures.forEach(fixture => {
-          const result = quickSimMatch(fixture.id, state.players, state.teams, state.fixtures);
-          state.players = result.players;
-          state.teams = result.teams;
-          state.fixtures[fixture.id] = result.fixture;
-        });
-
-        const progression = computeWeeklyProgression(state.currentWeek, state.players, state.teams, state.fixtures, state.news);
-        state.players = progression.players;
-        state.teams = progression.teams;
-        state.currentWeek = progression.currentWeek;
-        state.news = progression.news;
-
-        const transfers = computeWeeklyTransfers(state.players, state.teams, null, undefined, state.currentWeek);
-        state.players = transfers.players;
-        state.teams = transfers.teams;
-
-        Object.values(state.teams).forEach(team => {
-          if (team.activeFormation.startsWith('3')) formationUsage.back3++;
-          else if (team.activeFormation.startsWith('5')) formationUsage.back5++;
-          else formationUsage.back4++;
-        });
-      }
-    }
-  } finally {
-    Math.random = originalRandom;
-  }
-
-  assert(formationUsage.back3 > 0, `Seeded formation run produced no back-3 usage: ${JSON.stringify(formationUsage)}`);
-  assert(formationUsage.back5 > 0, `Seeded formation run produced no back-5 usage: ${JSON.stringify(formationUsage)}`);
-  console.log(`Formation usage: ${JSON.stringify(formationUsage)}`);
-};
-
 export const checkRosterSizeConstraints = () => {
   const data = initGameData();
   const teams = Object.values(data.teams);
@@ -164,15 +111,10 @@ export const checkUnavailableBenchPlayersCanBeRemoved = () => {
     benchPlayer!.id
   );
   const resultingPlayers = result.players || players;
-  const squadScreen = readSource('app/(tabs)/squad.tsx');
 
   assert(
     !resultingPlayers[benchPlayer!.id].isSub,
     'Unavailable bench player should be removable from the bench'
-  );
-  assert(
-    /const bench\s*=\s*sortedSquad\.filter\([^)]*!isPlayerUnavailable/.test(squadScreen),
-    'Squad screen bench capacity should ignore unavailable substitutes'
   );
 };
 

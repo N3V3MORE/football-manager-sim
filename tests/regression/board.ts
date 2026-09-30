@@ -1,19 +1,7 @@
-import { existsSync } from 'fs';
-import { join } from 'path';
-import { Team, applyInboxActionState, applySackingRisk, assert, buildBoardObjectives, buildBoardProfile, computeWeeklyProgression, createSeededRandom, hasReachedCompetitionRound, initGameData, readSource, useGameStore } from './shared';
-
-export const checkDeadStoreActionsAreRemoved = () => {
-  const gameStoreSource = readSource('src/store/gameStore.ts');
-  const transferActionsSource = readSource('src/store/transferActions.ts');
-  const agentCheckSource = readSource('scripts/agent_game_check.ts');
-
-  assert(!gameStoreSource.includes('checkBoardObjectives'), 'Public checkBoardObjectives store action should be removed');
-  assert(!gameStoreSource.includes('processWeeklyTransfers'), 'Public processWeeklyTransfers store action should be removed');
-  assert(!transferActionsSource.includes('processWeeklyTransfersState'), 'Dead processWeeklyTransfersState wrapper should be removed');
-  assert(!agentCheckSource.includes('checkBoardObjectives'), 'Agent smoke check should not call checkBoardObjectives');
-  assert(!agentCheckSource.includes('processWeeklyTransfers'), 'Agent smoke check should not call processWeeklyTransfers');
-  assert(!existsSync(join(process.cwd(), 'src/store/boardActions.ts')), 'boardActions wrapper file should be deleted');
-};
+import { dismissUserManagerFromTeam } from '../../src/core/careerEngine';
+import { refreshUnemployedJobOffers } from '../../src/store/inboxCareerBoard';
+import { rolloverSeasonIfNeeded } from '../../src/store/seasonRollover';
+import { Team, applyInboxActionState, applySackingRisk, assert, buildBoardObjectives, buildBoardProfile, computeWeeklyProgression, createSeededRandom, hasReachedCompetitionRound, initGameData, useGameStore } from './shared';
 
 export const checkUserTeamProgressionDoesNotAdaptFormation = () => {
   const data = initGameData();
@@ -233,68 +221,6 @@ export const checkNonTerminalSackingWarningDoesNotDismiss = () => {
   assert(result.sackMessages.length > 0, 'Non-terminal sacking risk should still warn the manager');
 };
 
-export const checkSeasonEndSackingUsesSharedThreshold = () => {
-  const seasonRollover = readSource('src/store/seasonRollover.ts');
-  assert(
-    /getSackingImminentWeek/.test(seasonRollover) && !/consecutiveLowApprovalWeeks\s*>=\s*4/.test(seasonRollover),
-    'Season-end sacking should use the shared patience-sensitive threshold helper'
-  );
-};
-
-export const checkUiContractsMatchEngineState = () => {
-  const statsScreen = readSource('app/stats.tsx');
-  const hubScreen = readSource('app/(tabs)/index.tsx');
-  const settingsScreen = readSource('app/(tabs)/settings.tsx');
-  const calendarScreen = readSource('app/calendar.tsx');
-  const calendarRow = readSource('components/calendar/calendar-fixture-row.tsx');
-  const calendarUtils = readSource('src/utils/calendar.ts');
-  const squadScreen = readSource('app/(tabs)/squad.tsx');
-  const matchScreen = readSource('app/match.tsx');
-  const contractWatchCard = readSource('components/settings/contract-watch-card.tsx');
-
-  assert(
-    /All-Competition Stats/.test(statsScreen) && /playerTeam\.division === userTeam\.division/.test(statsScreen),
-    'Stats screen should honestly label aggregate all-competition leaderboards for the managed division'
-  );
-  assert(
-    /position === 'GK'/.test(hubScreen),
-    'Hub clean-sheet leader should use the same goalkeeper filter as Golden Glove stats'
-  );
-  assert(
-    /filter\(team => !team\.isExternal\)/.test(settingsScreen),
-    'Team picker should exclude external Continental clubs'
-  );
-  assert(
-    !/2024\/25 Fixtures/.test(calendarScreen) && /formatSeasonLabel/.test(calendarScreen),
-    'Calendar screen should render a dynamic season label'
-  );
-  assert(
-    /formatSeasonLabel/.test(calendarUtils),
-    'Calendar utilities should expose a season label helper'
-  );
-  assert(
-    /competitionLabel/.test(calendarScreen) && /roundLabel/.test(calendarScreen) && /competitionLabel/.test(calendarRow),
-    'Calendar rows should show competition context for cup and Europe fixtures'
-  );
-  assert(
-    /Tap a reserve to designate as sub/.test(squadScreen),
-    'Squad empty-bench instruction should match the tap interaction'
-  );
-  assert(
-    !/Conserves 25%|35% more energy|astronomical energy drain|30% better tackling/.test(squadScreen)
-      && !/Conserves 25%|35% more energy|astronomical energy drain|30% better tackling/.test(matchScreen),
-    'Tactics copy should not claim effects the engine does not implement'
-  );
-  assert(
-    /buildSquadPlan\(team,\s*allPlayers\)/.test(contractWatchCard) && /allPlayers=\{players\}/.test(settingsScreen),
-    'Contract Watch should derive contract advice from the same buildSquadPlan inputs as the engine'
-  );
-  assert(
-    /decisionByPlayerId\[b\.id\]\?\.priority/.test(contractWatchCard),
-    'Contract Watch should sort expiring deals by squad-plan decision priority'
-  );
-};
-
 export const checkInitialGameSetupCanBeSeeded = () => {
   const summarize = () => {
     const data = initGameData(undefined, { next: createSeededRandom(20260618) });
@@ -343,9 +269,6 @@ export const checkStoreInitializesSelectedTeamDefaults = () => {
     Math.random = originalRandom;
   }
 };
-import { refreshUnemployedJobOffers } from '../../src/store/inboxCareerBoard';
-import { rolloverSeasonIfNeeded } from '../../src/store/seasonRollover';
-import { dismissUserManagerFromTeam } from '../../src/core/careerEngine';
 
 export const checkUnemployedCareerRecovery = () => {
   const snapshot = useGameStore.getState();

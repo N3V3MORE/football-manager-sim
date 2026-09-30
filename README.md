@@ -7,7 +7,7 @@ The project is England-first and backend-first. The simulation covers league pla
 ## Status
 
 - Current release: `v4.3.0` stable freeze
-- Release gate: `npm run ci` and `npm run gate:release`
+- Release gate: `npm run gate:release`
 - Next tracks: `v4.4` and `v4.5` are paused/not started
 - Full version history: [CHANGELOG.md](./CHANGELOG.md)
 - Detailed plan: [ROADMAP.md](./ROADMAP.md)
@@ -15,7 +15,7 @@ The project is England-first and backend-first. The simulation covers league pla
 ## Setup
 
 Requirements:
-- Node.js 18+
+- Node.js 20.19.4+ (Node 22 used in CI)
 - Expo Go, Android emulator, iOS simulator, or web target
 
 ```bash
@@ -28,31 +28,24 @@ npm run start
 ## Scripts
 
 ```bash
-npm run start              # Start the Expo dev server
-npm run typecheck          # tsc --noEmit
-npm run lint               # ESLint
-npm run analyze            # Detailed single-season simulation report
-npm run track:season       # Season integrity and tactical tracking
-npm run qa                 # Autonomous store-level QA stress test
-npm run turbo              # Fast multi-season simulation (default 500 seasons)
-npm run test:ci            # Deterministic progression, career, competition, inbox, and state-consistency checks
-npm run test:regression    # Deterministic engine regression checks
-npm run check:save         # Audits persisted save shape and formation-map recovery
-npm run check:agent        # Agent-driven init, live match, quick sim, and weekly advance
-npm run check:season       # Full-season agent playthrough
-npm run check:season5      # Five-season agent playthrough
-npm run check:deadcode     # Fails on unused exports outside configured entrypoints
-npm run test:news          # News-generation output test
-npm run ci                 # Full CI: typecheck + lint + test:ci + test:regression + check:save + check:agent
-npm run gate:release       # Release gate: ci + five-season playthrough + dead-code + Expo checks
+npm start                  # Expo dev server
+npm run typecheck          # TypeScript
+npm run lint               # ESLint, no warnings
+npm test                   # Fast behavioral tests, serial execution
+npm test -- --test-name-pattern="transfer"  # Target named cases
+npm run test:slow          # Three seeded world seasons + continuous five-year career
+npm run simulate -- --mode=career --seasons=3 --seed=12091
+npm run simulate -- --mode=world --seasons=1 --seed=20260513
+npm run bench -- --samples=7 --warmups=2 --seed=12091
+npm run check:deadcode     # Unused exports
+npm run doctor:release    # Expo Doctor gate
+npm run ci                # Typecheck + lint + fast tests
+npm run gate:release      # CI + slow tests + dead-code + Doctor + all-platform export
 ```
 
-### Analysis and tracking
+Simulation runs are sequential CPU workloads, bounded to ten seasons. Benchmarks are bounded to thirty samples and compare seeded fingerprints, RNG draws, timings, and save counts. Caches are transient and do not change the save schema. Sim & Exit saves once at completion; interrupted completion resumes from the pre-exit autosave.
 
-- `turbo` defaults to 500 seasons. Override with `TURBO_SEASONS=50`.
-- `track:season` defaults to 1 season. Override with `SEASON_TRACKER_SEASONS=10`.
-- `gate:release` runs `ci`, `check:season5`, `check:deadcode`, `expo-doctor`, and `expo export`.
-- Pull requests and `v*` tag pushes run `npm ci`, `npm run ci`, and `npm run gate:release` in GitHub Actions.
+Pull requests and pushes to main run fast CI once. Release tags (`v*`) and manual workflow runs execute the complete release gate once.
 
 ## Versioning
 

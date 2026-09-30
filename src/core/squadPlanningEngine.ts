@@ -82,9 +82,9 @@ const buildDepthReason = (
 
 export const evaluateSquadNeeds = (
   team: Team,
-  players: Record<string, Player>
+  players: Record<string, Player>,
+  squad = getTeamSquad(players, team.id)
 ): SquadNeed[] => {
-  const squad = getTeamSquad(players, team.id);
   const policy = getSquadPolicy(team);
   const totalWageBill = squad.reduce((sum, player) => sum + (Number.isFinite(player.wage) ? player.wage : 0), 0);
 
@@ -135,9 +135,9 @@ export const evaluateSquadNeeds = (
 export const evaluateContractDecisions = (
   team: Team,
   players: Record<string, Player>,
-  needs: SquadNeed[] = evaluateSquadNeeds(team, players)
+  needs: SquadNeed[] = evaluateSquadNeeds(team, players),
+  squad = getTeamSquad(players, team.id)
 ): ContractDecision[] => {
-  const squad = getTeamSquad(players, team.id);
   const averageWage = average(squad.map(player => player.wage));
   const retainRatingFloor = getRetainRatingFloor(team);
   const highWageBackupThreshold = getHighWageBackupThreshold(team);
@@ -219,12 +219,13 @@ export const evaluateContractDecisions = (
 
 export const buildSquadPlan = (
   team: Team,
-  players: Record<string, Player>
+  players: Record<string, Player>,
+  squad = getTeamSquad(players, team.id)
 ): SquadPlan => {
-  const needs = evaluateSquadNeeds(team, players);
+  const needs = evaluateSquadNeeds(team, players, squad);
   return {
     teamId: team.id,
     needs,
-    contractDecisions: evaluateContractDecisions(team, players, needs),
+    contractDecisions: evaluateContractDecisions(team, players, needs, squad),
   };
 };

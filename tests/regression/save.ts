@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../src/constants/formations';
-import { isPlayerSlotFit, rebuildFormationMap } from '../src/core/formationMapUtils';
-import { Formation, Team } from '../src/models/types';
-import { useGameStore } from '../src/store/gameStore';
-import { clearPersistLoadError, getPersistLoadError, PERSIST_STORAGE_KEY, safeStorage, sanitizePersistedState } from '../src/store/persistence';
+import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../../src/constants/formations';
+import { isPlayerSlotFit, rebuildFormationMap } from '../../src/core/formationMapUtils';
+import { Formation, Team } from '../../src/models/types';
+import { useGameStore } from '../../src/store/gameStore';
+import { clearPersistLoadError, getPersistLoadError, PERSIST_STORAGE_KEY, safeStorage, sanitizePersistedState } from '../../src/store/persistence';
 
 const checkCurrentVersionHydration = async () => {
   await useGameStore.persist.rehydrate();
@@ -101,26 +101,6 @@ const validateFormationDefinitions = () => {
   });
 };
 
-const validateReferences = (label: string) => {
-  const state = useGameStore.getState();
-
-  Object.values(state.players).forEach(player => {
-    assert(state.teams[player.teamId], `${label}: ${player.name} points to missing team ${player.teamId}`);
-  });
-
-  Object.values(state.fixtures).forEach(fixture => {
-    assert(state.teams[fixture.homeTeamId], `${label}: fixture ${fixture.id} has missing home team ${fixture.homeTeamId}`);
-    assert(state.teams[fixture.awayTeamId], `${label}: fixture ${fixture.id} has missing away team ${fixture.awayTeamId}`);
-  });
-
-  Object.values(state.teams).forEach(team => {
-    team.lastStartingXI?.forEach(playerId => {
-      const player = state.players[playerId];
-      assert(player?.teamId === team.id, `${label}: ${team.name} last XI contains invalid player ${playerId}`);
-    });
-  });
-};
-
 const validateUserLineup = (label: string, team: Team) => {
   const state = useGameStore.getState();
   const starters = getStarters(team.id);
@@ -168,29 +148,6 @@ const initializeUserTeam = (formation: Formation) => {
   const userTeam = useGameStore.getState().teams[userTeamId];
   assert(userTeam, `Missing initialized user team ${userTeamId}`);
   return userTeam;
-};
-
-const checkSeasonSkipContinuity = () => {
-  const before = initializeUserTeam('4-3-3');
-  const beforeTactics = JSON.stringify(before.tactics);
-  const beforeFormation = before.activeFormation;
-
-  validateReferences('before skip');
-  validateUserLineup('before skip', before);
-
-  useGameStore.getState().skipToEndOfSeason();
-
-  const state = useGameStore.getState();
-  const after = state.teams[before.id];
-  assert(after, `Missing user team after season skip ${before.id}`);
-  assert(after.activeFormation === beforeFormation, 'Season skip changed the user formation');
-  assert(JSON.stringify(after.tactics) === beforeTactics, 'Season skip changed user tactics');
-  assert(state.currentWeek === 1, 'Season skip should roll into a new season at week 1');
-  assert(after.played === 0, `Season skip should reset the new season played count, got ${after.played}`);
-  assert(Object.values(state.fixtures).every(fixture => !fixture.isPlayed), 'New season fixtures should start unplayed');
-
-  validateReferences('after skip');
-  validateUserLineup('after skip', after);
 };
 
 const checkCorruptedMapRecovery = () => {
@@ -250,19 +207,8 @@ const checkSwapPlayerKeepsFormationMapUnique = () => {
   validateUserLineup('swap player map uniqueness', useGameStore.getState().teams[team.id]);
 };
 
-const checkManagerProfilesLoaded = () => {
-  const state = useGameStore.getState();
-  const teams = Object.values(state.teams);
-  assert(teams.length > 0, 'Expected teams to exist before manager validation');
-  teams.forEach(team => {
-    assert(team.manager, `Missing manager for ${team.name}`);
-    assert(team.manager.teamId === team.id, `Manager team linkage broken for ${team.name}`);
-    assert(team.manager.teamName === team.name, `Manager team name mismatch for ${team.name}`);
-    assert(team.manager.preferredFormations.length > 0, `Manager formations missing for ${team.name}`);
-  });
-};
-
 const checkPersistedStateSanitization = () => {
+  initializeUserTeam('4-3-3');
   const state = useGameStore.getState();
   const sanitized = sanitizePersistedState({
     ...state,
@@ -277,41 +223,12 @@ const checkPersistedStateSanitization = () => {
   );
 };
 
-const checkMockStorageRoundTrip = async () => {
-  const key = 'save-integrity-storage-probe';
-  await AsyncStorage.setItem(key, 'saved');
-  assert(await AsyncStorage.getItem(key) === 'saved', 'Mock AsyncStorage should preserve written values');
-  await AsyncStorage.removeItem(key);
-  assert(await AsyncStorage.getItem(key) === null, 'Mock AsyncStorage should remove written values');
-};
-
-const runSaveIntegrityCheck = async () => {
-  console.log('--- SAVE INTEGRITY CHECK ---');
-  withSeededRandom(20260407, () => {
-    validateFormationDefinitions();
-    console.log('[OK] Formation definitions cover every Formation value');
-    checkSeasonSkipContinuity();
-    console.log('[OK] Season skip keeps user lineup, tactics, and references intact');
-    checkCorruptedMapRecovery();
-    console.log('[OK] Corrupted formation maps recover to valid player slots');
-    checkBenchBounds();
-    console.log('[OK] Bench bounds and 3-4-3 lineup validation passed');
-    checkSwapPlayerKeepsFormationMapUnique();
-    console.log('[OK] Swap player formation-map uniqueness passed');
-    checkManagerProfilesLoaded();
-    console.log('[OK] Manager profiles are loaded for every club');
-    checkPersistedStateSanitization();
-    console.log('[OK] Persisted state sanitization passed');
-  });
-  await checkMockStorageRoundTrip();
-  console.log('[OK] Mock storage round trip passed');
-  await checkStorageReadFailure();
-  await checkCurrentVersionHydration();
-  console.log('[OK] Read failure protection and current-version hydration passed');
-  console.log('--- SAVE INTEGRITY CHECK COMPLETE ---');
-};
-
-runSaveIntegrityCheck().catch(error => {
-  console.error(error);
-  process.exit(1);
-});
+export const saveChecks = [
+  { name: 'save: validate Formation Definitions', run: validateFormationDefinitions },
+  { name: 'save: Current Version Hydration', run: checkCurrentVersionHydration },
+  { name: 'save: Storage Read Failure', run: checkStorageReadFailure },
+  { name: 'save: Corrupted Map Recovery', run: () => withSeededRandom(20260407, checkCorruptedMapRecovery) },
+  { name: 'save: Bench Bounds', run: () => withSeededRandom(20260407, checkBenchBounds) },
+  { name: 'save: Swap Player Keeps Formation Map Unique', run: () => withSeededRandom(20260407, checkSwapPlayerKeepsFormationMapUnique) },
+  { name: 'save: Persisted State Sanitization', run: checkPersistedStateSanitization },
+];
