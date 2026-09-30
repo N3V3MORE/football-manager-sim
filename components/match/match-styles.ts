@@ -143,6 +143,9 @@ export const matchStyles = StyleSheet.create({
   ratingsCol: {
     flex: 1,
   },
+  compactRatingsGrid: { flexDirection: 'column' },
+  compactRatingsCol: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', width: '100%' },
+  compactRatingText: { fontSize: 13 },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -153,6 +156,7 @@ export const matchStyles = StyleSheet.create({
   },
   ratingName: {
     flex: 1,
+    minWidth: 0,
     color: color.text.secondary,
     fontSize: 11,
     fontWeight: '700',

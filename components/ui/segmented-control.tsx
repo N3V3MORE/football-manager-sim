@@ -1,4 +1,5 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useRef, type KeyboardEvent } from 'react';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { color, radius, space, type } from '@/src/design/tokens';
 
@@ -19,13 +20,41 @@ type SegmentedControlProps<T extends string> = {
  * surface; inactive segments are transparent with muted labels.
  */
 export function SegmentedControl<T extends string>({ segments, value, onChange, label, wrapLabels = false }: SegmentedControlProps<T>) {
+  const optionRefs = useRef<Record<string, View | null>>({});
+  const activeIndex = Math.max(0, segments.findIndex(segment => segment.value === value));
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>, index: number) => {
+    let nextIndex = index;
+    switch (event.key) {
+      case 'Enter':
+      case ' ':
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat) onChange(segments[index].value);
+        return;
+      case 'ArrowLeft': nextIndex = (index - 1 + segments.length) % segments.length; break;
+      case 'ArrowRight': nextIndex = (index + 1) % segments.length; break;
+      case 'Home': nextIndex = 0; break;
+      case 'End': nextIndex = segments.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const selected = segments[nextIndex];
+    optionRefs.current[selected.value]?.focus();
+    onChange(selected.value);
+  };
   return (
     <View style={styles.container} accessibilityRole="tablist" accessibilityLabel={label}>
-      {segments.map(segment => {
+      {segments.map((segment, index) => {
         const active = segment.value === value;
         return (
           <TouchableOpacity
             key={segment.value}
+            ref={view => { optionRefs.current[segment.value] = view; }}
+            {...(Platform.OS === 'web' ? {
+              tabIndex: index === activeIndex ? 0 : -1,
+              onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => handleKeyDown(event, index),
+            } : {})}
             onPress={() => onChange(segment.value)}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}

@@ -837,7 +837,9 @@ export const processLiveMatchMinuteState = (
 
   return {
     patch: {
-      fixtures: { ...state.fixtures, [fixtureId]: updatedFixture },
+      fixtures: updatedFixture.homeScore === fixture.homeScore && updatedFixture.awayScore === fixture.awayScore
+        ? state.fixtures
+        : { ...state.fixtures, [fixtureId]: updatedFixture },
       teams: updatedTeams,
       players: updatedPlayers,
       liveMatches: { ...(state.liveMatches || {}), [fixtureId]: liveMatchState },

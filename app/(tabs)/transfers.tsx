@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, FlatList, View } from 'react-native';
-import { useGameStore } from '@/src/store/gameStore';
+import { FocusedGameStoreProvider, useFocusedGameStore } from '@/src/store/focusedGameStore';
 import { getTransferWindowLabel, isTransferWindowOpen } from '@/src/utils/calendar';
 import { Player, TransferNegotiation } from '@/src/models/types';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
@@ -17,19 +17,23 @@ import { getInboxSeason } from '@/src/store/inboxCore';
 type TransferTab = 'market' | 'allPlayers' | 'freeAgents' | 'squad';
 
 export default function TransfersScreen() {
-  const currentWeek = useGameStore(s => s.currentWeek);
-  const userTeamId = useGameStore(s => s.userTeamId);
-  const teams = useGameStore(s => s.teams);
-  const players = useGameStore(s => s.players);
-  const competitions = useGameStore(s => s.competitions);
-  const pendingNegotiations = useGameStore(s => s.pendingNegotiations || []);
-  const approachPlayer = useGameStore(s => s.approachPlayer);
-  const buyPlayer = useGameStore(s => s.buyPlayer);
-  const submitTransferBid = useGameStore(s => s.submitTransferBid);
-  const withdrawTransferNegotiation = useGameStore(s => s.withdrawTransferNegotiation);
-  const signFreeAgent = useGameStore(s => s.signFreeAgent);
-  const listPlayerForSale = useGameStore(s => s.listPlayerForSale);
-  const unlistPlayer = useGameStore(s => s.unlistPlayer);
+  return <FocusedGameStoreProvider><TransfersContent /></FocusedGameStoreProvider>;
+}
+
+function TransfersContent() {
+  const currentWeek = useFocusedGameStore(s => s.currentWeek);
+  const userTeamId = useFocusedGameStore(s => s.userTeamId);
+  const teams = useFocusedGameStore(s => s.teams);
+  const players = useFocusedGameStore(s => s.players);
+  const competitions = useFocusedGameStore(s => s.competitions);
+  const pendingNegotiations = useFocusedGameStore(s => s.pendingNegotiations || []);
+  const approachPlayer = useFocusedGameStore(s => s.approachPlayer);
+  const buyPlayer = useFocusedGameStore(s => s.buyPlayer);
+  const submitTransferBid = useFocusedGameStore(s => s.submitTransferBid);
+  const withdrawTransferNegotiation = useFocusedGameStore(s => s.withdrawTransferNegotiation);
+  const signFreeAgent = useFocusedGameStore(s => s.signFreeAgent);
+  const listPlayerForSale = useFocusedGameStore(s => s.listPlayerForSale);
+  const unlistPlayer = useFocusedGameStore(s => s.unlistPlayer);
 
   const windowLabel = getTransferWindowLabel(currentWeek, getInboxSeason(competitions));
   const windowOpen = isTransferWindowOpen(currentWeek);

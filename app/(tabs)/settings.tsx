@@ -9,7 +9,7 @@ import { DevToolsCard } from '@/components/settings/dev-tools-card';
 import { TeamSelectionSheet } from '@/components/settings/team-selection-sheet';
 import { Screen } from '@/components/ui';
 import { TabHeader } from '@/components/ui/page-header';
-import { useGameStore } from '@/src/store/gameStore';
+import { FocusedGameStoreProvider, useFocusedGameStore } from '@/src/store/focusedGameStore';
 import { useConfirmStore } from '@/src/store/confirmStore';
 import { sortTeamsByDivisionAndName } from '@/src/core/leagueUtils';
 import { isContractExpiringSoon, isPlayerInjured, isPlayerUnavailable } from '@/src/core/playerStatusUtils';
@@ -17,16 +17,20 @@ import { space } from '@/src/design/tokens';
 
 
 export default function SettingsScreen() {
-  const userTeamId = useGameStore(state => state.userTeamId);
-  const teams = useGameStore(state => state.teams);
-  const userSquad = useGameStore(useShallow(state => Object.values(state.players).filter(player => player.teamId === state.userTeamId)));
+  return <FocusedGameStoreProvider><SettingsContent /></FocusedGameStoreProvider>;
+}
+
+function SettingsContent() {
+  const userTeamId = useFocusedGameStore(state => state.userTeamId);
+  const teams = useFocusedGameStore(state => state.teams);
+  const userSquad = useFocusedGameStore(useShallow(state => Object.values(state.players).filter(player => player.teamId === state.userTeamId)));
   const players = useMemo(() => Object.fromEntries(userSquad.map(player => [player.id, player])), [userSquad]);
-  const advanceWeek = useGameStore(state => state.advanceWeek);
-  const skipToEndOfSeason = useGameStore(state => state.skipToEndOfSeason);
-  const clearStuckLiveMatches = useGameStore(state => state.clearStuckLiveMatches);
-  const changeTeam = useGameStore(state => state.changeTeam);
-  const initializeGame = useGameStore(state => state.initializeGame);
-  const renewPlayerContract = useGameStore(state => state.renewPlayerContract);
+  const advanceWeek = useFocusedGameStore(state => state.advanceWeek);
+  const skipToEndOfSeason = useFocusedGameStore(state => state.skipToEndOfSeason);
+  const clearStuckLiveMatches = useFocusedGameStore(state => state.clearStuckLiveMatches);
+  const changeTeam = useFocusedGameStore(state => state.changeTeam);
+  const initializeGame = useFocusedGameStore(state => state.initializeGame);
+  const renewPlayerContract = useFocusedGameStore(state => state.renewPlayerContract);
 
   const [showChangeTeam, setShowChangeTeam] = useState(false);
   const showConfirm = useConfirmStore(s => s.showConfirm);

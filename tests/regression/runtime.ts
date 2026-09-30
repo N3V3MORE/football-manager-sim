@@ -21,6 +21,11 @@ import { getSackingImminentWeek } from '../../src/core/careerEngine';
 import { buildSeasonSummary } from '../../src/core/careerEngine';
 import { advanceWeekTransition } from '../../src/store/weekLifecycle';
 import { ENGINE_CONFIG } from '../../src/config/engineConfig';
+import { createStore } from 'zustand/vanilla';
+import { createFocusedStoreView } from '../../src/store/focusedStore';
+import { getReadableTextColor, getTextContrast } from '../../src/design/textContrast';
+import { TEAM_COLORS } from '../../src/constants/teamColors';
+import { color } from '../../src/design/tokens';
 
 type State = ReturnType<typeof useGameStore.getState>;
 const prepare = () => {
@@ -55,8 +60,15 @@ const checkAtomicCompletion = async () => {
       const { state, fixture } = prepare();
       let current = clone(state);
       for (let minute = 1; minute <= startingMinute; minute += 1) {
+        const beforeFixture = current.fixtures[fixture.id];
+        const beforeScores = [beforeFixture.homeScore, beforeFixture.awayScore];
         const update = processLiveMatchMinuteState(current, fixture.id, minute);
         assert.equal(update.patch.teams, current.teams, 'Normal minutes must preserve the teams reference');
+        assert.deepEqual([beforeFixture.homeScore, beforeFixture.awayScore], beforeScores, 'Minutes must not mutate the original fixture');
+        const afterFixture = update.patch.fixtures![fixture.id];
+        const sameScores = beforeScores[0] === afterFixture.homeScore && beforeScores[1] === afterFixture.awayScore;
+        assert.equal(update.patch.fixtures === current.fixtures, sameScores, 'Quiet minutes must retain the fixtures record; score changes must publish it');
+        assert.equal(afterFixture === beforeFixture, sameScores);
         current = { ...current, ...update.patch };
       }
       if (startingMinute === 45) {
@@ -295,6 +307,47 @@ const checkWeeklyTransitionReporting = () => {
 };
 
 export const runtimeChecks = [
+  { name: 'ui: team text meets contrast without changing kit colours', run: () => {
+    const original = JSON.stringify(TEAM_COLORS);
+    for (const team of Object.values(TEAM_COLORS)) {
+      for (const foreground of [team.primary, team.secondary]) {
+        for (const background of [color.bg.card, color.bg.screen, '#ffffff']) {
+          const readable = getReadableTextColor(foreground, background);
+          assert.ok(getTextContrast(readable, background) >= 4.5, `${foreground} must remain legible on ${background}`);
+          assert.equal(getReadableTextColor(readable, background), readable);
+          if (getTextContrast(foreground, background) >= 4.5) assert.equal(readable, foreground);
+        }
+      }
+    }
+    assert.equal(JSON.stringify(TEAM_COLORS), original);
+  } },
+  { name: 'ui: hidden snapshots stop subscriptions and refresh on focus', run: () => {
+    const source = createStore(() => ({ count: 0 }));
+    let notifications = 0;
+    const active = createFocusedStoreView(source, true);
+    const unsubscribe = active.subscribe(() => { notifications += 1; });
+    source.setState({ count: 1 });
+    assert.equal(notifications, 1);
+    assert.equal(active.getState(), source.getState());
+    unsubscribe();
+    const hidden = createFocusedStoreView(source, false);
+    const frozen = hidden.getState();
+    const unsubscribeHidden = hidden.subscribe(() => { notifications += 1; });
+    source.setState({ count: 2 });
+    assert.equal(notifications, 1, 'Hidden subscribers must receive no store notifications');
+    assert.equal(hidden.getState(), frozen);
+    assert.equal(hidden.getState().count, 1);
+    assert.equal(hidden.getInitialState().count, 0, 'Hydration must keep the source initial snapshot');
+    unsubscribeHidden();
+    const resumed = createFocusedStoreView(source, true);
+    assert.equal(resumed.getState().count, 2, 'Focus must read updates missed while hidden');
+    const cleanup = resumed.subscribe(() => { notifications += 1; });
+    source.setState({ count: 3 });
+    assert.equal(notifications, 2);
+    cleanup();
+    source.setState({ count: 4 });
+    assert.equal(notifications, 2, 'Cleanup must remove active listeners');
+  } },
   { name: 'career: weekly observations retain rollover fixtures and capped career summaries', run: checkWeeklyTransitionReporting },
   { name: 'tooling: Doctor completes all checks before passing the release gate', run: checkDoctorCompletionGate },
   { name: 'save: atomic exit parity, substitutions, autosaves and no-ops', run: checkAtomicCompletion },

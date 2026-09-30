@@ -5,6 +5,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
+import { getReadableTextColor } from '@/src/design/textContrast';
+import { color } from '@/src/design/tokens';
 import { useState, useEffect, useRef } from 'react';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { getPositionColor } from '@/src/constants/positionColors';
@@ -385,7 +387,7 @@ export default function MatchScreen() {
 
         <View style={styles.scoreboard}>
           <View style={styles.teamBox}>
-            <Text style={[styles.teamName, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
+            <Text style={[styles.teamName, { color: getReadableTextColor(homeTheme.primary, color.bg.card) }]}>{homeTeam.name}</Text>
             <Text style={styles.score}>
                 {minute > 0 || currentFixture.isPlayed ? currentFixture.homeScore : '-'}
             </Text>
@@ -394,7 +396,7 @@ export default function MatchScreen() {
             <Text style={styles.vsText}>VS</Text>
           </View>
           <View style={styles.teamBox}>
-            <Text style={[styles.teamName, { color: awayPrimary }]}>{awayTeam.name}</Text>
+            <Text style={[styles.teamName, { color: getReadableTextColor(awayPrimary, color.bg.card) }]}>{awayTeam.name}</Text>
             <Text style={styles.score}>
                 {minute > 0 || currentFixture.isPlayed ? currentFixture.awayScore : '-'}
             </Text>
@@ -411,7 +413,7 @@ export default function MatchScreen() {
 
         <View style={styles.lineupRow}>
             <View style={styles.lineupCol}>
-                <Text style={[styles.lineupHeader, { color: homeTheme.primary }]}>Home XI</Text>
+                <Text style={[styles.lineupHeader, { color: getReadableTextColor(homeTheme.primary, color.bg.screen) }]}>Home XI</Text>
                 {homePlayers.map(p => (
                     <View key={p.id} style={styles.lineupPlayerRow}>
                         <View style={[styles.lineupPosPill, { backgroundColor: getPositionColor(p.position) }]}>
@@ -422,7 +424,7 @@ export default function MatchScreen() {
                 ))}
             </View>
             <View style={[styles.lineupCol, { alignItems: 'flex-end' }]}>
-                <Text style={[styles.lineupHeader, { color: awayPrimary, textAlign: 'right' }]}>Away XI</Text>
+                <Text style={[styles.lineupHeader, { color: getReadableTextColor(awayPrimary, color.bg.screen), textAlign: 'right' }]}>Away XI</Text>
                 {awayPlayers.map(p => (
                     <View key={p.id} style={[styles.lineupPlayerRow, { flexDirection: 'row-reverse' }]}>
                         <View style={[styles.lineupPosPill, { backgroundColor: getPositionColor(p.position) }]}>

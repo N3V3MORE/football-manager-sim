@@ -55,6 +55,7 @@ try {
   for (const [id, patch] of Object.entries(lineup)) initialized.players[id] = { ...initialized.players[id], ...patch };
   const fixture = Object.values(initialized.fixtures).find(value => value.week === 1 && (value.homeTeamId === 'T1' || value.awayTeamId === 'T1'))!;
   const snapshot = JSON.stringify(initialized);
+  let saveSnapshots: State[] = [];
   const cases: BenchmarkCase[] = [
     { name: 'season rollover', run: state => advanceSeason(state.players, state.teams, state.competitions, 'T1', state.news) },
     { name: 'season rollover (expiring contracts)', prepare: state => ({ ...state,
@@ -92,6 +93,21 @@ try {
       useGameStore.getState().finishLiveMatch(fixture.id);
       return useGameStore.getState();
     } },
+    { name: 'save encoding (90 minutes)', prepare: state => {
+      saveSnapshots = [];
+      let current = state;
+      for (let minute = 1; minute <= 90; minute += 1) {
+        current = { ...current, ...processLiveMatchMinuteState(current, fixture.id, minute).patch };
+        saveSnapshots.push(current);
+      }
+      saveSnapshots.push({ ...current, ...finishLiveMatchState(current, fixture.id) });
+      return state;
+    }, run: () => {
+      const version = useGameStore.persist.getOptions().version;
+      let encodedBytes = 0;
+      for (const state of saveSnapshots) encodedBytes += Buffer.byteLength(JSON.stringify({ state, version }));
+      return { envelopes: saveSnapshots.length, encodedBytes };
+    } },
   ];
   const results = [];
   const scenario = process.argv.find(value => value.startsWith('--scenario='))?.slice('--scenario='.length);
@@ -105,6 +121,7 @@ try {
     let nextRngValue: number | undefined;
     let saveWrites = 0;
     let saveBytes = 0;
+    let encoding: { envelopes: number; encodedBytes: number } | undefined;
     for (let sample = -warmups; sample < samples; sample += 1) {
       const cloned = { ...initialized, ...JSON.parse(snapshot) } as State;
       const state = benchmark.prepare ? benchmark.prepare(cloned) : cloned;
@@ -117,6 +134,7 @@ try {
       const start = performance.now();
       const result = benchmark.run(state, fixture.id);
       const elapsed = performance.now() - start;
+      if (benchmark.name === 'save encoding (90 minutes)') encoding = result as typeof encoding;
       const hash = fingerprint(result);
       const fullHash = createHash('sha256').update(JSON.stringify(result)).digest('hex').slice(0, 16);
       const nextDraw = random.next();
@@ -136,6 +154,7 @@ try {
       p95Ms: Number(timings[Math.min(timings.length - 1, Math.ceil(timings.length * 0.95) - 1)].toFixed(2)),
       globalRngDraws: expectedDraws, fingerprint: expectedFingerprint, saveWrites,
       fullFingerprint: expectedFullFingerprint, nextRngValue,
+      ...(encoding ? { encodedEnvelopes: encoding.envelopes, encodedMB: Number((encoding.encodedBytes / 1000000).toFixed(2)) } : {}),
       savedMB: Number((saveBytes / 1000000).toFixed(2)) });
   }
   console.log(JSON.stringify({ seed, samples, warmups, node: process.version, platform: process.platform, results }, null, 2));

@@ -3,10 +3,15 @@ import { Screen } from '@/components/ui';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import type { Fixture, Player, Team, MatchPlayerSummaryRow } from '@/src/models/types';
 import { matchStyles as styles } from './match-styles';
+import { useState } from 'react';
+import { color } from '@/src/design/tokens';
+import { getReadableTextColor } from '@/src/design/textContrast';
 
 type MatchResultProps = { fixture: Fixture; teams: Record<string, Team>; players: Record<string, Player>; onExit: () => void; onContinue: () => void };
 
 export function MatchResultView({ fixture, teams, players, onExit, onContinue }: MatchResultProps) {
+  const [ratingsWidth, setRatingsWidth] = useState<number | null>(null);
+  const compactRatings = ratingsWidth !== null && ratingsWidth < 600;
   const homeTeam = teams[fixture.homeTeamId];
   const awayTeam = teams[fixture.awayTeamId];
   const hScore = fixture.homeScore ?? 0;
@@ -17,6 +22,8 @@ export function MatchResultView({ fixture, teams, players, onExit, onContinue }:
   if (homeTheme.primary === awayThemeRaw.primary) {
     awayPrimary = awayThemeRaw.secondary;
   }
+  const homeTextColor = getReadableTextColor(homeTheme.primary, color.bg.card);
+  const awayTextColor = getReadableTextColor(awayPrimary, color.bg.card);
   const matchSummary = fixture.matchSummary;
   const manOfTheMatch = matchSummary?.playerRows.find(row => row.playerId === matchSummary.manOfTheMatchPlayerId);
   const homeSummaryRows = matchSummary?.playerRows.filter(row => row.teamId === fixture.homeTeamId) || [];
@@ -26,9 +33,9 @@ export function MatchResultView({ fixture, teams, players, onExit, onContinue }:
       .sort((left, right) => right.minutes - left.minutes || right.rating - left.rating)
       .map(row => (
         <View key={row.playerId} style={styles.ratingRow}>
-          <Text style={styles.ratingName} numberOfLines={1}>{row.name}</Text>
-          <Text style={styles.ratingMeta}>{`${row.minutes}'`}</Text>
-          <Text style={styles.ratingMeta}>{row.rating.toFixed(1)}</Text>
+          <Text style={[styles.ratingName, compactRatings && styles.compactRatingText]} numberOfLines={1}>{row.name}</Text>
+          <Text style={[styles.ratingMeta, compactRatings && styles.compactRatingText]}>{`${row.minutes}'`}</Text>
+          <Text style={[styles.ratingMeta, compactRatings && styles.compactRatingText]}>{row.rating.toFixed(1)}</Text>
         </View>
       ))
   );
@@ -44,14 +51,14 @@ export function MatchResultView({ fixture, teams, players, onExit, onContinue }:
         <Text style={styles.stadiumText}>{homeTheme.stadium}</Text>
         <View style={styles.scoreboard}>
           <View style={styles.teamBox}>
-            <Text style={[styles.teamName, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
+            <Text style={[styles.teamName, { color: homeTextColor }]}>{homeTeam.name}</Text>
             <Text style={styles.score}>{fixture.resolution === 'void' ? '—' : hScore}</Text>
           </View>
           <View style={styles.vsBox}>
             <Text style={styles.vsText}>VS</Text>
           </View>
           <View style={styles.teamBox}>
-            <Text style={[styles.teamName, { color: awayPrimary }]}>{awayTeam.name}</Text>
+            <Text style={[styles.teamName, { color: awayTextColor }]}>{awayTeam.name}</Text>
             <Text style={styles.score}>{fixture.resolution === 'void' ? '—' : aScore}</Text>
           </View>
         </View>
@@ -97,13 +104,13 @@ export function MatchResultView({ fixture, teams, players, onExit, onContinue }:
               </View>
             )}
             <Text style={styles.summaryTitle}>Player Ratings</Text>
-            <View style={styles.ratingsGrid}>
-              <View style={styles.ratingsCol}>
-                <Text style={[styles.lineupHeader, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
+            <View style={[styles.ratingsGrid, compactRatings && styles.compactRatingsGrid]} onLayout={event => setRatingsWidth(event.nativeEvent.layout.width)}>
+              <View style={[styles.ratingsCol, compactRatings && styles.compactRatingsCol]}>
+                <Text style={[styles.lineupHeader, { color: homeTextColor }]}>{homeTeam.name}</Text>
                 {renderRatingRows(homeSummaryRows)}
               </View>
-              <View style={styles.ratingsCol}>
-                <Text style={[styles.lineupHeader, { color: awayPrimary, textAlign: 'right' }]}>{awayTeam.name}</Text>
+              <View style={[styles.ratingsCol, compactRatings && styles.compactRatingsCol]}>
+                <Text style={[styles.lineupHeader, { color: awayTextColor, textAlign: compactRatings ? 'left' : 'right' }]}>{awayTeam.name}</Text>
                 {renderRatingRows(awaySummaryRows)}
               </View>
             </View>

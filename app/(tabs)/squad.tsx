@@ -3,7 +3,7 @@ import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity
 } from 'react-native';
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { useGameStore } from '@/src/store/gameStore';
+import { FocusedGameStoreProvider, useFocusedGameStore } from '@/src/store/focusedGameStore';
 import { Formation, Player, TeamTactics } from '@/src/models/types';
 import { getSlotsForFormation, Slot } from '@/src/constants/formations';
 import { getSlotFitScore, rebuildFormationMap, rebuildFormationSlotPlayers } from '@/src/core/formationMapUtils';
@@ -104,17 +104,21 @@ const TACTIC_SECTIONS: TacticConfig[] = [
 ];
 
 export default function SquadScreen() {
-  const userTeamId    = useGameStore(s => s.userTeamId);
-  const myTeam = useGameStore(s => s.userTeamId ? s.teams[s.userTeamId] : undefined);
-  const mySquad = useGameStore(useShallow(s => Object.values(s.players).filter(player => player.teamId === s.userTeamId)));
+  return <FocusedGameStoreProvider><SquadContent /></FocusedGameStoreProvider>;
+}
+
+function SquadContent() {
+  const userTeamId    = useFocusedGameStore(s => s.userTeamId);
+  const myTeam = useFocusedGameStore(s => s.userTeamId ? s.teams[s.userTeamId] : undefined);
+  const mySquad = useFocusedGameStore(useShallow(s => Object.values(s.players).filter(player => player.teamId === s.userTeamId)));
   const players = useMemo(() => Object.fromEntries(mySquad.map(player => [player.id, player])), [mySquad]);
-  const setFormation  = useGameStore(s => s.setFormation);
-  const setTactics    = useGameStore(s => s.setTactics);
-  const swapPlayer    = useGameStore(s => s.swapPlayer);
-  const markAsSub     = useGameStore(s => s.markAsSub);
-  const setTrainingFocus = useGameStore(s => s.setTrainingFocus);
-  const setPlayerRole = useGameStore(s => s.setPlayerRole);
-  const swapStartingSlots = useGameStore(s => s.swapStartingSlots);
+  const setFormation  = useFocusedGameStore(s => s.setFormation);
+  const setTactics    = useFocusedGameStore(s => s.setTactics);
+  const swapPlayer    = useFocusedGameStore(s => s.swapPlayer);
+  const markAsSub     = useFocusedGameStore(s => s.markAsSub);
+  const setTrainingFocus = useFocusedGameStore(s => s.setTrainingFocus);
+  const setPlayerRole = useFocusedGameStore(s => s.setPlayerRole);
+  const swapStartingSlots = useFocusedGameStore(s => s.swapStartingSlots);
 
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [expandedCardId, setExpandedCardId]   = useState<string | null>(null);

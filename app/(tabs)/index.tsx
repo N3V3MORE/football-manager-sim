@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
-import { useGameStore } from '@/src/store/gameStore';
+import { FocusedGameStoreProvider, useFocusedGameStore } from '@/src/store/focusedGameStore';
 import { useRouter } from 'expo-router';
 import { BoardRoomCard } from '@/components/hub/board-room-card';
 import { CareerStatsCard } from '@/components/hub/career-stats-card';
@@ -42,18 +42,22 @@ type CompetitionPanelItem = {
 const weekToDate = (week: number, season: number): string => formatShortDate(week, season);
 
 export default function HubScreen() {
+  return <FocusedGameStoreProvider><HubContent /></FocusedGameStoreProvider>;
+}
+
+function HubContent() {
   const router = useRouter();
-  const currentWeek = useGameStore(state => state.currentWeek);
-  const userTeamId = useGameStore(state => state.userTeamId);
-  const teams = useGameStore(state => state.teams);
-  const fixtures = useGameStore(state => state.fixtures);
-  const competitions = useGameStore(state => state.competitions);
-  const advanceWeek = useGameStore(state => state.advanceWeek);
-  const playMatch = useGameStore(state => state.playMatch);
-  const inboxMessages = useGameStore(state => state.inboxMessages);
-  const players = useGameStore(state => state.players);
-  const news = useGameStore(state => state.news);
-  const careerRecord = useGameStore(state => state.careerRecord);
+  const currentWeek = useFocusedGameStore(state => state.currentWeek);
+  const userTeamId = useFocusedGameStore(state => state.userTeamId);
+  const teams = useFocusedGameStore(state => state.teams);
+  const fixtures = useFocusedGameStore(state => state.fixtures);
+  const competitions = useFocusedGameStore(state => state.competitions);
+  const advanceWeek = useFocusedGameStore(state => state.advanceWeek);
+  const playMatch = useFocusedGameStore(state => state.playMatch);
+  const inboxMessages = useFocusedGameStore(state => state.inboxMessages);
+  const players = useFocusedGameStore(state => state.players);
+  const news = useFocusedGameStore(state => state.news);
+  const careerRecord = useFocusedGameStore(state => state.careerRecord);
   const seasonNumber = getInboxSeason(competitions);
   const openLeague = useCallback(() => router.push('/league'), [router]);
   const openCalendar = useCallback(() => router.push('/calendar'), [router]);
@@ -176,7 +180,7 @@ export default function HubScreen() {
 
   if (!myTeam || !myTheme) {
     return (
-      <Screen scroll={false}>
+      <Screen contentContainerStyle={styles.emptyScrollContent}>
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>Between Jobs</Text>
           <Text style={styles.emptyCopy}>
@@ -285,9 +289,11 @@ export default function HubScreen() {
 
 const styles = StyleSheet.create({
   emptyState: {
-    flex: 1,
-    padding: 20,
     gap: 16,
+  },
+  emptyScrollContent: {
+    flexGrow: 1,
+    padding: 20,
     justifyContent: 'center',
   },
   emptyTitle: {
