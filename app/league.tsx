@@ -5,7 +5,6 @@ import {
   Text,
   TouchableOpacity,
   View,
-  useWindowDimensions,
   type DimensionValue,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -42,7 +41,7 @@ export default function LeagueTableScreen() {
   const [selectedCountryId, setSelectedCountryId] = useState(
     teams[userTeamId || '']?.countryId || DEFAULT_COUNTRY_ID
   );
-  const { width } = useWindowDimensions();
+  const [pagerWidth, setPagerWidth] = useState(0);
   const countryScrollRef = useRef<ScrollView>(null);
   const divisionScrollRefs = useRef<Record<string, ScrollView | null>>({});
   const divisionOffsets = useRef<Record<string, Record<string, number>>>({});
@@ -61,12 +60,14 @@ export default function LeagueTableScreen() {
   ) as Record<string, Team[]>, [teams]);
 
   useEffect(() => {
+    if (pagerWidth <= 0) return;
     const targetIndex = Math.max(0, LEAGUE_COUNTRIES.findIndex(country => country.id === activeCountryId));
     if (targetIndex < 0) return;
-    requestAnimationFrame(() => {
-      countryScrollRef.current?.scrollTo({ x: targetIndex * width, animated: true });
+    const frame = requestAnimationFrame(() => {
+      countryScrollRef.current?.scrollTo({ x: targetIndex * pagerWidth, animated: true });
     });
-  }, [activeCountryId, width]);
+    return () => cancelAnimationFrame(frame);
+  }, [activeCountryId, pagerWidth]);
 
   const getLastLineup = (team: Team) => {
     if (!team.lastStartingXI || team.lastStartingXI.length === 0) return null;
@@ -76,7 +77,7 @@ export default function LeagueTableScreen() {
   const scrollToCountry = (countryId: string) => {
     const index = Math.max(0, LEAGUE_COUNTRIES.findIndex(country => country.id === countryId));
     setSelectedCountryId(countryId);
-    countryScrollRef.current?.scrollTo({ x: index * width, animated: true });
+    countryScrollRef.current?.scrollTo({ x: index * pagerWidth, animated: true });
   };
 
   const scrollToDivision = (countryId: string, division: string) => {
@@ -206,7 +207,7 @@ export default function LeagueTableScreen() {
     const isActiveCountry = countryId === activeCountryId;
 
     return (
-      <View key={countryId} style={[styles.countryPage, { width }]}>
+      <View key={countryId} style={[styles.countryPage, { width: pagerWidth }]}>
         <ScrollView
           ref={ref => {
             divisionScrollRefs.current[countryId] = ref;
@@ -258,12 +259,14 @@ export default function LeagueTableScreen() {
       <ScrollView
         ref={countryScrollRef}
         style={styles.countryPager}
+        onLayout={event => setPagerWidth(event.nativeEvent.layout.width)}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         nestedScrollEnabled
         onMomentumScrollEnd={(event) => {
-          const index = Math.round(event.nativeEvent.contentOffset.x / width);
+          if (pagerWidth <= 0) return;
+          const index = Math.round(event.nativeEvent.contentOffset.x / pagerWidth);
           const nextCountry = LEAGUE_COUNTRIES[index];
           if (nextCountry) setSelectedCountryId(nextCountry.id);
         }}

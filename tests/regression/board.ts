@@ -169,7 +169,7 @@ export const checkMidSeasonSackingTerminatesImmediately = () => {
   );
   const immediateOffer = nextState.inboxMessages.find((message: any) => message.category === 'career_job_offer' && message.action?.type === 'accept_job_offer');
   assert(immediateOffer, 'Terminal mid-season sacking should include an actionable job offer');
-  const acceptedState = applyInboxActionState(nextState, immediateOffer.id) as any;
+  const acceptedState = applyInboxActionState(nextState, immediateOffer.id).patch as any;
   assert(acceptedState.userTeamId === immediateOffer.teamId, 'Mid-season job offer should be accepted immediately from between jobs');
   assert(acceptedState.boardObjectives.length > 0, 'Accepting a mid-season job offer should build objectives for the new club');
 };
@@ -288,7 +288,7 @@ export const checkUnemployedCareerRecovery = () => {
     const rollover = rolloverSeasonIfNeeded({ ...unemployed, currentWeek: 100, inboxMessages: messages }, 99, [])!;
     assert(rollover.inboxMessages.some(message => message.id === messages[0].id), 'Outstanding offers must survive unemployed season rollover');
     assert(JSON.stringify(rollover.careerRecord) === JSON.stringify(unemployed.careerRecord), 'Waiting for work must not change career history or reputation');
-    const rehired = applyInboxActionState(rollover, messages[0].id);
+    const rehired = applyInboxActionState(rollover, messages[0].id).patch;
     assert(rehired.userTeamId === 'T2', 'A carried offer must restore employment');
     assert(rehired.teams!.T2.manager.name === unemployed.careerRecord.userManager!.name, 'Rehire must preserve manager identity');
     assert(!rehired.inboxMessages!.some(message => message.action?.type === 'accept_job_offer'), 'Rehire must clear competing offers');

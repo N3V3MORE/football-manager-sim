@@ -42,9 +42,9 @@ import {
   unlistPlayerState,
   withdrawTransferNegotiationState,
 } from './transferActions';
-import { DEFAULT_GAME_STATE, PERSIST_STORAGE_KEY, ensureReferentialIntegrity, safeStorage, sanitizePersistedState } from './persistence';
+import { DEFAULT_GAME_STATE, PERSIST_STORAGE_KEY, ensureReferentialIntegrity, reportPersistHydrationError, safeStorage, sanitizePersistedState } from './persistence';
 import { createSeededRandomGenerator } from '../core/random';
-import { advanceWeekState, skipToEndOfSeasonState } from './weekLifecycle';
+import { advanceWeekTransition, skipToEndOfSeasonState, WeekAdvanceResult } from './weekLifecycle';
 import { finishLiveMatchState, makeLiveSubstitutionsState, processLiveMatchMinuteState, setLiveMatchFormationState } from './liveMatchActions';
 import { playMatchState } from './fixtureResolution';
 import { changeTeamState } from './careerActions';
@@ -53,11 +53,11 @@ interface GameStore extends GameState {
   liveMatches: Record<string, LiveMatchState>;
   transfersAppliedWeek: number;
   initializeGame: (userTeamId: string, seed?: number) => void;
-  advanceWeek: () => void;
+  advanceWeek: () => WeekAdvanceResult;
   playMatch: (fixtureId: string) => void;
   markInboxMessageRead: (messageId: string) => void;
   dismissInboxMessage: (messageId: string) => void;
-  applyInboxAction: (messageId: string) => void;
+  applyInboxAction: (messageId: string) => StoreActionResult;
   renewPlayerContract: (playerId: string, years: number, wage: number) => { success: boolean; message: string };
   setFormation: (teamId: string, formation: Formation) => void;
   toggleStarting: (playerId: string) => void;
@@ -189,7 +189,13 @@ export const useGameStore = create<GameStore>()(
       },
 
       applyInboxAction: (messageId: string) => {
-        setChanged(state => applyInboxActionState(state, messageId));
+        let result: StoreActionResult = { success: false, message: '' };
+        setChanged(state => {
+          const update = applyInboxActionState(state, messageId);
+          result = update.result;
+          return update.patch;
+        });
+        return result;
       },
 
       playMatch: (fixtureId: string) => {
@@ -231,14 +237,17 @@ export const useGameStore = create<GameStore>()(
       },
 
       advanceWeek: () => {
+        const transition = advanceWeekTransition(get());
         setChanged(state => {
-          const next = advanceWeekState(state);
+          const next = transition.nextState;
           // Ensure free-agent team exists if any player was moved there during
           // squad trimming or contract expiry (durable representation for
           // referential integrity).
           const fixedTeams = ensureReferentialIntegrity(next.teams ?? state.teams, next.players ?? state.players);
           return { ...next, teams: fixedTeams };
         });
+        const { nextState: _nextState, ...result } = transition;
+        return result;
       },
 
       setFormation: (teamId, formation) => {
@@ -362,7 +371,6 @@ export const useGameStore = create<GameStore>()(
       },
 
       withdrawTransferNegotiation: (negotiationId: string) => {
-        if (!get().pendingNegotiations?.some(item => item.id === negotiationId && (item.status === 'pending' || item.status === 'countered'))) return;
         setChanged(state => withdrawTransferNegotiationState(state, negotiationId));
       },
 
@@ -389,6 +397,9 @@ export const useGameStore = create<GameStore>()(
       name: PERSIST_STORAGE_KEY,
       storage: createJSONStorage(() => safeStorage),
       version: 9,
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) reportPersistHydrationError(error);
+      },
       merge: (persistedState, currentState) => persistedState
         ? { ...currentState, ...sanitizePersistedState(persistedState as Partial<GameStore>) }
         : currentState,

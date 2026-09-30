@@ -7,7 +7,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { installAgentGameHandler } from '@/src/dev/agentGameHandler';
 import { useGameStore } from '@/src/store/gameStore';
-import { PERSIST_STORAGE_KEY, clearPersistLoadError, getPersistLoadError, safeStorage } from '@/src/store/persistence';
+import { PERSIST_STORAGE_KEY, clearPersistLoadError, getPersistLoadError, safeStorage, subscribePersistLoadError } from '@/src/store/persistence';
 import { Button, Screen } from '@/components/ui';
 import { ConfirmHost } from '@/components/ui/confirm-host';
 import { color, space, type } from '@/src/design/tokens';
@@ -24,11 +24,13 @@ export default function RootLayout() {
   useEffect(() => {
     setHasHydrated(useGameStore.persist.hasHydrated());
     setLoadError(getPersistLoadError());
+    const unsubError = subscribePersistLoadError(() => setLoadError(getPersistLoadError()));
+    const unsubStart = useGameStore.persist.onHydrate(() => setHasHydrated(false));
     const unsub = useGameStore.persist.onFinishHydration(() => {
       setLoadError(getPersistLoadError());
       setHasHydrated(true);
     });
-    return unsub;
+    return () => { unsub(); unsubStart(); unsubError(); };
   }, []);
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function RootLayout() {
   // B4: hydration skeleton. Previously this returned `null`, which flashed a blank
   // screen on cold start. A branded loader confirms the app is alive while the
   // persisted store rehydrates.
-  if (!hasHydrated) {
+  if (!hasHydrated && !loadError) {
     return (
       <ThemeProvider value={DarkTheme}>
         <Screen scroll={false} edges={['top', 'bottom']}>

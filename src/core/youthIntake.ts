@@ -4,6 +4,7 @@ import { getSquadPolicy } from './squadPolicy';
 import { isPlayableClub } from './freeAgentPool';
 import { createYouthPotential } from './trainingEngine';
 import { calculateImpactCoefficient, clampRating } from './playerRatingUtils';
+import { createRosterIndex } from './rosterIndex';
 
 const YOUTH_FIRST_NAMES = ['Alex', 'Ben', 'Callum', 'Dan', 'Ethan', 'Finn', 'George', 'Harry', 'Isaac', 'Jack'];
 const YOUTH_LAST_NAMES = ['Adams', 'Brown', 'Clark', 'Davies', 'Evans', 'Fisher', 'Green', 'Harris', 'Irvine', 'Jones'];
@@ -160,19 +161,21 @@ export const replenishUnderfilledSquads = (
 ): Record<string, Player> => {
   const nextPlayers = { ...players };
   let nextId = parseInt(getNextPlayerId(players), 10);
+  const rosterIndex = createRosterIndex(players);
 
   Object.values(teams).filter(isPlayableClub).forEach(team => {
-    let squad = Object.values(nextPlayers).filter(player => player.teamId === team.id);
+    const squad = rosterIndex.getPlayers(team.id, players);
+    let squadSize = squad.length;
     const policy = getSquadPolicy(team);
-    let counts = getPositionCounts(squad);
+    const counts = getPositionCounts(squad);
 
-    while (squad.length < policy.structuralMinimum || POSITIONS.some(position => counts[position] < policy.positionalMinimums[position])) {
+    while (squadSize < policy.structuralMinimum || POSITIONS.some(position => counts[position] < policy.positionalMinimums[position])) {
       const position = getNextIntakePosition(counts, team, rng);
       const playerId = (nextId++).toString();
       const youth = generateYouthPlayer(playerId, team.id, position, rng);
       nextPlayers[playerId] = youth;
-      squad = [...squad, youth];
-      counts = getPositionCounts(squad);
+      squadSize += 1;
+      counts[position] += 1;
     }
   });
 

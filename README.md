@@ -43,7 +43,7 @@ npm run ci                # Typecheck + lint + fast tests
 npm run gate:release      # CI + slow tests + dead-code + Doctor + all-platform export
 ```
 
-Simulation runs are sequential CPU workloads, bounded to ten seasons. Benchmarks are bounded to thirty samples and compare seeded fingerprints, RNG draws, timings, and save counts. Caches are transient and do not change the save schema. Sim & Exit saves once at completion; interrupted completion resumes from the pre-exit autosave.
+Simulation runs are sequential CPU workloads, bounded to ten seasons. Benchmarks cover matches, week advancement, rollover (including expiring contracts), youth intake, and Sim & Exit. They are bounded to thirty samples and compare seeded fingerprints, RNG draws, RNG continuation, timings, and save counts; use `--scenario=rollover` or `--scenario=youth` to target those cases. Caches are transient and do not change the save schema. Sim & Exit saves once at completion; interrupted completion resumes from the pre-exit autosave.
 
 Pull requests and pushes to main run fast CI once. Release tags (`v*`) and manual workflow runs execute the complete release gate once.
 

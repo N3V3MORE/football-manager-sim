@@ -17,11 +17,28 @@ import { resolveWeeklyNegotiationsState } from './transferActions';
 import { rolloverSeasonIfNeeded } from './seasonRollover';
 import { ensureReferentialIntegrity } from './persistence';
 import { refreshUnemployedJobOffers } from './inboxCareerBoard';
+import type { Fixture, SeasonSummary } from '../models/types';
 
 export type { WeeklyLifecycleState };
 
-export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TState): TState => {
+export type WeekAdvanceResult = {
+  advanced: boolean;
+  rolledOver: boolean;
+  completedFixtures: Fixture[];
+  completedSeasonSummary: SeasonSummary | null;
+  preRolloverState: WeeklyLifecycleState | null;
+};
+
+export const advanceWeekTransition = <TState extends WeeklyLifecycleState>(state: TState): WeekAdvanceResult & { nextState: TState } => {
   const initialWeek = state.currentWeek;
+  let completedFixtures: Fixture[] = [];
+  const result = (nextState: TState, preRolloverState: TState | null = null) => ({
+    nextState, completedFixtures, preRolloverState,
+    advanced: nextState.currentWeek !== initialWeek || preRolloverState !== null,
+    rolledOver: preRolloverState !== null,
+    completedSeasonSummary: nextState.careerRecord.seasonsManaged > state.careerRecord.seasonsManaged
+      ? nextState.careerRecord.seasonHistory.at(-1) ?? null : null,
+  });
   const liveMatches = pruneInvalidLiveMatches(state.liveMatches || {}, {
     currentWeek: state.currentWeek,
     fixtures: state.fixtures,
@@ -34,9 +51,10 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
     !fixture.isPlayed &&
     Boolean((recoveredState.liveMatches || {})[fixture.id])
   ));
-  if (hasActiveCurrentLiveMatch) return recoveredState;
+  if (hasActiveCurrentLiveMatch) return result(recoveredState);
 
   let nextState = playCurrentWeekFixtures(recoveredState);
+  completedFixtures = Object.values(nextState.fixtures).filter(fixture => fixture.isPlayed && !state.fixtures[fixture.id]?.isPlayed);
 
   const beforeProgressionPlayers = nextState.players;
   const progression = computeWeeklyProgression(
@@ -112,7 +130,7 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
   ];
 
   const rolledOverState = rolloverSeasonIfNeeded(nextState, initialWeek, weekMessages);
-  if (rolledOverState) return rolledOverState;
+  if (rolledOverState) return result(rolledOverState, nextState);
 
   const nextAssistantMessages = generateAssistantWeekMessages({
     currentWeek: nextState.currentWeek,
@@ -124,12 +142,14 @@ export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TSt
     previousPlayers: beforeProgressionPlayers,
   });
 
-  return {
+  return result({
     ...nextState,
     inboxMessages: refreshUnemployedJobOffers({ ...nextState,
       inboxMessages: mergeInboxMessages(nextState.inboxMessages, [...weekMessages, ...nextAssistantMessages]) }),
-  };
+  });
 };
+
+export const advanceWeekState = <TState extends WeeklyLifecycleState>(state: TState): TState => advanceWeekTransition(state).nextState;
 
 /**
  * Repeatedly advance the week until the current season rolls over (or the

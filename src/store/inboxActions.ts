@@ -1,7 +1,7 @@
 import { GameState } from '../models/types';
 import { moveUserManagerToTeam } from '../core/careerEngine';
 import { buildManagedTeamObjectives } from '../core/boardEngine';
-import { renewPlayerContractState } from './contractActions';
+import { renewPlayerContractState, StoreActionResult } from './contractActions';
 import { applyLineupSuggestionToTeam } from './lineupActions';
 import { acceptTransferCounterState, withdrawTransferNegotiationState } from './transferActions';
 import { generateAssistantWeekMessages } from './inboxAssistant';
@@ -25,9 +25,9 @@ type InboxActionPatch = InboxActionState | Partial<InboxActionState>;
 export const applyInboxActionState = (
   state: InboxActionState,
   messageId: string
-): InboxActionPatch => {
+): { patch: InboxActionPatch; result: StoreActionResult } => {
   const message = state.inboxMessages.find(item => item.id === messageId);
-  if (!message?.action) return state;
+  if (!message?.action) return { patch: state, result: { success: false, message: 'This message has no action.' } };
 
   let nextPlayers = state.players;
   let nextTeams = state.teams;
@@ -35,7 +35,7 @@ export const applyInboxActionState = (
   if (message.action.type === 'apply_lineup') {
     const { teamId, formationMap, startingIds, subIds } = message.action.payload;
     const team = state.teams[teamId];
-    if (!team) return state;
+    if (!team) return { patch: state, result: { success: false, message: 'This team no longer exists.' } };
 
     nextPlayers = applyLineupSuggestionToTeam(state.players, teamId, startingIds, subIds);
     const eligibleFormationMap = Object.fromEntries(
@@ -54,7 +54,7 @@ export const applyInboxActionState = (
   } else if (message.action.type === 'apply_tactics') {
     const { teamId, tactics } = message.action.payload;
     const team = state.teams[teamId];
-    if (!team) return state;
+    if (!team) return { patch: state, result: { success: false, message: 'This team no longer exists.' } };
 
     nextTeams = {
       ...state.teams,
@@ -71,9 +71,12 @@ export const applyInboxActionState = (
     if (!renewalResult.result.success) {
       // Invalid or unauthorized — mark read and clear action, don't mutate player
       return {
-        inboxMessages: state.inboxMessages.map(item =>
-          item.id === messageId ? { ...item, isRead: true, action: undefined } : item
-        ),
+        result: renewalResult.result,
+        patch: {
+          inboxMessages: state.inboxMessages.map(item =>
+            item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+          ),
+        },
       };
     }
 
@@ -81,44 +84,59 @@ export const applyInboxActionState = (
     nextPlayers = renewalResult.patch.players ?? state.players;
 
     return {
-      players: nextPlayers,
-      teams: nextTeams,
-      inboxMessages: (renewalResult.patch.inboxMessages ?? state.inboxMessages).map(item =>
-        item.id === messageId ? { ...item, isRead: true, action: undefined } : item
-      ),
+      result: renewalResult.result,
+      patch: {
+        players: nextPlayers,
+        teams: nextTeams,
+        inboxMessages: (renewalResult.patch.inboxMessages ?? state.inboxMessages).map(item =>
+          item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+        ),
+      },
     };
   } else if (message.action.type === 'accept_transfer_counter') {
     const result = acceptTransferCounterState(state, message.action.payload.negotiationId);
     if (!result.result.success) {
       return {
-        inboxMessages: state.inboxMessages.map(item =>
-          item.id === messageId ? { ...item, isRead: true, action: undefined } : item
-        ),
+        result: result.result,
+        patch: {
+          inboxMessages: state.inboxMessages.map(item =>
+            item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+          ),
+        },
       };
     }
 
     return {
-      ...result.patch,
-      inboxMessages: (result.patch.inboxMessages ?? state.inboxMessages).map(item =>
-        item.id === messageId ? { ...item, isRead: true, action: undefined } : item
-      ),
+      result: result.result,
+      patch: {
+        ...result.patch,
+        inboxMessages: (result.patch.inboxMessages ?? state.inboxMessages).map(item =>
+          item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+        ),
+      },
     };
   } else if (message.action.type === 'withdraw_transfer_negotiation') {
     const patch = withdrawTransferNegotiationState(state, message.action.payload.negotiationId);
     return {
-      ...patch,
-      inboxMessages: state.inboxMessages.map(item =>
-        item.id === messageId ? { ...item, isRead: true, action: undefined } : item
-      ),
+      result: { success: patch !== state, message: patch === state ? 'This negotiation is not active for your club.' : 'Negotiation withdrawn.' },
+      patch: {
+        ...patch,
+        inboxMessages: state.inboxMessages.map(item =>
+          item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+        ),
+      },
     };
   } else if (message.action.type === 'accept_job_offer') {
     const { teamId } = message.action.payload;
     const nextTeam = state.teams[teamId];
     if (!nextTeam) {
       return {
-        inboxMessages: state.inboxMessages.map(item => (
-          item.id === messageId ? { ...item, isRead: true, action: undefined } : item
-        )),
+        result: { success: false, message: 'This team no longer exists.' },
+        patch: {
+          inboxMessages: state.inboxMessages.map(item => (
+            item.id === messageId ? { ...item, isRead: true, action: undefined } : item
+          )),
+        },
       };
     }
 
@@ -143,22 +161,28 @@ export const applyInboxActionState = (
     });
 
     return {
-      userTeamId: teamId,
-      careerRecord: managerMove.careerRecord,
-      boardObjectives,
-      players: nextPlayers,
-      teams: nextTeams,
-      inboxMessages: mergeInboxMessages(carriedMessages, nextAssistantMessages),
+      result: { success: true, message: 'Job offer accepted.' },
+      patch: {
+        userTeamId: teamId,
+        careerRecord: managerMove.careerRecord,
+        boardObjectives,
+        players: nextPlayers,
+        teams: nextTeams,
+        inboxMessages: mergeInboxMessages(carriedMessages, nextAssistantMessages),
+      },
     };
   }
 
   return {
-    players: nextPlayers,
-    teams: nextTeams,
-    inboxMessages: state.inboxMessages.map(item => (
-      item.id === messageId
-        ? { ...item, isRead: true, action: undefined }
-        : item
-    )),
+    result: { success: true, message: 'Inbox action applied.' },
+    patch: {
+      players: nextPlayers,
+      teams: nextTeams,
+      inboxMessages: state.inboxMessages.map(item => (
+        item.id === messageId
+          ? { ...item, isRead: true, action: undefined }
+          : item
+      )),
+    },
   };
 };

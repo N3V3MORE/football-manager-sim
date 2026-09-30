@@ -260,7 +260,7 @@ export const checkLineupInboxActionFiltersStaleFormationMap = () => {
       seasonHistory: [],
       consecutiveLowApprovalWeeks: 0,
     },
-  }, message.id);
+  }, message.id).patch;
   const nextTeams = result.teams || data.teams;
   const nextPlayers = result.players || players;
   const mappedIds = Object.values(nextTeams[userTeam!.id].formationMap || {});

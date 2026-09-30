@@ -1,16 +1,18 @@
+import { MatchResultView } from '@/components/match/match-result-view';
+import { MatchTeamManagement } from '@/components/match/match-team-management';
+import { matchStyles as styles } from '@/components/match/match-styles';
 import { useShallow } from 'zustand/react/shallow';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGameStore } from '@/src/store/gameStore';
 import { useState, useEffect, useRef } from 'react';
 import { getTeamTheme } from '@/src/constants/teamColors';
 import { getPositionColor } from '@/src/constants/positionColors';
 import { sortPlayersByPositionGroup } from '@/src/core/playerSortUtils';
-import { Formation, MatchPlayerSummaryRow, TeamTactics } from '@/src/models/types';
+import { Formation, TeamTactics } from '@/src/models/types';
 import { TacticSection } from '@/components/squad/tactic-section';
 import { FormationSelectionModal } from '@/components/squad/formation-selection-modal';
-import { Screen, ModalSheet, Button } from '@/components/ui';
-import { color } from '@/src/design/tokens';
+import { Screen, ModalSheet, Button, EmptyState } from '@/components/ui';
 import { useConfirmStore } from '@/src/store/confirmStore';
 import { SUPPORTED_FORMATIONS } from '@/src/constants/formations';
 import * as Haptics from 'expo-haptics';
@@ -24,6 +26,60 @@ const tap = (style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Li
     Haptics.impactAsync(style).catch(() => {});
   }
 };
+
+// Tactical overlay config
+const TACTIC_SECTIONS: { key: keyof TeamTactics; title: string; options: string[]; descriptions: Record<string, string> }[] = [
+  {
+    key: 'mentality',
+    title: 'Mentality',
+    options: ['Defensive', 'Balanced', 'Attacking'],
+    descriptions: {
+      Defensive: 'Focus on shape and discipline. Lower goal threat but stronger defence.',
+      Balanced: 'Standard approach. No specific stat bonuses or penalties.',
+      Attacking: 'Push players forward. Increased shooting accuracy but vulnerable to counters.',
+    },
+  },
+  {
+    key: 'passingStyle',
+    title: 'Passing Style',
+    options: ['Short', 'Mixed', 'Direct'],
+    descriptions: {
+      Short: 'Patient buildup. Higher pass completion but fewer through-balls.',
+      Mixed: 'A balanced blend of short and direct passing.',
+      Direct: 'Bypass midfield. More through-balls, more risk on passing.',
+    },
+  },
+  {
+    key: 'tempo',
+    title: 'Tempo',
+    options: ['Slow', 'Normal', 'Fast'],
+    descriptions: {
+      Slow: 'Control the game and limit opponent chances.',
+      Normal: 'Standard rhythm and frequency of play.',
+      Fast: 'Higher intensity and chance creation, but costs more energy.',
+    },
+  },
+  {
+    key: 'defensiveLine',
+    title: 'Defensive Line',
+    options: ['Deep', 'Standard', 'High'],
+    descriptions: {
+      Deep: 'Protect space behind the defence but concede midfield territory.',
+      Standard: 'Balanced defensive positioning.',
+      High: 'Compress the pitch but risk through-balls behind.',
+    },
+  },
+  {
+    key: 'pressing',
+    title: 'Pressing',
+    options: ['None', 'Medium', 'High'],
+    descriptions: {
+      None: 'Sit off and conserve energy.',
+      Medium: 'Press selectively.',
+      High: 'Aggressive pressure with higher energy cost.',
+    },
+  },
+];
 
 export default function MatchScreen() {
   const router = useRouter();
@@ -180,122 +236,18 @@ export default function MatchScreen() {
     router.replace('/(tabs)');
   };
 
-  if (!fixture) return <Text>Loading...</Text>;
+  if (!fixture || !teams[fixture.homeTeamId] || !teams[fixture.awayTeamId]) return (
+    <Screen scroll={false}>
+      <EmptyState title="Match unavailable" message="This fixture could not be found. Return to the Hub to choose your next match.">
+        <Button title="Back to Hub" onPress={() => router.replace('/(tabs)')} />
+      </EmptyState>
+    </Screen>
+  );
 
   const homeTeam = teams[fixture.homeTeamId];
   const awayTeam = teams[fixture.awayTeamId];
 
-  // If the fixture is already played, show the result screen
-  if (fixture.isPlayed) {
-    const hScore = fixture.homeScore ?? 0;
-    const aScore = fixture.awayScore ?? 0;
-    const homeTheme = getTeamTheme(homeTeam.name);
-    const awayThemeRaw = getTeamTheme(awayTeam.name);
-    let awayPrimary = awayThemeRaw.primary;
-    if (homeTheme.primary === awayThemeRaw.primary) {
-      awayPrimary = awayThemeRaw.secondary;
-    }
-    const matchSummary = fixture.matchSummary;
-    const manOfTheMatch = matchSummary?.playerRows.find(row => row.playerId === matchSummary.manOfTheMatchPlayerId);
-    const homeSummaryRows = matchSummary?.playerRows.filter(row => row.teamId === fixture.homeTeamId) || [];
-    const awaySummaryRows = matchSummary?.playerRows.filter(row => row.teamId === fixture.awayTeamId) || [];
-    const renderRatingRows = (rows: MatchPlayerSummaryRow[]) => (
-      rows
-        .sort((left, right) => right.minutes - left.minutes || right.rating - left.rating)
-        .map(row => (
-          <View key={row.playerId} style={styles.ratingRow}>
-            <Text style={styles.ratingName} numberOfLines={1}>{row.name}</Text>
-            <Text style={styles.ratingMeta}>{`${row.minutes}'`}</Text>
-            <Text style={styles.ratingMeta}>{row.rating.toFixed(1)}</Text>
-          </View>
-        ))
-    );
-    return (
-      <Screen scroll={false}>
-        <View style={styles.topNav}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.exitBtn} accessibilityRole="button" accessibilityLabel="Exit match">
-            <Text style={styles.exitText}>[ EXIT ]</Text>
-          </TouchableOpacity>
-        </View>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <Text style={styles.headerTitle}>Match Result</Text>
-          <Text style={styles.stadiumText}>{homeTheme.stadium}</Text>
-          <View style={styles.scoreboard}>
-            <View style={styles.teamBox}>
-              <Text style={[styles.teamName, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
-              <Text style={styles.score}>{fixture.resolution === 'void' ? '—' : hScore}</Text>
-            </View>
-            <View style={styles.vsBox}>
-              <Text style={styles.vsText}>VS</Text>
-            </View>
-            <View style={styles.teamBox}>
-              <Text style={[styles.teamName, { color: awayPrimary }]}>{awayTeam.name}</Text>
-              <Text style={styles.score}>{fixture.resolution === 'void' ? '—' : aScore}</Text>
-            </View>
-          </View>
-          {fixture.resolution === 'void' && <Text style={styles.penaltiesNote}>Fixture void — no result awarded</Text>}
-          {fixture.resolution === 'extra_time' && (
-            <Text style={styles.penaltiesNote}>
-              Won after extra time
-            </Text>
-          )}
-          {fixture.resolution === 'penalties' && (
-            <Text style={styles.penaltiesNote}>
-              Won on penalties{fixture.penaltyShootout ? ` (${fixture.penaltyShootout.homeScore}-${fixture.penaltyShootout.awayScore})` : ''}
-            </Text>
-          )}
-          {fixture.penaltyShootout && (
-            <View style={styles.summaryPanel}>
-              <Text style={styles.summaryTitle}>Penalty Shootout</Text>
-              {fixture.penaltyShootout.kicks.map((kick, index) => (
-                <Text key={`${kick.teamId}-${kick.takerPlayerId}-${index}`} style={styles.ratingMeta}>
-                  {teams[kick.teamId]?.name}: {players[kick.takerPlayerId]?.name || 'Taker'} - {kick.outcome.toUpperCase()} ({kick.homeScore}-{kick.awayScore})
-                </Text>
-              ))}
-            </View>
-          )}
-          {matchSummary && (
-            <View style={styles.summaryPanel}>
-              <Text style={styles.summaryTitle}>Match Stats</Text>
-              <View style={styles.statRow}>
-                <Text style={styles.statValue}>{matchSummary.homeTeamStats.shots}</Text>
-                <Text style={styles.statLabel}>Shots</Text>
-                <Text style={styles.statValue}>{matchSummary.awayTeamStats.shots}</Text>
-              </View>
-              <View style={styles.statRow}>
-                <Text style={styles.statValue}>{matchSummary.homeTeamStats.shotsOnTarget}</Text>
-                <Text style={styles.statLabel}>Shots on Target</Text>
-                <Text style={styles.statValue}>{matchSummary.awayTeamStats.shotsOnTarget}</Text>
-              </View>
-              {manOfTheMatch && (
-                <View style={styles.motmBox}>
-                  <Text style={styles.summaryTitle}>Man of the Match</Text>
-                  <Text style={styles.motmName}>{manOfTheMatch.name}</Text>
-                  <Text style={styles.motmMeta}>{manOfTheMatch.rating.toFixed(1)} rating</Text>
-                </View>
-              )}
-              <Text style={styles.summaryTitle}>Player Ratings</Text>
-              <View style={styles.ratingsGrid}>
-                <View style={styles.ratingsCol}>
-                  <Text style={[styles.lineupHeader, { color: homeTheme.primary }]}>{homeTeam.name}</Text>
-                  {renderRatingRows(homeSummaryRows)}
-                </View>
-                <View style={styles.ratingsCol}>
-                  <Text style={[styles.lineupHeader, { color: awayPrimary, textAlign: 'right' }]}>{awayTeam.name}</Text>
-                  {renderRatingRows(awaySummaryRows)}
-                </View>
-              </View>
-            </View>
-          )}
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.btnContinue} onPress={handleContinue} accessibilityRole="button" accessibilityLabel="Continue to next week">
-              <Text style={styles.btnText}>Continue to Next Week</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </Screen>
-    );
-  }
+  if (fixture.isPlayed) return <MatchResultView fixture={fixture} teams={teams} players={players} onExit={() => router.back()} onContinue={handleContinue} />;
 
   // Colors & Anti-Clash
   const homeTheme = getTeamTheme(homeTeam.name);
@@ -353,60 +305,6 @@ export default function MatchScreen() {
   };
 
   const currentFixture = fixture;
-
-  // Tactical overlay config
-  const TACTIC_SECTIONS: { key: keyof TeamTactics; title: string; options: string[]; descriptions: Record<string, string> }[] = [
-    {
-      key: 'mentality',
-      title: 'Mentality',
-      options: ['Defensive', 'Balanced', 'Attacking'],
-      descriptions: {
-        Defensive: 'Focus on shape and discipline. Lower goal threat but stronger defence.',
-        Balanced: 'Standard approach. No specific stat bonuses or penalties.',
-        Attacking: 'Push players forward. Increased shooting accuracy but vulnerable to counters.',
-      },
-    },
-    {
-      key: 'passingStyle',
-      title: 'Passing Style',
-      options: ['Short', 'Mixed', 'Direct'],
-      descriptions: {
-        Short: 'Patient buildup. Higher pass completion but fewer through-balls.',
-        Mixed: 'A balanced blend of short and direct passing.',
-        Direct: 'Bypass midfield. More through-balls, more risk on passing.',
-      },
-    },
-    {
-      key: 'tempo',
-      title: 'Tempo',
-      options: ['Slow', 'Normal', 'Fast'],
-      descriptions: {
-        Slow: 'Control the game and limit opponent chances.',
-        Normal: 'Standard rhythm and frequency of play.',
-        Fast: 'Higher intensity and chance creation, but costs more energy.',
-      },
-    },
-    {
-      key: 'defensiveLine',
-      title: 'Defensive Line',
-      options: ['Deep', 'Standard', 'High'],
-      descriptions: {
-        Deep: 'Protect space behind the defence but concede midfield territory.',
-        Standard: 'Balanced defensive positioning.',
-        High: 'Compress the pitch but risk through-balls behind.',
-      },
-    },
-    {
-      key: 'pressing',
-      title: 'Pressing',
-      options: ['None', 'Medium', 'High'],
-      descriptions: {
-        None: 'Sit off and conserve energy.',
-        Medium: 'Press selectively.',
-        High: 'Aggressive pressure with higher energy cost.',
-      },
-    },
-  ];
 
   const myTeam = userTeamId ? teams[userTeamId] : null;
   const myTactics = myTeam?.tactics;
@@ -590,80 +488,19 @@ export default function MatchScreen() {
         }
       >
         {canManageLiveTeam && (
-          <View style={styles.liveControlPanel}>
-            <View style={styles.liveControlHeader}>
-              <View>
-                <Text style={styles.liveControlTitle}>Live Team</Text>
-                <Text style={styles.liveControlMeta}>
-                  Subs {Math.max(0, maxSubs - usedSubs)} / {maxSubs} · Windows {remainingWindows} / {maxWindows}{isManagingHalfTime ? ' · Half-time window free' : ''}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.shapeButton}
-                onPress={() => setShowLiveFormationPicker(true)}
-                accessibilityRole="button"
-                accessibilityLabel="Change live formation"
-              >
-                <Text style={styles.shapeButtonText}>{liveFormation || myTeam?.activeFormation || 'Shape'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.subPickerGrid}>
-              <View style={styles.subPickerCol}>
-                <Text style={styles.subPickerTitle}>Off</Text>
-                {manageableCurrentPlayers.map(player => (
-                  <TouchableOpacity
-                    key={player.id}
-                    style={[styles.subPlayerRow, selectedOffPlayerId === player.id && styles.subPlayerSelected]}
-                    onPress={() => setSelectedOffPlayerId(player.id)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: selectedOffPlayerId === player.id }}
-                  >
-                    <Text style={styles.subPlayerName} numberOfLines={1}>{player.name}</Text>
-                    <Text style={styles.subPlayerMeta}>{player.subPosition || player.position}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View style={styles.subPickerCol}>
-                <Text style={styles.subPickerTitle}>On</Text>
-                {manageableBenchPlayers.map(player => (
-                  <TouchableOpacity
-                    key={player.id}
-                    style={[styles.subPlayerRow, selectedOnPlayerId === player.id && styles.subPlayerSelected]}
-                    onPress={() => setSelectedOnPlayerId(player.id)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: selectedOnPlayerId === player.id }}
-                  >
-                    <Text style={styles.subPlayerName} numberOfLines={1}>{player.name}</Text>
-                    <Text style={styles.subPlayerMeta}>{player.subPosition || player.position}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-            <View style={styles.pendingSubsBox}>
-              {pendingReplacements.length === 0 ? (
-                <Text style={styles.pendingSubText}>No pending substitutions</Text>
-              ) : pendingReplacements.map((replacement, index) => (
-                <Text key={`${replacement.offPlayerId}-${replacement.onPlayerId}`} style={styles.pendingSubText}>
-                  {index + 1}. {players[replacement.offPlayerId]?.name} {'->'} {players[replacement.onPlayerId]?.name}
-                </Text>
-              ))}
-            </View>
-            <View style={styles.subActionRow}>
-              <Button
-                title="Queue Sub"
-                variant="secondary"
-                onPress={handleQueueSubstitution}
-                disabled={!selectedOffPlayerId || !selectedOnPlayerId || !canQueueSubstitution}
-              />
-              <Button
-                title="Apply Subs"
-                variant="primary"
-                onPress={handleApplySubstitutions}
-                disabled={pendingReplacements.length === 0}
-              />
-            </View>
-          </View>
+          <MatchTeamManagement
+            remainingSubs={Math.max(0, maxSubs - usedSubs)} maxSubs={maxSubs}
+            remainingWindows={remainingWindows} maxWindows={maxWindows} isManagingHalfTime={isManagingHalfTime}
+            formationLabel={liveFormation || myTeam?.activeFormation || 'Shape'}
+            manageableCurrentPlayers={manageableCurrentPlayers} manageableBenchPlayers={manageableBenchPlayers}
+            selectedOffPlayerId={selectedOffPlayerId} selectedOnPlayerId={selectedOnPlayerId}
+            pendingReplacements={pendingReplacements.map(replacement => ({ ...replacement,
+              offName: players[replacement.offPlayerId]?.name, onName: players[replacement.onPlayerId]?.name }))}
+            canQueueSubstitution={canQueueSubstitution}
+            onSelectOff={setSelectedOffPlayerId} onSelectOn={setSelectedOnPlayerId}
+            onOpenFormation={() => setShowLiveFormationPicker(true)}
+            onQueue={handleQueueSubstitution} onApply={handleApplySubstitutions}
+          />
         )}
         {myTactics && TACTIC_SECTIONS.map((section) => (
           <TacticSection
@@ -686,353 +523,3 @@ export default function MatchScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  topNav: {
-      paddingHorizontal: 20,
-      paddingTop: 10,
-      alignItems: 'flex-end',
-  },
-  exitBtn: {
-      padding: 8,
-  },
-  exitText: {
-      color: color.danger.base,
-      fontWeight: 'bold',
-      fontSize: 16,
-  },
-  scrollContent: {
-      padding: 24,
-      paddingTop: 10,
-  },
-  headerTitle: {
-    color: color.text.primary,
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  stadiumText: {
-      color: color.text.faint,
-      fontSize: 14,
-      textAlign: 'center',
-      fontWeight: '600',
-      marginBottom: 12,
-      letterSpacing: 1,
-  },
-  minuteClock: {
-      color: color.danger.base,
-      fontSize: 32,
-      fontWeight: '900',
-      textAlign: 'center',
-      marginBottom: 20,
-  },
-  scoreboard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: color.bg.card,
-    padding: 20,
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: color.border.default,
-  },
-  teamBox: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  teamName: {
-    fontSize: 16,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  score: {
-    color: color.text.primary,
-    fontSize: 42,
-    fontWeight: '900',
-  },
-  vsBox: {
-    paddingHorizontal: 16,
-  },
-  vsText: {
-    color: color.text.faint,
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  penaltiesNote: {
-    color: color.warning.fg,
-    fontSize: 14,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginTop: 12,
-  },
-  summaryPanel: {
-    marginTop: 20,
-    backgroundColor: color.bg.card,
-    borderWidth: 1,
-    borderColor: color.border.default,
-    padding: 14,
-  },
-  summaryTitle: {
-    color: color.text.primary,
-    fontSize: 14,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    marginBottom: 10,
-  },
-  statRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: color.border.subtle,
-  },
-  statValue: {
-    flex: 1,
-    color: color.text.primary,
-    fontSize: 16,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  statLabel: {
-    flex: 2,
-    color: color.text.muted,
-    fontSize: 12,
-    fontWeight: '800',
-    textAlign: 'center',
-    textTransform: 'uppercase',
-  },
-  motmBox: {
-    marginTop: 14,
-    marginBottom: 12,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: color.border.subtle,
-  },
-  motmName: {
-    color: color.warning.fg,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  motmMeta: {
-    color: color.text.muted,
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  ratingsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  ratingsCol: {
-    flex: 1,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: color.border.subtle,
-  },
-  ratingName: {
-    flex: 1,
-    color: color.text.secondary,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  ratingMeta: {
-    color: color.text.primary,
-    fontSize: 11,
-    fontWeight: '900',
-    minWidth: 32,
-    textAlign: 'right',
-  },
-  logBox: {
-    marginTop: 24,
-    backgroundColor: color.bg.card,
-    padding: 16,
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: color.border.default,
-    minHeight: 120,
-  },
-  logText: {
-    color: color.text.muted,
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  logTextLatest: {
-    color: color.accent.primary,
-    fontSize: 15,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  lineupRow: {
-      flexDirection: 'row',
-      marginTop: 24,
-      justifyContent: 'space-between',
-  },
-  lineupCol: {
-      flex: 1,
-  },
-  lineupHeader: {
-      fontSize: 14,
-      fontWeight: '900',
-      marginBottom: 12,
-      textTransform: 'uppercase',
-  },
-  lineupPlayerName: {
-      color: color.text.secondary,
-      fontSize: 12,
-      marginBottom: 4,
-  },
-  buttonContainer: {
-    marginTop: 48,
-    paddingBottom: 40,
-  },
-  halfTimeActions: {
-    gap: 12,
-    alignItems: 'center',
-  },
-  btnSimulate: {
-    backgroundColor: color.accent.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 32,
-    borderRadius: 0,
-    alignItems: 'center',
-    alignSelf: 'center',
-    minWidth: 200,
-  },
-  btnPause: {
-    backgroundColor: color.warning.base,
-    paddingVertical: 10,
-    paddingHorizontal: 32,
-    borderRadius: 0,
-    alignItems: 'center',
-    alignSelf: 'center',
-    minWidth: 200,
-  },
-  btnContinue: {
-    backgroundColor: color.success.base,
-    paddingVertical: 10,
-    paddingHorizontal: 32,
-    borderRadius: 0,
-    alignItems: 'center',
-    alignSelf: 'center',
-    minWidth: 200,
-  },
-  btnText: {
-    color: color.bg.screen,
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  lineupPosPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 0,
-    marginRight: 6,
-    minWidth: 32,
-    alignItems: 'center',
-  },
-  lineupPosText: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: '900',
-  },
-  lineupPlayerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  liveControlPanel: {
-    borderWidth: 1,
-    borderColor: color.border.default,
-    backgroundColor: color.bg.card,
-    padding: 12,
-    marginBottom: 16,
-  },
-  liveControlHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  liveControlTitle: {
-    color: color.text.primary,
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  liveControlMeta: {
-    color: color.text.muted,
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  shapeButton: {
-    borderWidth: 1,
-    borderColor: color.accent.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  shapeButtonText: {
-    color: color.accent.primary,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  subPickerGrid: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  subPickerCol: {
-    flex: 1,
-  },
-  subPickerTitle: {
-    color: color.text.primary,
-    fontSize: 12,
-    fontWeight: '900',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  subPlayerRow: {
-    borderWidth: 1,
-    borderColor: color.border.subtle,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    marginBottom: 6,
-  },
-  subPlayerSelected: {
-    borderColor: color.accent.primary,
-    backgroundColor: color.accent.dim,
-  },
-  subPlayerName: {
-    color: color.text.secondary,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  subPlayerMeta: {
-    color: color.text.faint,
-    fontSize: 10,
-    fontWeight: '800',
-    marginTop: 2,
-  },
-  pendingSubsBox: {
-    marginTop: 10,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: color.border.subtle,
-  },
-  pendingSubText: {
-    color: color.text.muted,
-    fontSize: 11,
-    fontWeight: '700',
-    marginBottom: 3,
-  },
-  subActionRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-});

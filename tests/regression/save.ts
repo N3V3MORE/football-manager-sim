@@ -3,7 +3,7 @@ import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../../src/constants/
 import { isPlayerSlotFit, rebuildFormationMap } from '../../src/core/formationMapUtils';
 import { Formation, Team } from '../../src/models/types';
 import { useGameStore } from '../../src/store/gameStore';
-import { clearPersistLoadError, getPersistLoadError, PERSIST_STORAGE_KEY, safeStorage, sanitizePersistedState } from '../../src/store/persistence';
+import { clearPersistLoadError, getPersistLoadError, PERSIST_STORAGE_KEY, safeStorage, sanitizePersistedState, subscribePersistLoadError } from '../../src/store/persistence';
 
 const checkCurrentVersionHydration = async () => {
   await useGameStore.persist.rehydrate();
@@ -44,6 +44,55 @@ const checkStorageReadFailure = async () => {
   } finally {
     AsyncStorage.getItem = originalGetItem;
     clearPersistLoadError();
+  }
+};
+
+const checkMalformedSaveRecovery = async () => {
+  useGameStore.getState().initializeGame('T1', 9029);
+  const valid = JSON.parse(JSON.stringify(useGameStore.getState()));
+  const validRaw = JSON.stringify({ state: valid, version: 9 });
+  const originalWarn = console.warn;
+  let errorNotifications = 0;
+  const unsubscribe = subscribePersistLoadError(() => { if (getPersistLoadError()) errorNotifications += 1; });
+  try {
+    console.warn = () => {};
+    const invalidSaves = [{}, [], null, { state: {}, version: 9 }, {
+      state: { ...valid, competitions: { ...valid.competitions,
+        'premier-league': { ...valid.competitions['premier-league'], rounds: [null] } } }, version: 9,
+    }];
+    for (const invalid of invalidSaves) {
+      clearPersistLoadError();
+      const raw = JSON.stringify(invalid);
+      await AsyncStorage.setItem(PERSIST_STORAGE_KEY, raw);
+      await useGameStore.persist.rehydrate();
+      assert(getPersistLoadError(), 'Invalid saves must reach the existing recovery screen');
+      assert(await AsyncStorage.getItem(PERSIST_STORAGE_KEY) === raw, 'Failed hydration must preserve the original save');
+      useGameStore.getState().initializeGame('T2', 9029);
+      assert(await AsyncStorage.getItem(PERSIST_STORAGE_KEY) === raw, 'Writes must remain blocked until the user clears the load error');
+    }
+    assert(errorNotifications === invalidSaves.length, 'Each hydration failure must notify the recovery screen');
+    assert(!useGameStore.persist.hasHydrated(), 'Nested sanitizer failure must remain visible even without successful hydration');
+    await AsyncStorage.setItem(PERSIST_STORAGE_KEY, validRaw);
+    await useGameStore.persist.rehydrate();
+    assert(useGameStore.persist.hasHydrated() && !getPersistLoadError(), 'Reloading a valid save must recover');
+    assert(useGameStore.getState().userTeamId === 'T1', 'Recovery must restore the existing career');
+
+    await AsyncStorage.setItem(PERSIST_STORAGE_KEY, JSON.stringify({ state: { ...valid, competitions: undefined }, version: 1 }));
+    await useGameStore.persist.rehydrate();
+    assert(useGameStore.persist.hasHydrated() && !getPersistLoadError(), 'Valid legacy saves must still migrate');
+    assert(useGameStore.getState().userTeamId === 'T1', 'Legacy migration must retain the managed club');
+    const migrated = JSON.parse((await AsyncStorage.getItem(PERSIST_STORAGE_KEY))!);
+    assert(migrated.version === 9, 'Successful legacy hydration must retain the existing save version');
+
+    await AsyncStorage.removeItem(PERSIST_STORAGE_KEY);
+    await useGameStore.persist.rehydrate();
+    assert(useGameStore.persist.hasHydrated() && !getPersistLoadError(), 'Missing storage must remain a valid first launch');
+  } finally {
+    console.warn = originalWarn;
+    unsubscribe();
+    clearPersistLoadError();
+    await AsyncStorage.setItem(PERSIST_STORAGE_KEY, validRaw);
+    await useGameStore.persist.rehydrate();
   }
 };
 
@@ -227,6 +276,7 @@ export const saveChecks = [
   { name: 'save: validate Formation Definitions', run: validateFormationDefinitions },
   { name: 'save: Current Version Hydration', run: checkCurrentVersionHydration },
   { name: 'save: Storage Read Failure', run: checkStorageReadFailure },
+  { name: 'save: malformed saves preserve data and recover current and legacy careers', run: checkMalformedSaveRecovery },
   { name: 'save: Corrupted Map Recovery', run: () => withSeededRandom(20260407, checkCorruptedMapRecovery) },
   { name: 'save: Bench Bounds', run: () => withSeededRandom(20260407, checkBenchBounds) },
   { name: 'save: Swap Player Keeps Formation Map Unique', run: () => withSeededRandom(20260407, checkSwapPlayerKeepsFormationMapUnique) },

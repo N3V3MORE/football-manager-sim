@@ -5,6 +5,10 @@ import { useGameStore } from '../../src/store/gameStore';
 import { initGameData } from '../../src/utils/initGame';
 import { runAiPreWeekPolicy } from '../../src/dev/aiPolicy';
 import type { AgentGameHandler } from '../../src/dev/agentGameHandler';
+import { safeStorage } from '../../src/store/persistence';
+import type { TransferNegotiation } from '../../src/models/types';
+import { buildSeasonSummary } from '../../src/core/careerEngine';
+import type { SeasonSummary } from '../../src/models/types';
 
 const state = () => useGameStore.getState();
 export const checkAgentRuntimeBridge = () => {
@@ -73,6 +77,78 @@ const withGame = (check: (handler: AgentGameHandler) => void) => {
 const assertSuccess = (result: ReturnType<AgentGameHandler['run']>) => assert.equal(result.ok, true, result.error);
 
 export const agentInteractionChecks = [
+  { name: 'agent: full-run reporting includes final weeks beyond ten retained seasons', run: () => withGame(handler => {
+    const originalAdvance = state().advanceWeek;
+    let seasons = 0;
+    let invalidWeek = false;
+    try {
+      useGameStore.setState({ advanceWeek: () => {
+        const before = state();
+        const fixture = { ...Object.values(before.fixtures)[0], isPlayed: true, homeScore: 6, awayScore: 3 };
+        const outcome: SeasonSummary['outcome'] = seasons % 3 === 0 ? 'promoted' : seasons % 3 === 1 ? 'relegated' : 'sacked';
+        const summary = { ...buildSeasonSummary(++seasons, before.teams.T1, before.teams, before.competitions), outcome };
+        useGameStore.setState({ currentWeek: 1,
+          ...(invalidWeek ? { teams: { ...before.teams, T1: { ...before.teams.T1, budget: NaN } } } : {}),
+          fixtures: { next: { ...fixture, id: 'next', isPlayed: false, homeScore: null, awayScore: null } },
+          competitions: Object.fromEntries(Object.entries(before.competitions).map(([id, competition]) => [id, { ...competition, season: competition.season + 1 }])),
+          careerRecord: { ...before.careerRecord, seasonsManaged: seasons, seasonHistory: [...before.careerRecord.seasonHistory, summary].slice(-10) } });
+        return { advanced: true, rolledOver: true, completedFixtures: [fixture], completedSeasonSummary: summary, preRolloverState: before };
+      } });
+      const result = handler.run('playWithAI', { seasons: 12, maxWeeks: 12, seed: 671, policy: 'passive', reportBalanceFlags: true });
+      assertSuccess(result);
+      const report = result.data as { weeksPlayed: number; bugs: unknown[]; balanceFlags: { type: string }[]; summary: { promotions: number; relegations: number; sackings: number; avgGoalsPerMatch: number } };
+      assert.deepEqual(report.bugs, []);
+      assert.equal(report.weeksPlayed, 12);
+      assert.equal(state().careerRecord.seasonHistory.length, 10);
+      assert.deepEqual([report.summary.promotions, report.summary.relegations, report.summary.sackings], [4, 4, 4]);
+      assert.equal(report.summary.avgGoalsPerMatch, 9, 'Discarded final-week fixtures must contribute exactly once');
+      assert.equal(report.balanceFlags.filter(flag => flag.type === 'scoreline').length, 12);
+      seasons = 0;
+      invalidWeek = true;
+      const stopped = handler.run('playWithAI', { seasons: 1, maxWeeks: 1, seed: 671, policy: 'passive', reportBalanceFlags: true, stopOnError: true });
+      assertSuccess(stopped);
+      const stoppedReport = stopped.data as typeof report;
+      assert.ok(stoppedReport.bugs.length > 0);
+      assert.equal(stoppedReport.weeksPlayed, 1);
+      assert.equal(stoppedReport.summary.avgGoalsPerMatch, 9, 'A committed week must be counted before stopping on validation failure');
+      assert.equal(stoppedReport.summary.promotions, 1);
+      assert.equal(stoppedReport.balanceFlags.filter(flag => flag.type === 'scoreline').length, 1);
+    } finally { useGameStore.setState({ advanceWeek: originalAdvance }); }
+  }) },
+  { name: 'agent: foreign withdrawals are no-ops and rejected inbox actions report failure', run: () => withGame(handler => {
+    const target = Object.values(state().players).find(player => player.teamId === 'T2')!;
+    const negotiation: TransferNegotiation = { id: 'counter', playerId: target.id, buyerTeamId: 'T1', sellerTeamId: 'T2',
+      askingPrice: 10, currentBid: 9, currentWage: target.wage, round: 1, status: 'countered', expiresWeek: 3, createdWeek: 1, source: 'listed_offer' };
+    useGameStore.setState({ pendingNegotiations: [negotiation] });
+    state().changeTeam('T3');
+    const originalWrite = safeStorage.setItem;
+    let writes = 0;
+    try {
+      safeStorage.setItem = async () => { writes += 1; };
+      const before = state();
+      state().withdrawTransferNegotiation(negotiation.id);
+      assert.equal(state(), before, 'Shared withdrawal must reject another club without changing references');
+      const rejected = handler.run('withdrawTransferNegotiation', { negotiationId: negotiation.id });
+      assert.equal(rejected.ok, false);
+      assert.equal(rejected.changed, false);
+      assert.equal(writes, 0, 'Unauthorized withdrawals must not autosave');
+    } finally { safeStorage.setItem = originalWrite; }
+
+    state().initializeGame('T1', 424242);
+    useGameStore.setState({ teams: { ...state().teams, T1: { ...state().teams.T1, budget: 0, operatingBudget: 0 } },
+      players: { ...state().players, [target.id]: { ...state().players[target.id], isTransferListed: true, askingPrice: 10 } },
+      pendingNegotiations: [negotiation], inboxMessages: [
+        { ...state().inboxMessages[0], id: 'counter-message', action: { type: 'accept_transfer_counter', payload: { negotiationId: negotiation.id } } },
+        { ...state().inboxMessages[0], id: 'renewal-message', action: { type: 'renew_contract', payload: { playerId: target.id, years: 2, wage: target.wage } } },
+      ] });
+    for (const messageId of ['counter-message', 'renewal-message']) {
+      const rejected = handler.run('applyInboxAction', { messageId });
+      assert.equal(rejected.ok, false);
+      assert.ok(rejected.error);
+      assert.equal(state().players[target.id].teamId, 'T2');
+      assert.equal(state().inboxMessages.find(message => message.id === messageId)?.action, undefined, 'Rejected actions must still be consumed');
+    }
+  }) },
   { name: 'agent: detached observations and management controls', run: () => withGame(handler => {
     const owned = Object.values(state().players).filter(player => player.teamId === 'T1');
     const page = handler.run('players', { limit: 2 }).data as { players: typeof owned; total: number };

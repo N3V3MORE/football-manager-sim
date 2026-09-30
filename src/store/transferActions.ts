@@ -645,13 +645,14 @@ export const acceptTransferCounterState = (
 export const withdrawTransferNegotiationState = (
   state: TransferActionState,
   negotiationId: string
-): TransferActionPatch => ({
-  pendingNegotiations: getNegotiations(state).map(item => (
-    item.id === negotiationId && isActiveNegotiation(item)
-      ? { ...item, status: 'rejected' as const }
-      : item
-  )),
-});
+): TransferActionPatch => {
+  const negotiations = getNegotiations(state);
+  const negotiation = negotiations.find(item => item.id === negotiationId);
+  if (!negotiation || negotiation.buyerTeamId !== state.userTeamId || !isActiveNegotiation(negotiation)) return state;
+  return {
+    pendingNegotiations: negotiations.map(item => item.id === negotiationId ? { ...item, status: 'rejected' as const } : item),
+  };
+};
 
 export const resolveWeeklyNegotiationsState = (state: TransferActionState): TransferActionState => {
   let players = state.players;

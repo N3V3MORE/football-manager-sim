@@ -18,6 +18,8 @@ import { validateAgentGameState } from '../../src/dev/agentGameHandler';
 import { rolloverSeasonIfNeeded } from '../../src/store/seasonRollover';
 import { getSeasonWeekLimit } from '../../src/core/leagueUtils';
 import { getSackingImminentWeek } from '../../src/core/careerEngine';
+import { buildSeasonSummary } from '../../src/core/careerEngine';
+import { advanceWeekTransition } from '../../src/store/weekLifecycle';
 import { ENGINE_CONFIG } from '../../src/config/engineConfig';
 
 type State = ReturnType<typeof useGameStore.getState>;
@@ -254,7 +256,46 @@ const checkAggregateAndSackingContext = () => {
   }
 };
 
+const checkWeeklyTransitionReporting = () => {
+  const { state, fixture } = prepare();
+  const summary = buildSeasonSummary(1, state.teams.T1, state.teams, state.competitions);
+  const history = Array.from({ length: 10 }, (_, index) => ({ ...summary, season: index + 1 }));
+  const final = { ...state, currentWeek: 54, competitions: {},
+    fixtures: { [fixture.id]: { ...fixture, week: 54 } },
+    careerRecord: { ...state.careerRecord, seasonsManaged: 10, seasonHistory: history } };
+  const transition = advanceWeekTransition(final);
+  assert.equal(transition.advanced, true);
+  assert.equal(transition.rolledOver, true);
+  assert.equal(transition.completedFixtures.length, 1);
+  assert.equal(transition.completedFixtures[0].isPlayed, true);
+  assert.equal(final.fixtures[fixture.id].isPlayed, false, 'Observation must not mutate the input fixture');
+  assert.ok(transition.preRolloverState?.fixtures[fixture.id].isPlayed);
+  assert.equal(transition.nextState.currentWeek, 1);
+  assert.equal(transition.nextState.careerRecord.seasonHistory.length, 10);
+  assert.equal(transition.completedSeasonSummary?.season, 11, 'Monotonic career count must detect summaries after history reaches its cap');
+
+  useGameStore.setState(state);
+  state.processMatchMinute(fixture.id, 1);
+  const blocked = useGameStore.getState().advanceWeek();
+  assert.equal(blocked.advanced, false);
+  assert.deepEqual(blocked.completedFixtures, []);
+  assert.equal(blocked.completedSeasonSummary, null);
+
+  const originalWrite = safeStorage.setItem;
+  let saved: Record<string, unknown> | undefined;
+  try {
+    safeStorage.setItem = async (_key, value) => { saved = JSON.parse(value).state; };
+    useGameStore.setState(final);
+    const result = useGameStore.getState().advanceWeek();
+    assert.equal(result.completedFixtures.length, 1);
+    assert.ok(saved);
+    assert.equal('completedFixtures' in saved, false);
+    assert.equal('preRolloverState' in saved, false, 'Transient observations must stay out of saves');
+  } finally { safeStorage.setItem = originalWrite; }
+};
+
 export const runtimeChecks = [
+  { name: 'career: weekly observations retain rollover fixtures and capped career summaries', run: checkWeeklyTransitionReporting },
   { name: 'tooling: Doctor completes all checks before passing the release gate', run: checkDoctorCompletionGate },
   { name: 'save: atomic exit parity, substitutions, autosaves and no-ops', run: checkAtomicCompletion },
   { name: 'save: interrupted exit and failed write resume the pre-exit save', run: checkAtomicFailureAndReload },

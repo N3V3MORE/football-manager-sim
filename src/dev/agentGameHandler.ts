@@ -1,4 +1,4 @@
-import { Fixture, Formation, Player, PlayerRole, StatKey, Team, TeamTactics } from '../models/types';
+import { Fixture, Formation, GameState, Player, PlayerRole, StatKey, Team, TeamTactics } from '../models/types';
 import { BASE_FORMATION_SLOTS, getSlotsForFormation } from '../constants/formations';
 import { getCompatiblePlayerRolesForSlot } from '../core/playerRoleEngine';
 import { getDecisiveTieScore } from '../core/matchTieResolution';
@@ -226,9 +226,15 @@ const readBoolean = (payload: AgentPayload, key: string, fallback: boolean) => {
 
 const getTeamName = (teamId: string) => state().teams[teamId]?.name || teamId;
 
+let hashedState: ReturnType<typeof state> | undefined;
+let cachedStateHash: string;
 const getStateHash = () => {
   const current = state();
-  return hashStringToSeed(JSON.stringify(current)).toString(16).padStart(8, '0');
+  if (current !== hashedState) {
+    cachedStateHash = hashStringToSeed(JSON.stringify(current)).toString(16).padStart(8, '0');
+    hashedState = current;
+  }
+  return cachedStateHash;
 };
 
 function assertManagedTeam(teamId?: string | null): asserts teamId is string {
@@ -568,8 +574,7 @@ const applyAssistantActions = (payload: AgentPayload) => {
       message.action.payload.teamId !== userTeamId
     ) return;
 
-    state().applyInboxAction(message.id);
-    applied.push(message.id);
+    if (state().applyInboxAction(message.id).success) applied.push(message.id);
   });
 
   return { applied };
@@ -777,20 +782,19 @@ const buildBugReport = (
 });
 
 const collectBalanceFlags = ({
-  playedFixtureIdsBefore,
+  completedFixtures,
   seasonStartRatings,
   checkProgression,
+  current = state(),
 }: {
-  playedFixtureIdsBefore: Set<string>;
+  completedFixtures: Fixture[];
   seasonStartRatings: Record<string, number>;
   checkProgression: boolean;
+  current?: Pick<GameState, 'players' | 'teams' | 'fixtures' | 'currentWeek'>;
 }): BalanceFlag[] => {
-  const current = state();
   const flags: BalanceFlag[] = [];
 
-  Object.values(current.fixtures)
-    .filter(fixture => fixture.isPlayed && !playedFixtureIdsBefore.has(fixture.id))
-    .forEach(fixture => {
+  completedFixtures.forEach(fixture => {
       const totalGoals = (fixture.homeScore ?? 0) + (fixture.awayScore ?? 0);
       if (totalGoals > 8) {
         flags.push({
@@ -856,7 +860,7 @@ const collectBalanceFlags = ({
   });
 
   if (checkProgression) {
-    Object.values(current.players).forEach(player => {
+    Object.values(state().players).forEach(player => {
       const startRating = seasonStartRatings[player.id];
       if (startRating !== undefined && player.overallRating - startRating > 10) {
         flags.push({
@@ -883,18 +887,15 @@ const getAiPolicyGameState = (): AIPolicyGameState => ({
 });
 
 const buildAiPlaySummary = (
-  initialSeasonHistoryLength: number,
+  outcomes: Pick<AIPlayReport['summary'], 'promotions' | 'relegations' | 'sackings'>,
   transfersMade: number,
   matchTotals: { played: number; goals: number }
 ): AIPlayReport['summary'] => {
   const current = state();
-  const newSeasonSummaries = current.careerRecord.seasonHistory.slice(initialSeasonHistoryLength);
 
   return {
     avgGoalsPerMatch: matchTotals.played > 0 ? Number((matchTotals.goals / matchTotals.played).toFixed(2)) : 0,
-    promotions: newSeasonSummaries.filter(summary => summary.outcome === 'promoted').length,
-    relegations: newSeasonSummaries.filter(summary => summary.outcome === 'relegated').length,
-    sackings: newSeasonSummaries.filter(summary => summary.outcome === 'sacked').length,
+    ...outcomes,
     transfersMade,
     financialHealth: getTeamFinancialHealth(current.teams),
   };
@@ -905,7 +906,7 @@ const playWithAIState = (config: AIPlayConfig, maxWeeks: number): AIPlayReport =
 
   const bugs: BugReport[] = [];
   const balanceFlags: BalanceFlag[] = [];
-  const initialSeasonHistoryLength = state().careerRecord.seasonHistory.length;
+  const outcomes = { promotions: 0, relegations: 0, sackings: 0 };
   const startingSeason = getInboxSeason(state().competitions);
   let seasonStartRatings = buildSeasonStartRatings();
   let lastSeasonMarker = startingSeason;
@@ -922,21 +923,21 @@ const playWithAIState = (config: AIPlayConfig, maxWeeks: number): AIPlayReport =
   ) {
     attempts += 1;
     const beforePlayers = state().players;
-    const playedFixtureIdsBefore = new Set(
-      Object.values(state().fixtures).filter(fixture => fixture.isPlayed).map(fixture => fixture.id)
-    );
+    let transition: ReturnType<ReturnType<typeof state>['advanceWeek']> | undefined;
+    let shouldStop = false;
 
     try {
       applyAssistantActions(undefined);
       runAiPreWeekPolicy(getAiPolicyGameState(), config);
-      if (!advanceOneWeek()) throw new Error('Week advancement is blocked by an active live match.');
+      transition = state().advanceWeek();
+      if (!transition.advanced) throw new Error('Week advancement is blocked by an active live match.');
       weeksPlayed += 1;
       runAiPostWeekPolicy(getAiPolicyGameState(), config);
       consecutiveErrors = 0;
     } catch (error) {
       consecutiveErrors += 1;
       bugs.push(buildBugReport('exception', errorMessage(error), error));
-      if (config.stopOnError || consecutiveErrors >= 3) break;
+      shouldStop = config.stopOnError || consecutiveErrors >= 3;
     }
 
     transfersMade += getPlayerTeamChanges(beforePlayers, state().players);
@@ -944,13 +945,15 @@ const playWithAIState = (config: AIPlayConfig, maxWeeks: number): AIPlayReport =
     const validation = validateAgentGameState();
     if (validation.status === 'fail') {
       bugs.push(buildBugReport('validation', 'Agent validation failed during AI autoplay.', undefined, validation));
-      if (config.stopOnError) break;
+      shouldStop ||= config.stopOnError;
     }
 
     const seasonAdvanced = getInboxSeason(state().competitions) > lastSeasonMarker;
-    const newlyPlayedFixtures = Object.values(state().fixtures).filter(fixture => (
-      fixture.isPlayed && !playedFixtureIdsBefore.has(fixture.id)
-    ));
+    const newlyPlayedFixtures = transition?.completedFixtures ?? [];
+    const outcome = transition?.completedSeasonSummary?.outcome;
+    if (outcome === 'promoted') outcomes.promotions += 1;
+    if (outcome === 'relegated') outcomes.relegations += 1;
+    if (outcome === 'sacked') outcomes.sackings += 1;
     playedMatches += newlyPlayedFixtures.length;
     totalGoals += newlyPlayedFixtures.reduce((sum, fixture) => (
       sum + (fixture.homeScore ?? 0) + (fixture.awayScore ?? 0)
@@ -958,9 +961,10 @@ const playWithAIState = (config: AIPlayConfig, maxWeeks: number): AIPlayReport =
 
     if (config.reportBalanceFlags) {
       balanceFlags.push(...collectBalanceFlags({
-        playedFixtureIdsBefore,
+        completedFixtures: newlyPlayedFixtures,
         seasonStartRatings,
         checkProgression: seasonAdvanced,
+        current: transition?.preRolloverState ?? state(),
       }));
     }
 
@@ -968,6 +972,7 @@ const playWithAIState = (config: AIPlayConfig, maxWeeks: number): AIPlayReport =
       seasonStartRatings = buildSeasonStartRatings();
       lastSeasonMarker = getInboxSeason(state().competitions);
     }
+    if (shouldStop) break;
   }
 
   if (getInboxSeason(state().competitions) - startingSeason < config.seasons && bugs.length === 0) {
@@ -979,7 +984,7 @@ const playWithAIState = (config: AIPlayConfig, maxWeeks: number): AIPlayReport =
     weeksPlayed,
     bugs,
     balanceFlags,
-    summary: buildAiPlaySummary(initialSeasonHistoryLength, transfersMade, {
+    summary: buildAiPlaySummary(outcomes, transfersMade, {
       played: playedMatches,
       goals: totalGoals,
     }),
@@ -1021,7 +1026,7 @@ const runAgentCommand = (command: AgentCommand, payload?: AgentPayload): AgentCo
       if (!message) throw new Error(`Unknown inbox message ${messageId}`);
       if (command === 'applyInboxAction') {
         if (!message.action) throw new Error('This inbox message has no action');
-        state().applyInboxAction(messageId);
+        data = state().applyInboxAction(messageId);
       } else if (command === 'markInboxRead') state().markInboxMessageRead(messageId);
       else state().dismissInboxMessage(messageId);
     }
@@ -1115,6 +1120,7 @@ const runAgentCommand = (command: AgentCommand, payload?: AgentPayload): AgentCo
       const negotiationId = requiredString(payload, 'negotiationId');
       const negotiation = state().pendingNegotiations?.find(item => item.id === negotiationId);
       if (!negotiation || !['pending', 'countered'].includes(negotiation.status)) throw new Error('No active negotiation with that ID');
+      assertManagedTeam(negotiation.buyerTeamId);
       if (command === 'submitTransferBid') data = state().submitTransferBid(negotiationId, readNumber(payload, 'fee', 0), readNumber(payload, 'wageOffered', 0));
       else if (command === 'acceptTransferCounter') data = state().acceptTransferCounter(negotiationId);
       else state().withdrawTransferNegotiation(negotiationId);

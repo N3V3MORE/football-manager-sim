@@ -48,15 +48,27 @@ export interface PersistLoadError {
 export const PERSIST_STORAGE_KEY = 'football-manager-storage';
 
 let persistLoadError: PersistLoadError | null = null;
+const persistLoadErrorListeners = new Set<() => void>();
 
 export const getPersistLoadError = (): PersistLoadError | null => persistLoadError;
 
 export const clearPersistLoadError = () => {
   persistLoadError = null;
+  persistLoadErrorListeners.forEach(listener => listener());
+};
+
+export const subscribePersistLoadError = (listener: () => void) => {
+  persistLoadErrorListeners.add(listener);
+  return () => { persistLoadErrorListeners.delete(listener); };
 };
 
 const setPersistLoadError = (key: string, message: string) => {
   persistLoadError = { key, message };
+  persistLoadErrorListeners.forEach(listener => listener());
+};
+
+export const reportPersistHydrationError = (error: unknown) => {
+  setPersistLoadError(PERSIST_STORAGE_KEY, `Your saved game could not be loaded. Please reload to try again. ${error instanceof Error ? error.message : String(error)}`);
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -64,9 +76,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 );
 
 const unpackPersistedState = (parsed: unknown): PersistedStoreState => {
-  if (!isRecord(parsed)) return {};
+  if (!isRecord(parsed)) throw new Error('The save must contain a game-state object.');
   const envelope = parsed as PersistedStorageEnvelope;
-  return isRecord(envelope.state) ? envelope.state : parsed as PersistedStoreState;
+  const state = 'state' in parsed ? envelope.state : parsed;
+  if (!isRecord(state) || !isRecord(state.teams) || !isRecord(state.players) || !isRecord(state.fixtures)) {
+    throw new Error('The save is missing its teams, players or fixtures.');
+  }
+  return state as PersistedStoreState;
 };
 
 const DEFAULT_CAREER_RECORD: CareerRecord = {
@@ -181,7 +197,10 @@ export const safeStorage = {
     }
     if (raw === null) return null;
     try {
-      JSON.parse(raw);
+      const envelope: unknown = JSON.parse(raw);
+      if (!isRecord(envelope) || !isRecord(envelope.state)) throw new Error('The save envelope is missing its game state.');
+      if (envelope.version !== undefined && (!Number.isInteger(envelope.version) || (envelope.version as number) < 0)) throw new Error('The save version is invalid.');
+      unpackPersistedState(envelope);
       if (persistLoadError?.key === key) clearPersistLoadError();
       return raw;
     } catch (parseError) {
@@ -192,6 +211,7 @@ export const safeStorage = {
     }
   },
   setItem: async (key: string, value: string) => {
+    if (persistLoadError?.key === key) return;
     try { await AsyncStorage.setItem(key, value); } catch (e) { console.warn('save failed:', e); }
   },
   removeItem: async (key: string) => {
@@ -309,6 +329,19 @@ const isValidUserManagerIdentity = (value: unknown): value is UserManagerIdentit
 };
 
 export const sanitizePersistedState = (state: PersistedStoreState): PersistedStoreState => {
+  if (state.competitions !== undefined) {
+    if (!isRecord(state.competitions)) throw new Error('The saved competitions are invalid.');
+    for (const [id, competition] of Object.entries(state.competitions)) {
+      if (!VALID_COMPETITION_IDS.has(id as CompetitionId)) continue;
+      if (!isRecord(competition)) throw new Error(`The saved competition ${id} is invalid.`);
+      if (competition.rounds !== undefined && !Array.isArray(competition.rounds)) throw new Error(`The saved rounds for ${id} are invalid.`);
+      for (const round of competition.rounds ?? []) {
+        if (!isRecord(round) || ['entrantTeamIds', 'fixtureIds', 'byeTeamIds', 'winnerTeamIds'].some(key => round[key] !== undefined && !Array.isArray(round[key]))) {
+          throw new Error(`A saved round for ${id} is invalid.`);
+        }
+      }
+    }
+  }
   const teams = state.teams && typeof state.teams === 'object'
     ? Object.fromEntries(
       Object.entries(state.teams).map(([teamId, team]) => {
@@ -643,6 +676,9 @@ export const sanitizePersistedState = (state: PersistedStoreState): PersistedSto
         rounds: Array.isArray(competition.rounds)
           ? competition.rounds.map(round => ({
               ...round,
+              entrantTeamIds: Array.isArray(round.entrantTeamIds) ? round.entrantTeamIds : [],
+              byeTeamIds: Array.isArray(round.byeTeamIds) ? round.byeTeamIds : [],
+              winnerTeamIds: Array.isArray(round.winnerTeamIds) ? round.winnerTeamIds : [],
               fixtureIds: Array.isArray(round.fixtureIds)
                 ? round.fixtureIds.filter(fixtureId => fixtures[fixtureId]?.competitionId === competitionId)
                 : [],

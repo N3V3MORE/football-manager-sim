@@ -14,6 +14,7 @@ export const checkSeasonRunnerIgnoresSackingAndBoundsErrors = () => {
       const current = useGameStore.getState();
       useGameStore.setState({ currentWeek: current.currentWeek + 1,
         careerRecord: { ...current.careerRecord, seasonsManaged: current.careerRecord.seasonsManaged + 1 } });
+      return { advanced: true, rolledOver: false, completedFixtures: [], completedSeasonSummary: null, preRolloverState: null };
     } });
     const result = globalThis.__FM_AGENT__!.run('playSeason', { maxWeeks: 1, applyAssistantActions: false, continueOnError: true });
     assert(!(result.data as { completedSeason: boolean }).completedSeason, 'A sacking must not count as world rollover');
@@ -74,6 +75,7 @@ export const checkAiAutoplayCommandProducesReport = () => {
         useGameStore.setState({ currentWeek: 1,
           fixtures: { ...current.fixtures, [fixture.id]: { ...fixture, isPlayed: true, homeScore: 1, awayScore: 0, winnerTeamId: fixture.homeTeamId } },
           competitions: Object.fromEntries(Object.entries(current.competitions).map(([id, competition]) => [id, { ...competition, season: competition.season + 1 }])) });
+        return { advanced: true, rolledOver: true, completedFixtures: [useGameStore.getState().fixtures[fixture.id]], completedSeasonSummary: null, preRolloverState: current };
       } });
       result = runner('playWithAI', { seasons: 1, seed: 12091, teamId: 'T1', policy: 'balanced', stopOnError: true, reportBalanceFlags: true, verbosity: 'quiet' });
     } finally { useGameStore.setState({ advanceWeek }); }

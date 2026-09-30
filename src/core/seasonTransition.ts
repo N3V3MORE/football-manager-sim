@@ -26,6 +26,7 @@ import { replenishUnderfilledSquads } from './youthIntake';
 import { getSquadPolicy } from './squadPolicy';
 import { RandomGenerator, resolveRandom } from './random';
 import { movePlayerToTeam } from './playerMovement';
+import { createRosterIndex, RosterIndex } from './rosterIndex';
 
 const OFF_SEASON_INJURY_RECOVERY_WEEKS = 8;
 
@@ -136,14 +137,15 @@ const findContractDestinationTeamId = (
   player: Player,
   teams: Record<string, Team>,
   userTeamId: string | null,
-  players: Record<string, Player>
+  players: Record<string, Player>,
+  rosterIndex: RosterIndex
 ) => {
   const currentDivision = teams[player.teamId]?.division;
 
   const candidateTeams = Object.values(teams)
     .filter(team => isPlayableClub(team) && team.id !== player.teamId && team.id !== userTeamId)
     .map(team => {
-      const squad = Object.values(players).filter(p => p.teamId === team.id);
+      const squad = rosterIndex.getPlayers(team.id, players);
       const squadSize = squad.length;
       // Count players of the same position already on the candidate team
       const positionDepth = squad.filter(p => p.position === player.position).length;
@@ -198,18 +200,18 @@ const findContractDestinationTeamId = (
 
 const reseedTeamLineupForNewSeason = (
   team: Team,
-  players: Record<string, Player>
-): { team: Team; players: Record<string, Player> } => {
-  const updatedPlayers = { ...players };
-  const lineupUpdates = buildQuickSimLineup(team.id, updatedPlayers, team.activeFormation);
+  players: Record<string, Player>,
+  rosterIndex: RosterIndex
+): Team => {
+  const lineupUpdates = buildQuickSimLineup(team.id, players, team.activeFormation, rosterIndex.getPlayers(team.id, players));
 
   Object.entries(lineupUpdates).forEach(([playerId, updates]) => {
-    const player = updatedPlayers[playerId];
+    const player = players[playerId];
     if (!player) return;
-    updatedPlayers[playerId] = { ...player, ...updates };
+    players[playerId] = { ...player, ...updates };
   });
 
-  const starters = Object.values(updatedPlayers).filter(player => player.teamId === team.id && player.isStarting);
+  const starters = rosterIndex.getPlayers(team.id, players).filter(player => player.isStarting);
   const formationMap = rebuildFormationMap(
     getSlotsForFormation(team.activeFormation),
     starters,
@@ -217,12 +219,9 @@ const reseedTeamLineupForNewSeason = (
   );
 
   return {
-    team: {
-      ...team,
-      formationMap,
-      lastStartingXI: starters.map(player => player.id).slice(0, 11),
-    },
-    players: updatedPlayers,
+    ...team,
+    formationMap,
+    lastStartingXI: starters.map(player => player.id).slice(0, 11),
   };
 };
 
@@ -248,6 +247,7 @@ export const advanceSeason = (
   const seasonNews: string[] = [];
   let contractAdjustedPlayers = { ...players };
   let contractAdjustedTeams = ensureFreeAgentTeam({ ...teams });
+  const contractRosters = createRosterIndex(players);
 
   Object.values(players).forEach(player => {
     if (player.contractLeft > 0) return;
@@ -255,13 +255,14 @@ export const advanceSeason = (
     if (!isPlayableClub(currentTeam)) return;
 
     if (player.teamId === userTeamId) {
-      const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId, contractAdjustedPlayers);
+      const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId, contractAdjustedPlayers, contractRosters);
       if (!destinationTeamId) {
         const moved = movePlayerToTeam(contractAdjustedPlayers, contractAdjustedTeams, player.id, FREE_AGENT_TEAM_ID, {
           contractLeft: 0,
         });
         contractAdjustedPlayers = moved.players;
         contractAdjustedTeams = moved.teams;
+        contractRosters.movePlayer(player.id, player.teamId, FREE_AGENT_TEAM_ID);
         seasonNews.push(`${player.name} leaves ${currentTeam.name} after his contract expires.`);
         return;
       }
@@ -271,13 +272,14 @@ export const advanceSeason = (
       });
       contractAdjustedPlayers = moved.players;
       contractAdjustedTeams = moved.teams;
+      contractRosters.movePlayer(player.id, player.teamId, destinationTeamId);
       seasonNews.push(`${player.name} leaves ${currentTeam.name} after running down his contract.`);
       return;
     }
 
     // AI-team: use the current provisional squad plan so simultaneous expiries
     // cannot all assume the other expiring players will stay.
-    const squadDecision = buildSquadPlan(currentTeam, contractAdjustedPlayers)
+    const squadDecision = buildSquadPlan(currentTeam, contractAdjustedPlayers, contractRosters.getPlayers(currentTeam.id, contractAdjustedPlayers))
       .contractDecisions.find(decision => decision.playerId === player.id);
     if (squadDecision && squadDecision.decision === 'renew') {
       const renewal = getRenewalOffer(player);
@@ -290,13 +292,14 @@ export const advanceSeason = (
     }
 
     // Release, sell, or no squad-plan decision: attempt to move to a destination team.
-    const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId, contractAdjustedPlayers);
+    const destinationTeamId = findContractDestinationTeamId(player, contractAdjustedTeams, userTeamId, contractAdjustedPlayers, contractRosters);
     if (!destinationTeamId) {
       const moved = movePlayerToTeam(contractAdjustedPlayers, contractAdjustedTeams, player.id, FREE_AGENT_TEAM_ID, {
         contractLeft: 0,
       });
       contractAdjustedPlayers = moved.players;
       contractAdjustedTeams = moved.teams;
+      contractRosters.movePlayer(player.id, player.teamId, FREE_AGENT_TEAM_ID);
       return;
     }
 
@@ -305,6 +308,7 @@ export const advanceSeason = (
     });
     contractAdjustedPlayers = moved.players;
     contractAdjustedTeams = moved.teams;
+    contractRosters.movePlayer(player.id, player.teamId, destinationTeamId);
   });
 
   const nextPlayers = Object.fromEntries(
@@ -439,13 +443,12 @@ export const advanceSeason = (
     seasonNews.push(`${newYouthCount} academy graduate${newYouthCount !== 1 ? 's' : ''} promoted to first-team squads.`);
   }
 
-  let lineupSeededPlayers = replenishedPlayers;
+  const lineupSeededPlayers = replenishedPlayers;
+  const lineupRosters = createRosterIndex(lineupSeededPlayers);
   const lineupSeededTeams = Object.fromEntries(
     Object.entries(reviewedTeams).map(([teamId, team]) => {
       if (!isPlayableClub(team)) return [teamId, team];
-      const seeded = reseedTeamLineupForNewSeason(team, lineupSeededPlayers);
-      lineupSeededPlayers = seeded.players;
-      return [teamId, seeded.team];
+      return [teamId, reseedTeamLineupForNewSeason(team, lineupSeededPlayers, lineupRosters)];
     })
   ) as Record<string, Team>;
 
